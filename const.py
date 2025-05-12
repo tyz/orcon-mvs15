@@ -1,0 +1,7 @@
+DOMAIN = "orcon_mvs"
+CONF_GATEWAY_ID = "gateway_id"
+CONF_REMOTE_ID = "remote_id"
+CONF_FAN_ID = "fan_id"
+CONF_CO2_ID = "co2_id"
+CONF_MQTT_TOPIC = "mqtt_topic"
+DEFAULT_TOPIC = "RAMSES/GATEWAY"
