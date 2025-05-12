@@ -3,11 +3,13 @@ from homeassistant.const import CONCENTRATION_PARTS_PER_MILLION
 
 from .const import DOMAIN
 
+
 async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
     sensor = Co2Sensor(data)
     hass.data[DOMAIN]["co2_sensor"] = sensor
     async_add_entities([sensor])
+
 
 class Co2Sensor(SensorEntity):
     def __init__(self, config):

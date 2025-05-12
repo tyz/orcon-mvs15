@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date, datetime as dt
+from datetime import datetime as dt
 from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.components import mqtt
 
@@ -120,16 +120,21 @@ class OrconFan(FanEntity):
             return
         fan_mode = fields[1][4:6]
         bitmap = int(fields[1][2:4], 16)
-        if (status := STATUS_MAP.get(fan_mode)):
+        if status := STATUS_MAP.get(fan_mode):
             self._attr_preset_mode = status
             _LOGGER.info(f"[RAMSES] Fan status: {status}")
-            _LOGGER.debug("Fan state: " + str({
-                "passive": bool(bitmap & 0x02),
-                "damper_only": bool(bitmap & 0x04),
-                "filter_dirty": bool(bitmap & 0x20),
-                "frost_cycle": bool(bitmap & 0x40),
-                "has_fault": bool(bitmap & 0x80),
-            }))
+            _LOGGER.debug(
+                "Fan state: "
+                + str(
+                    {
+                        "passive": bool(bitmap & 0x02),
+                        "damper_only": bool(bitmap & 0x04),
+                        "filter_dirty": bool(bitmap & 0x20),
+                        "frost_cycle": bool(bitmap & 0x40),
+                        "has_fault": bool(bitmap & 0x80),
+                    }
+                )
+            )
         else:
             _LOGGER.warning(f"[RAMSES] Unknown fan_mode {fan_mode}")
         self.async_write_ha_state()
@@ -148,20 +153,24 @@ class OrconFan(FanEntity):
     def _handle_code_10e0(self, fields):
         """device info"""
         description, _, _ = fields[1][36:].partition("00")
-        result = {
-            "sz_oem_code": fields[1][14:16],  # 00/FF is CH/DHW, 01/6x is HVAC
-            "manufacturer_group": fields[1][2:6],  # 0001-HVAC, 0002-CH/DHW
-            "manufacturer_sub_id": fields[1][6:8],
-            "product_id": fields[1][8:10],  # if CH/DHW: matches device_type (sometimes)
-            "date_1": self._hex_to_date(fields[1][28:36]),
-            "date_2": self._hex_to_date(fields[1][20:28]),
-            "software_ver_id": fields[1][10:12],
-            "list_ver_id": fields[1][12:14],  # if FF/01 is CH/DHW, then 01/FF
-            "additional_ver_a": fields[1][16:18],
-            "additional_ver_b": fields[1][18:20],
-            "signature": fields[1][2:20],
-            "description": bytearray.fromhex(description).decode(),
-        }
+        _LOGGER.debug(
+            str(
+                {
+                    "sz_oem_code": fields[1][14:16],  # 00/FF is CH/DHW, 01/6x is HVAC
+                    "manufacturer_group": fields[1][2:6],  # 0001-HVAC, 0002-CH/DHW
+                    "manufacturer_sub_id": fields[1][6:8],
+                    "product_id": fields[1][8:10],  # if CH/DHW: matches device_type (sometimes)
+                    "date_1": self._hex_to_date(fields[1][28:36]),
+                    "date_2": self._hex_to_date(fields[1][20:28]),
+                    "software_ver_id": fields[1][10:12],
+                    "list_ver_id": fields[1][12:14],  # if FF/01 is CH/DHW, then 01/FF
+                    "additional_ver_a": fields[1][16:18],
+                    "additional_ver_b": fields[1][18:20],
+                    "signature": fields[1][2:20],
+                    "description": bytearray.fromhex(description).decode(),
+                }
+            )
+        )
 
     def _handle_code_31e0(self, fields):
         """ventilator demand, by co2 sensor"""
