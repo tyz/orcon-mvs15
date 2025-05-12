@@ -4,9 +4,12 @@
   "version": "1.0",
   "config_flow": true,
   "requirements": [],
-  "codeowners": [],
+  "codeowners": ["@tyz"],
   "iot_class": "local_push",
   "integration_type": "hub",
   "dependencies": ["mqtt"],
-  "domains": ["fan"]
+  "domains": ["fan"],
+  "documentation": "https://github.com/tyz/orcon-mvs",
+  "issue_tracker": "https://github.com/tyz/orcon-mvs/issues"
 }
+
