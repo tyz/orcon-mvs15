@@ -8,6 +8,7 @@
           "gateway_id": "Gateway ID (bijv. 18:149960)",
           "fan_id": "Ventilator ID (bijv. 32:096887)",
           "co2_id": "CO2 sensor ID (bijv. 29:224547)",
+          "remote_id": "Afstandbediening ID (bijv. 29:183031)",
           "mqtt_topic": "MQTT topic prefix (bijv. RAMSES/GATEWAY)"
         }
       }
