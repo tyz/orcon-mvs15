@@ -16,6 +16,11 @@ from .const import (
     DEFAULT_TOPIC,
 )
 
+# TODO:
+# * Move ramses packet + checks to its own class
+# * Move mqtt to separate class
+# * Add USB support for Ramses ESP
+
 _LOGGER = logging.getLogger(__name__)
 
 COMMAND_TEMPLATES = {
@@ -69,7 +74,7 @@ class OrconFan(FanEntity):
         self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self._send_initial_status_request)
 
     async def _send_initial_status_request(self, event):
-        await asyncio.sleep(3)  # FIXME: wait on mqtt ready state instead?
+        await asyncio.sleep(2)  # FIXME: wait on mqtt ready state instead?
         cmd = REQ_STATUS_TEMPLATE.format(gateway_id=self._gateway_id, fan_id=self._fan_id)
         await self._publish_mqtt_message(cmd)
 
@@ -129,8 +134,9 @@ class OrconFan(FanEntity):
 
     def _handle_code_31d9(self, fields):
         """Ventilation status"""
-        if len(fields) < 2:
-            _LOGGER.warning(f"[RAMSES] Unexpected fields for 31D9: {fields}")
+        # FIXME: Create a class for `fields`
+        if int(fields[0]) != 3 or len(fields[1]) != (int(fields[0]) * 2):
+            _LOGGER.warning(f"[RAMSES] Unexpected length for 31D9: {fields}")
             return
         fan_mode = fields[1][4:6]
         bitmap = int(fields[1][2:4], 16)
@@ -138,7 +144,7 @@ class OrconFan(FanEntity):
             self._attr_preset_mode = status
             _LOGGER.info(f"[RAMSES] Fan status: {status}")
             _LOGGER.debug(
-                "Fan state: "
+                "[RAMES] Fan state: "
                 + str(
                     {
                         "passive": bool(bitmap & 0x02),
@@ -169,7 +175,8 @@ class OrconFan(FanEntity):
         """device info"""
         description, _, _ = fields[1][36:].partition("00")
         _LOGGER.debug(
-            str(
+            "[RAMSES] "
+            + str(
                 {
                     "sz_oem_code": fields[1][14:16],  # 00/FF is CH/DHW, 01/6x is HVAC
                     "manufacturer_group": fields[1][2:6],  # 0001-HVAC, 0002-CH/DHW
@@ -189,7 +196,8 @@ class OrconFan(FanEntity):
 
     def _handle_code_31e0(self, fields):
         """ventilator demand, by co2 sensor"""
-        pass
+        demand = int(int(fields[1][4:6], 16) / 2)
+        _LOGGER.debug(f"[RAMES] Vent demand {demand}%")
 
     async def async_set_preset_mode(self, preset_mode: str):
         command = COMMAND_TEMPLATES.get(preset_mode)
