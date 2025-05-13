@@ -1,8 +1,10 @@
 import json
 import logging
+import asyncio
 from datetime import datetime as dt
 from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.components import mqtt
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 
 from .const import (
     DOMAIN,
@@ -26,6 +28,8 @@ COMMAND_TEMPLATES = {
     "High (60m)": " I --- {remote_id} {fan_id} --:------ 22F3 007 00023C03040000",
     "Away": " I --- {remote_id} {fan_id} --:------ 22F1 003 000004",
 }
+
+REQ_STATUS_TEMPLATE = " RQ --- {gateway_id} {fan_id} --:------ 31D9 001 00"
 
 STATUS_MAP = {
     "00": "Away",
@@ -56,13 +60,18 @@ class OrconFan(FanEntity):
     def extra_state_attributes(self):
         return {
             "co2": self._co2,
-            "fan_id": self._fan_id,
-            "gateway_id": self._gateway_id,
-            "remote_id": self._remote_id,
         }
 
     async def async_added_to_hass(self):
-        await mqtt.async_subscribe(self.hass, f"{DEFAULT_TOPIC}/+/rx", self._handle_mqtt_message)
+        topic_rx = f"{DEFAULT_TOPIC}/{self._gateway_id}/rx"
+        await mqtt.async_subscribe(self.hass, topic_rx, self._handle_mqtt_message)
+        _LOGGER.debug(f"[MQTT] Subscribed to {topic_rx}")
+        self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self._send_initial_status_request)
+
+    async def _send_initial_status_request(self, event):
+        await asyncio.sleep(3)  # FIXME: wait on mqtt ready state instead?
+        cmd = REQ_STATUS_TEMPLATE.format(gateway_id=self._gateway_id, fan_id=self._fan_id)
+        await self._publish_mqtt_message(cmd)
 
     async def _publish_mqtt_message(self, cmd):
         topic = f"{DEFAULT_TOPIC}/{self._gateway_id}/tx"
@@ -88,12 +97,17 @@ class OrconFan(FanEntity):
         if len(parts) < 8:
             _LOGGER.warning(f"[RAMSES] Malformed packet: {msg}")
             return
+        signal = parts[0]
+        msg_type = parts[1]
         src = parts[3]
         code = parts[6]
         data_fields = parts[7:]
-        _LOGGER.debug(f"[RAMSES] ts={ts} src={src} code={code} data={data_fields}")
+        _LOGGER.debug(f"[RAMSES] signal_dBm={signal} ts={ts} src={src} code={code} data={data_fields}")
         if src not in {self._fan_id, self._co2_id, self._gateway_id}:
             _LOGGER.debug(f"[RAMSES] Ignored src: {src}")
+            return
+        if msg_type == "RQ":
+            """Don't call handler on something we send ourselves"""
             return
         handler = getattr(self, f"_handle_code_{code.lower()}", None)
         if callable(handler):
@@ -140,6 +154,7 @@ class OrconFan(FanEntity):
         self.async_write_ha_state()
 
     def _handle_code_1298(self, fields):
+        """co2 sensor"""
         if len(fields) < 2:
             _LOGGER.warning(f"[RAMSES] Unexpected fields for 1298: {fields}")
             return
