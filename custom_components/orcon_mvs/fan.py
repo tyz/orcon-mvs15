@@ -60,11 +60,13 @@ class OrconFan(FanEntity):
         self._mqtt_topic = mqtt_topic
         self._attr_preset_mode = STATUS_MAP.get("04")
         self._co2 = None
+        self._vent_demand = None
 
     @property
     def extra_state_attributes(self):
         return {
             "co2": self._co2,
+            "vent_demand": self._vent_demand,
         }
 
     async def async_added_to_hass(self):
@@ -196,8 +198,8 @@ class OrconFan(FanEntity):
 
     def _handle_code_31e0(self, fields):
         """ventilator demand, by co2 sensor"""
-        demand = int(int(fields[1][4:6], 16) / 2)
-        _LOGGER.debug(f"[RAMES] Vent demand {demand}%")
+        self._vent_demand = int(int(fields[1][4:6], 16) / 2)
+        _LOGGER.debug(f"[RAMES] Vent demand {self._vent_demand}%")
 
     async def async_set_preset_mode(self, preset_mode: str):
         command = COMMAND_TEMPLATES.get(preset_mode)
