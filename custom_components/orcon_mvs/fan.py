@@ -68,7 +68,7 @@ class OrconFan(FanEntity):
         topic = f"{DEFAULT_TOPIC}/{self._gateway_id}/tx"
         payload = json.dumps({"msg": cmd})
         try:
-            _LOGGER.debug("[MQTT] Send payload: %s", payload)
+            _LOGGER.debug(f"[MQTT] Send payload: {payload}")
             await mqtt.async_publish(self.hass, topic, payload)
         except Exception:
             _LOGGER.error(f"[MQTT] Failed to process payload {payload}", exc_info=True)
@@ -76,7 +76,7 @@ class OrconFan(FanEntity):
     async def _handle_mqtt_message(self, msg):
         try:
             payload = json.loads(msg.payload)
-            _LOGGER.debug("[MQTT] Received payload: %s", payload)
+            _LOGGER.debug(f"[MQTT] Received payload: {payload}")
             self._handle_ramses_packet(payload)
         except Exception:
             _LOGGER.error("[MQTT] Failed to process payload", exc_info=True)
@@ -86,23 +86,23 @@ class OrconFan(FanEntity):
         ts = payload.get("ts", "")
         parts = msg.split()
         if len(parts) < 8:
-            _LOGGER.warning("[RAMSES] Malformed packet: %s", msg)
+            _LOGGER.warning(f"[RAMSES] Malformed packet: {msg}")
             return
         src = parts[3]
         code = parts[6]
         data_fields = parts[7:]
-        _LOGGER.debug("[RAMSES] ts=%s src=%s code=%s data=%s", ts, src, code, data_fields)
+        _LOGGER.debug(f"[RAMSES] ts={ts} src={src} code={code} data={data_fields}")
         if src not in {self._fan_id, self._co2_id, self._gateway_id}:
-            _LOGGER.debug("[RAMSES] Ignored src: %s", src)
+            _LOGGER.debug(f"[RAMSES] Ignored src: {src}")
             return
         handler = getattr(self, f"_handle_code_{code.lower()}", None)
         if callable(handler):
             try:
                 handler(data_fields)
             except Exception:
-                _LOGGER.error("[RAMSES] Error in handler for code %s", code, exc_info=True)
+                _LOGGER.error(f"[RAMSES] Error in handler for code {code}", exc_info=True)
         else:
-            _LOGGER.warning("[RAMSES] No handler for code: %s", code)
+            _LOGGER.warning(f"[RAMSES] No handler for code: {code}")
 
     def _hex_to_date(self, value):
         if value == "FFFFFFFF":
@@ -116,7 +116,7 @@ class OrconFan(FanEntity):
     def _handle_code_31d9(self, fields):
         """Ventilation status"""
         if len(fields) < 2:
-            _LOGGER.warning("[RAMSES] Unexpected fields for 31D9: %s", fields)
+            _LOGGER.warning(f"[RAMSES] Unexpected fields for 31D9: {fields}")
             return
         fan_mode = fields[1][4:6]
         bitmap = int(fields[1][2:4], 16)
@@ -141,10 +141,10 @@ class OrconFan(FanEntity):
 
     def _handle_code_1298(self, fields):
         if len(fields) < 2:
-            _LOGGER.warning("[RAMSES] Unexpected fields for 1298: %s", fields)
+            _LOGGER.warning(f"[RAMSES] Unexpected fields for 1298: {fields}")
             return
         self._co2 = int(fields[1], 16)
-        _LOGGER.debug("[RAMSES] CO2 level: %d ppm", self._co2)
+        _LOGGER.debug(f"[RAMSES] CO2 level: {self._co2} ppm")
         self.async_write_ha_state()
         sensor = self.hass.data[DOMAIN].get("co2_sensor")
         if sensor:
@@ -179,7 +179,7 @@ class OrconFan(FanEntity):
     async def async_set_preset_mode(self, preset_mode: str):
         command = COMMAND_TEMPLATES.get(preset_mode)
         if not command:
-            _LOGGER.error("Unknown preset_mode: %s", preset_mode)
+            _LOGGER.error(f"Unknown preset_mode: {preset_mode}")
             return
         cmd = command.format(remote_id=self._remote_id, fan_id=self._fan_id)
         await self._publish_mqtt_message(cmd)
