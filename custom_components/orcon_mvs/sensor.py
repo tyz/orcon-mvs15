@@ -1,4 +1,8 @@
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorEntity,
+    SensorDeviceClass,
+    SensorStateClass,
+)
 from homeassistant.const import CONCENTRATION_PARTS_PER_MILLION
 
 from .const import DOMAIN
