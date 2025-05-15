@@ -2,7 +2,7 @@ import logging
 import asyncio
 import json
 from datetime import datetime as dt
-from .ramses_packet import RamsesPacket
+from .ramses_packet import RamsesPacket, RamsesPacket_SetFanMode, RamsesPacket_ReqFanState
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -12,19 +12,6 @@ class RamsesESPException(Exception):
 
 
 class RamsesESP:
-    COMMAND_TEMPLATES = {
-        "Auto": " I --- {remote_id} {fan_id} --:------ 22F1 003 000404",
-        "Low": " I --- {remote_id} {fan_id} --:------ 22F1 003 000104",
-        "Medium": " I --- {remote_id} {fan_id} --:------ 22F1 003 000204",
-        "High": " I --- {remote_id} {fan_id} --:------ 22F1 003 000304",
-        "High (15m)": " I --- {remote_id} {fan_id} --:------ 22F3 007 00020F03040000",
-        "High (30m)": " I --- {remote_id} {fan_id} --:------ 22F3 007 00021E03040000",
-        "High (60m)": " I --- {remote_id} {fan_id} --:------ 22F3 007 00023C03040000",
-        "Away": " I --- {remote_id} {fan_id} --:------ 22F1 003 000004",
-    }
-
-    REQ_STATUS_TEMPLATE = " RQ --- {gateway_id} {fan_id} --:------ 31D9 001 00"
-
     STATUS_MAP = {
         "00": "Away",
         "01": "Low",
@@ -43,27 +30,25 @@ class RamsesESP:
         self.co2_callback = co2_callback
         self.vent_demand_callback = vent_demand_callback
 
-    def _create_payload(self, cmd):
-        return {"msg": cmd}
-
     async def setup(self, event):
-        await asyncio.sleep(2)  # FIXME: wait on mqtt ready state instead?
-        cmd = self._create_payload(self.REQ_STATUS_TEMPLATE.format(gateway_id=self.gateway_id, fan_id=self.fan_id))
-        await self.mqtt.publish(cmd)
+        await asyncio.sleep(1)  # FIXME: wait on mqtt ready state instead?
+        rfs = RamsesPacket_ReqFanState(src_id=self.gateway_id, dst_id=self.fan_id)
+        await self.mqtt.publish(rfs)
 
     async def handle_mqtt_message(self, msg):
         try:
             self._handle_ramses_packet(json.loads(msg.payload))
         except Exception:
-            _LOGGER.error("[MQTT] Failed to process payload {msg}", exc_info=True)
+            _LOGGER.error("Failed to process payload {msg}", exc_info=True)
 
     async def set_preset_mode(self, mode):
-        command = self.COMMAND_TEMPLATES.get(mode)
-        if not command:
-            _LOGGER.error(f"Unknown preset_mode: {mode}")
+        try:
+            sfm = RamsesPacket_SetFanMode(preset=mode, src_id=self.remote_id, dst_id=self.fan_id)
+        except Exception:
+            _LOGGER.error(f"Error setting fan preset mode: {mode}")
             return
-        cmd = self._create_payload(command.format(remote_id=self.remote_id, fan_id=self.fan_id))
-        await self.mqtt.publish(cmd)
+        _LOGGER.info(f"Setting fan preset mode to {mode}")
+        await self.mqtt.publish(sfm)
 
     def _handle_ramses_packet(self, payload):
         try:
@@ -78,15 +63,15 @@ class RamsesESP:
             return
         handler = getattr(self, f"_handle_code_{packet.code.lower()}", None)
         if not callable(handler):
-            _LOGGER.warning(f"[RAMSES] No handler for code: {packet.code}")
+            _LOGGER.warning(f"No handler for code: {packet.code}")
             return
         try:
             handler(packet.data)
         except Exception:
-            _LOGGER.error(f"[RAMSES] Error in handler for code {packet.code}", exc_info=True)
+            _LOGGER.error(f"Error in handler for code {packet.code}", exc_info=True)
 
     def _hex_to_date(self, value):
-        """from ramses_rf"""
+        """From ramses_rf"""
         if value == "FFFFFFFF":
             return None
         return dt(
@@ -103,7 +88,7 @@ class RamsesESP:
             if self.fan_mode_callback:
                 self.fan_mode_callback(status)
             _LOGGER.debug(
-                f"[RAMES] Fan state: {status}, "
+                f"Fan state: {status}, "
                 + str(
                     {
                         "passive": bool(bitmap & 0x02),
@@ -115,19 +100,18 @@ class RamsesESP:
                 )
             )
         else:
-            _LOGGER.error(f"[RAMSES] Unknown fan_mode {fan_mode}")
+            _LOGGER.error(f"Unknown fan_mode {fan_mode}")
 
     def _handle_code_1298(self, data):
-        """co2 sensor"""
+        """CO2 sensor"""
         if self.co2_callback:
             self.co2_callback(int(data, 16))
 
     def _handle_code_10e0(self, data):
-        """device info"""
+        """Device info"""
         description, _, _ = data[36:].partition("00")
         _LOGGER.debug(
-            "[RAMSES] "
-            + str(
+            str(
                 {
                     "sz_oem_code": data[14:16],  # 00/FF is CH/DHW, 01/6x is HVAC
                     "manufacturer_group": data[2:6],  # 0001-HVAC, 0002-CH/DHW

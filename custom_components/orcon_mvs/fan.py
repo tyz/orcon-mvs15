@@ -3,6 +3,7 @@ from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
+from .ramses_packet import RamsesPacket_SetFanMode
 from .const import (
     DOMAIN,
     CONF_GATEWAY_ID,
@@ -13,8 +14,8 @@ from .const import (
 )
 
 # TODO:
-# * Move ramses packet handling + checks to its own class
 # * Add USB support for Ramses ESP
+# * Add code handlers to ramses_packet
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class OrconFan(FanEntity):
-    _attr_preset_modes = list(RamsesESP.COMMAND_TEMPLATES.keys())
+    _attr_preset_modes = RamsesPacket_SetFanMode.presets()
     _attr_supported_features = FanEntityFeature.PRESET_MODE
 
     def __init__(self, hass, gateway_id, remote_id, fan_id, co2_id, mqtt_topic):
@@ -56,9 +57,9 @@ class OrconFan(FanEntity):
     async def async_added_to_hass(self):
         sub_topic = f"{self._mqtt_topic}/{self._gateway_id}/rx"
         pub_topic = f"{self._mqtt_topic}/{self._gateway_id}/tx"
-        self._mqtt = MQTT(self.hass, sub_topic, pub_topic)
+        mqtt = MQTT(self.hass, sub_topic, pub_topic)
         self.ramses_esp = RamsesESP(
-            mqtt=self._mqtt,
+            mqtt=mqtt,
             gateway_id=self._gateway_id,
             remote_id=self._remote_id,
             fan_id=self._fan_id,
@@ -67,8 +68,8 @@ class OrconFan(FanEntity):
             co2_callback=self.co2_callback,
             vent_demand_callback=self.vent_demand_callback,
         )
-        self._mqtt.handle_message = self.ramses_esp.handle_mqtt_message
-        await self._mqtt.setup()
+        mqtt.handle_message = self.ramses_esp.handle_mqtt_message
+        await mqtt.setup()
         self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self.ramses_esp.setup)
 
     async def async_set_preset_mode(self, preset_mode: str):

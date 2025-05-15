@@ -18,11 +18,12 @@ class MQTT:
 
     async def setup(self):
         await mqtt.async_subscribe(self.hass, self.sub_topic, self.handle_message)
-        _LOGGER.debug(f"[MQTT] Subscribed to {self.sub_topic}")
+        _LOGGER.debug(f"Subscribed to {self.sub_topic}")
 
-    async def publish(self, payload):
+    async def publish(self, ramses_packet):
+        payload = ramses_packet.payload()
         try:
-            _LOGGER.debug(f"[MQTT] Send payload to {self.pub_topic}: {payload}")
+            _LOGGER.debug(f"Send payload to {self.pub_topic}: {payload}")
             await mqtt.async_publish(self.hass, self.pub_topic, json.dumps(payload))
         except Exception as e:
             raise MQTTException(f"Failed to publish payload {payload} to {self.pub_topic}: {e}")
