@@ -15,7 +15,7 @@ from .const import (
 
 # TODO:
 # * Add USB support for Ramses ESP
-# * Add code handlers to ramses_packet
+# * Add code rx handlers to ramses_packet
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,9 +64,11 @@ class OrconFan(FanEntity):
             remote_id=self._remote_id,
             fan_id=self._fan_id,
             co2_id=self._co2_id,
-            fan_mode_callback=self.fan_mode_callback,
-            co2_callback=self.co2_callback,
-            vent_demand_callback=self.vent_demand_callback,
+            callbacks={
+                "10E0": self.vent_demand_callback,
+                "1298": self.co2_callback,
+                "31D9": self.fan_mode_callback,
+            },
         )
         mqtt.handle_message = self.ramses_esp.handle_mqtt_message
         await mqtt.setup()
@@ -76,18 +78,21 @@ class OrconFan(FanEntity):
         await self.ramses_esp.set_preset_mode(preset_mode)
 
     def fan_mode_callback(self, status):
+        """Update fan state"""
         self._attr_preset_mode = status
         self.async_write_ha_state()
         _LOGGER.info(f"Fan mode: {status}")
 
     def co2_callback(self, status):
+        """Update CO2 sensor + attribute"""
         if sensor := self.hass.data[DOMAIN].get("co2_sensor"):
             sensor.update_state(status)
-            self._co2 = status
-            self.async_write_ha_state()
-            _LOGGER.info(f"CO2: {status}")
+        self._co2 = status
+        self.async_write_ha_state()
+        _LOGGER.info(f"CO2: {status}")
 
     def vent_demand_callback(self, status):
+        """Update Vent demand attribute"""
         self._vent_demand = status
         self.async_write_ha_state()
         _LOGGER.info(f"Vent demand: {status}")
