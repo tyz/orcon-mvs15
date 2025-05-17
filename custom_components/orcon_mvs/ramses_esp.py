@@ -1,7 +1,13 @@
 import logging
 import asyncio
 import json
-from .ramses_packet import RamsesPacket, RamsesPacket_SetFanMode, RamsesPacket_ReqFanState, RamsesPacket_ReqCO2State
+from .ramses_packet import (
+    RamsesPacket,
+    RamsesPacket_SetFanMode,
+    RamsesPacket_ReqFanState,
+    RamsesPacket_ReqCO2State,
+    RamsesPacket_ReqVentDemandState,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,11 +34,11 @@ class RamsesESP:
         self.callbacks = callbacks
 
     async def setup(self, event):
+        """Fetch fan, CO2 and vent demand state on startup"""
         await asyncio.sleep(1)  # FIXME: wait on mqtt ready state instead?
-        rfs = RamsesPacket_ReqFanState(src_id=self.gateway_id, dst_id=self.fan_id)
-        await self.mqtt.publish(rfs)
-        rcs = RamsesPacket_ReqCO2State(src_id=self.gateway_id, dst_id=self.co2_id)
-        await self.mqtt.publish(rcs)
+        await self.mqtt.publish(RamsesPacket_ReqFanState(src_id=self.gateway_id, dst_id=self.fan_id))
+        await self.mqtt.publish(RamsesPacket_ReqCO2State(src_id=self.gateway_id, dst_id=self.co2_id))
+        await self.mqtt.publish(RamsesPacket_ReqVentDemandState(src_id=self.gateway_id, dst_id=self.co2_id))
 
     async def handle_mqtt_message(self, msg):
         try:
@@ -86,7 +92,8 @@ class RamsesESP:
 
     def _handle_code_10e0(self, data):
         """Device info"""
-        pass
+        if "10E0" in self.callbacks:
+            self.callbacks["10E0"](data)
 
     def _handle_code_31e0(self, data):
         """ventilator demand, by co2 sensor"""

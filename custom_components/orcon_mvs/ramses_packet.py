@@ -23,22 +23,44 @@ class RamsesPacketDatetime:
         if isinstance(dt, datetime):
             self.t_datetime = dt
             self.t_str = datetime.isoformat(self.t_datetime)
+        elif isinstance(dt, str):
+            if len(dt) == 8:
+                """YYYY-MM-DD hex date"""
+                self.t_datetime = self._hex_to_date(dt)
+                self.t_str = ""
+                if self.t_datetime:
+                    self.t_str = self.t_datetime.strftime("%Y-%m-%d")
+            else:
+                """ISO 8601"""
+                self.t_str = str(dt)
+                try:
+                    self.t_datetime = datetime.fromisoformat(self.t_str)
+                except ValueError as e:
+                    raise RamsesPacketException(e)
         else:
-            self.t_str = str(dt)
-            self.t_datetime = datetime.fromisoformat(self.t_str)
+            raise RamsesPacketException(f"Don't know how to convert date {dt}")
 
     def __repr__(self):
         return self.t_str
 
+    def _hex_to_date(self, value):
+        if value == "FFFFFFFF":
+            return None
+        return datetime(
+            year=int(value[4:8], 16),
+            month=int(value[2:4], 16),
+            day=int(value[:2], 16) & 0b11111,  # 1st 3 bits: DayOfWeek
+        )
+
 
 class RamsesPacket:
-    def __init__(self, raw_packet=None, src_id="--:------", dst_id="--:------", xxx_id="--:------"):
+    def __init__(self, raw_packet=None, src_id="--:------", dst_id="--:------", ann_id="--:------"):
         self._timestamp = RamsesPacketDatetime(datetime.now())
         self.signal_strength = -1
         self.type = None
         self.src_id = src_id
         self.dst_id = dst_id
-        self.xxx_id = xxx_id
+        self.ann_id = ann_id
         self.code = None
         self.length = 0
         self._data = None
@@ -61,7 +83,7 @@ class RamsesPacket:
         self.length = len(self._data)
 
     def payload(self):
-        return {"msg": f" {self.type} --- {self.src_id} {self.dst_id} {self.xxx_id} {self.code} {self.length:03d} {self.data}"}
+        return {"msg": f" {self.type} --- {self.src_id} {self.dst_id} {self.ann_id} {self.code} {self.length:03d} {self.data}"}
 
     def json(self):
         return json.dumps(self.payload())
@@ -74,7 +96,7 @@ class RamsesPacket:
         self.type = fields[1]
         self.src_id = fields[3]
         self.dst_id = fields[4]
-        self.xxx_id = fields[5]
+        self.ann_id = fields[5]
         self.code = fields[6]
         self.data = fields[8]
         self.text = None
@@ -86,15 +108,10 @@ class RamsesPacket:
             _LOGGER.warning(f"No _text_{self.code.lower()}")
         _LOGGER.debug(self.__repr__())
 
-    def _hex_to_date(self, value):
-        """From ramses_rf"""
-        if value == "FFFFFFFF":
-            return None
-        return datetime(
-            year=int(value[4:8], 16),
-            month=int(value[2:4], 16),
-            day=int(value[:2], 16) & 0b11111,  # 1st 3 bits: DayOfWeek
-        ).strftime("%Y-%m-%d")
+    def _bool(value):
+        if value == "C8":
+            return True
+        return False
 
     def _text_31d9(self):
         presets = {  # FIXME: dup in ramses_esp
@@ -128,6 +145,8 @@ class RamsesPacket:
         return "Unknown type"
 
     def _text_1298(self):
+        if self.length == 1:
+            return "CO2 state request"
         value = int(self.data, 16)
         return f"CO2: {value} ppm"
 
@@ -138,13 +157,17 @@ class RamsesPacket:
         return "TODO"
 
     def _text_31e0(self):
-        value = int(int(self.data[4:6], 16) / 2)
-        return f"Vent demand: {value}%"
+        if self.length == 1:
+            return "Vent demand state request"
+        if self.length != 8:
+            return "Unexpected length"
+        percent = int(int(self.data[4:6], 16) / 2)
+        return f"Vent demand: {percent}%, flags: {self.data[2:4]}, unknown: {self.data[6:]}"
 
     def _text_10e0(self):
         if self.length == 1:
             return "Device info request"
-        if self.length == 38 or self.length == 29:
+        if self.length in [29, 38]:
             description, _, _ = self.data[36:].partition("00")
             return str(
                 {
@@ -152,8 +175,8 @@ class RamsesPacket:
                     "manufacturer_group": self.data[2:6],  # 0001-HVAC, 0002-CH/DHW
                     "manufacturer_sub_id": self.data[6:8],
                     "product_id": self.data[8:10],  # if CH/DHW: matches device_type (sometimes)
-                    "date_1": self._hex_to_date(self.data[28:36]),
-                    "date_2": self._hex_to_date(self.data[20:28]),
+                    "date_1": RamsesPacketDatetime(self.data[28:36]),
+                    "date_2": RamsesPacketDatetime(self.data[20:28]),
                     "software_ver_id": self.data[10:12],
                     "list_ver_id": self.data[12:14],  # if FF/01 is CH/DHW, then 01/FF
                     "additional_ver_a": self.data[16:18],
@@ -178,6 +201,14 @@ class RamsesPacket_ReqCO2State(RamsesPacket):
         super().__init__(src_id=src_id, dst_id=dst_id)
         self.type = "RQ"
         self.code = "1298"
+        self.data = "00"
+
+
+class RamsesPacket_ReqVentDemandState(RamsesPacket):
+    def __init__(self, src_id="--:------", dst_id="--:------"):
+        super().__init__(src_id=src_id, dst_id=dst_id)
+        self.type = "RQ"
+        self.code = "31E0"
         self.data = "00"
 
 

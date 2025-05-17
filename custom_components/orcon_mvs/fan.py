@@ -16,6 +16,8 @@ from .const import (
 # TODO:
 # * Add USB support for Ramses ESP
 # * Add code rx handlers to ramses_packet
+# * Add mqtt_publish retry if no response from remote
+# * Convert data to objects per code type
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,9 +67,9 @@ class OrconFan(FanEntity):
             fan_id=self._fan_id,
             co2_id=self._co2_id,
             callbacks={
-                "10E0": self.vent_demand_callback,
                 "1298": self.co2_callback,
                 "31D9": self.fan_mode_callback,
+                "31E0": self.vent_demand_callback,
             },
         )
         mqtt.handle_message = self.ramses_esp.handle_mqtt_message
