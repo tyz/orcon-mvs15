@@ -35,7 +35,7 @@ class RamsesESP:
 
     async def setup(self, event):
         """Fetch fan, CO2 and vent demand state on startup"""
-        await asyncio.sleep(1)  # FIXME: wait on mqtt ready state instead?
+        await asyncio.sleep(2)  # FIXME: wait on mqtt ready state instead?
         await self.mqtt.publish(RamsesPacket_ReqFanState(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.mqtt.publish(RamsesPacket_ReqCO2State(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.mqtt.publish(RamsesPacket_ReqVentDemandState(src_id=self.gateway_id, dst_id=self.co2_id))

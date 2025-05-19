@@ -151,10 +151,14 @@ class RamsesPacket:
         return f"CO2: {value} ppm"
 
     def _text_22f1(self):
-        return "TODO"
+        if self.length != 3:
+            return "Unexpected length"
+        return next(k for k, v in RamsesPacket_SetFanMode._preset_data.items() if v == self.data)
 
     def _text_22f3(self):
-        return "TODO"
+        if self.length != 7:
+            return "Unexpected length"
+        return next(k for k, v in RamsesPacket_SetFanMode._preset_data.items() if v == self.data)
 
     def _text_31e0(self):
         if self.length == 1:
