@@ -14,10 +14,11 @@ from .const import (
 )
 
 # TODO:
+# * self.ramses_esp.setup should als run on 1st install of integration
 # * Add USB support for Ramses ESP
-# * Add code rx handlers to ramses_packet
+# * Convert code related to ramses codes to 1 object per code type
 # * Add mqtt_publish retry if no response from remote
-# * Convert data to objects per code type
+# * Create devices with info from 10E0
 
 _LOGGER = logging.getLogger(__name__)
 
