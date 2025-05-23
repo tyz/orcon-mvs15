@@ -103,7 +103,7 @@ class RamsesESP:
                     self._log_f.close()
                 except Exception:
                     pass
-                for i in (2, 1):
+                for i in range(5, 0, -1):
                     src = f"{path}{'' if i==1 else f'.{i-1}'}"
                     dst = f"{path}.{i}"
                     try:

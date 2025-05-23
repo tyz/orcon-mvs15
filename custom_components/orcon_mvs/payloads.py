@@ -1,4 +1,7 @@
-from .ramses_packet import RamsesPacket, RamsesPacketDatetime
+try:
+    from .ramses_packet import RamsesPacket, RamsesPacketDatetime
+except Exception:
+    from ramses_packet import RamsesPacket, RamsesPacketDatetime
 
 
 class CodeException(Exception):
@@ -105,8 +108,11 @@ class Code22f1(Code):
 
     def _parse_payload(self):
         self.values = {}
-        if self.packet.length == 3:
-            preset = next(k for k, v in self._fan_modes.items() if v == self.packet.data)
+        if self.packet.length in [3, 7]:
+            try:
+                preset = next(k for k, v in self._fan_modes.items() if v == self.packet.data)
+            except StopIteration:
+                preset = self.packet.data
             self.values = {"fan_mode": preset}
 
     def __repr__(self):
@@ -137,6 +143,14 @@ class Code22f1(Code):
         return list(cls._fan_modes.keys())
 
 
+class Code22f3(Code22f1):
+    """Fan mode with timer"""
+
+    def _validate_payload(self):
+        if self.packet.length != 7:
+            raise CodeException(f"Unexpected length: {self.packet}")
+
+
 class Code31d9(Code):
     """Fan state"""
 
@@ -158,7 +172,7 @@ class Code31d9(Code):
             state = self.packet.data[4:6]
             bitmap = int(self.packet.data[2:4], 16)
             self.values = {
-                "fan_mode": self._presets.get(state, "UNKNOWN"),
+                "fan_mode": self._presets.get(state, state),
                 "passive": bool(bitmap & 0x02),
                 "damper_only": bool(bitmap & 0x04),
                 "filter_dirty": bool(bitmap & 0x20),
@@ -169,7 +183,7 @@ class Code31d9(Code):
     def __repr__(self):
         if "fan_mode" not in self.values:
             return "Fan mode state request"
-        return f"Fan mode: {self.values.get('fan_mode')}"
+        return f"Fan state: fan_mode: {self.values.get('fan_mode')}, has_fault: {self.values.get('has_fault')}"
 
     @classmethod
     def get(cls, src_id, dst_id):
@@ -182,14 +196,6 @@ class Code31d9(Code):
     @classmethod
     def presets(cls):
         return list(cls._presets.values())
-
-
-class Code22f3(Code22f1):
-    """Fan mode with timer"""
-
-    def _validate_payload(self):
-        if self.packet.length != 7:
-            raise CodeException(f"Unexpected length: {self.packet}")
 
 
 class Code31e0(Code):
@@ -211,7 +217,7 @@ class Code31e0(Code):
     def __repr__(self):
         if "percentage" not in self.values:
             return "Vent demand state request"
-        return f"Vent demand: {self.values['percentage']}%, "
+        return f"Vent demand: {self.values['percentage']}%"
 
     @classmethod
     def get(self, src_id, dst_id):
@@ -377,3 +383,35 @@ class Code042f(Code):
             "counter_5": f"0x{self.packer.data[10:14]}",
             "unknown_7": f"0x{self.packer.data[14:]}",
         }
+
+
+if __name__ == "__main__":
+    import sys
+
+    path = sys.argv[1] if len(sys.argv) == 2 else "../../../config/packet.log"
+    last_msg = ""
+    with open(path) as f:
+        while True:
+            if (line := f.readline()) == "":
+                break
+            if line[26] == " ":  # ramses_rf packet.log
+                ts = line[:26]
+                msg = line[27:].strip()
+            else:
+                ts = line[:32]
+                msg = line[33:].strip()
+            if msg[4:] == last_msg:
+                continue
+            last_msg = msg[4:]
+            try:
+                packet = RamsesPacket(raw_packet={"ts": ts, "msg": msg})
+            except Exception:
+                print(f"{ts} {msg}")
+                continue
+            if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
+                print(f"WARNING: Class Code{packet.code.lower()} not imported, or does not exist")
+                code_class = Code
+            print(
+                f"{ts} {packet.signal_strength:03d} {packet.type:>2} {packet.src_id} {packet.dst_id} "
+                f"{packet.ann_id} {packet.code} {packet.length:03d} {code_class(packet=packet)}"
+            )
