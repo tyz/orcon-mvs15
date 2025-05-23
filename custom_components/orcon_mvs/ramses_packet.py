@@ -67,6 +67,7 @@ class RamsesPacket:
         self._raw_packet = raw_packet
         if self._raw_packet:
             self.parse()
+            self.packet_log()
 
     def __repr__(self):
         all_attr = {k: v for k, v in vars(self).items() if not k.startswith("_")}
@@ -99,166 +100,10 @@ class RamsesPacket:
         self.ann_id = fields[5]
         self.code = fields[6]
         self.data = fields[8]
-        self.text = None
         assert int(fields[7]) == self.length
-        text_func = getattr(self, f"_text_{self.code.lower()}", None)
-        if callable(text_func):
-            self.text = text_func()
-        else:
-            _LOGGER.warning(f"No _text_{self.code.lower()}")
         _LOGGER.debug(self.__repr__())
 
-    def _bool(value):
-        if value == "C8":
-            return True
-        return False
-
-    def _text_31d9(self):
-        presets = {  # FIXME: dup in ramses_esp
-            "00": "Away",
-            "01": "Low",
-            "02": "Medium",
-            "03": "High",
-            "04": "Auto",
-        }
-        if self.length == 1:
-            if self.type == "RQ":
-                return "Fan state request"
-        if self.length != 3:
-            return "Unexpected length"
-        state = self.data[4:6]
-        bitmap = int(self.data[2:4], 16)
-        info = str(
-            {
-                "fan_mode": presets.get(state, "UNKNOWN"),
-                "passive": bool(bitmap & 0x02),
-                "damper_only": bool(bitmap & 0x04),
-                "filter_dirty": bool(bitmap & 0x20),
-                "frost_cycle": bool(bitmap & 0x40),
-                "has_fault": bool(bitmap & 0x80),
-            }
-        )
-        if self.type == "RP":
-            return f"Fan state response: {info}"
-        if self.type == "I":
-            return f"Fan state: {info}"
-        return "Unknown type"
-
-    def _text_1298(self):
-        if self.length == 1:
-            return "CO2 state request"
-        value = int(self.data, 16)
-        return f"CO2: {value} ppm"
-
-    def _text_22f1(self):
-        if self.length != 3:
-            return "Unexpected length"
-        return next(k for k, v in RamsesPacket_SetFanMode._presets_data.items() if v == self.data)
-
-    def _text_22f3(self):
-        if self.length != 7:
-            return "Unexpected length"
-        return next(k for k, v in RamsesPacket_SetFanMode._presets_data.items() if v == self.data)
-
-    def _text_31e0(self):
-        if self.length == 1:
-            return "Vent demand state request"
-        if self.length != 8:
-            return "Unexpected length"
-        percent = int(int(self.data[4:6], 16) / 2)
-        return f"Vent demand: {percent}%, flags: {self.data[2:4]}, unknown: {self.data[6:]}"
-
-    def _text_10e0(self):
-        if self.length == 1:
-            return "Device info request"
-        if self.length in [29, 38]:
-            description, _, _ = self.data[36:].partition("00")
-            return str(
-                {
-                    "sz_oem_code": self.data[14:16],  # 00/FF is CH/DHW, 01/6x is HVAC
-                    "manufacturer_group": self.data[2:6],  # 0001-HVAC, 0002-CH/DHW
-                    "manufacturer_sub_id": self.data[6:8],
-                    "product_id": self.data[8:10],  # if CH/DHW: matches device_type (sometimes)
-                    "date_1": RamsesPacketDatetime(self.data[28:36]),
-                    "date_2": RamsesPacketDatetime(self.data[20:28]),
-                    "software_ver_id": self.data[10:12],
-                    "list_ver_id": self.data[12:14],  # if FF/01 is CH/DHW, then 01/FF
-                    "additional_ver_a": self.data[16:18],
-                    "additional_ver_b": self.data[18:20],
-                    "signature": self.data[2:20],
-                    "description": bytearray.fromhex(description).decode(),
-                }
-            )
-        return "Unexpected length"
-
-
-class RamsesPacket_ReqFanState(RamsesPacket):
-    def __init__(self, src_id="--:------", dst_id="--:------"):
-        super().__init__(src_id=src_id, dst_id=dst_id)
-        self.type = "RQ"
-        self.code = "31D9"
-        self.data = "00"
-
-
-class RamsesPacket_ReqCO2State(RamsesPacket):
-    def __init__(self, src_id="--:------", dst_id="--:------"):
-        super().__init__(src_id=src_id, dst_id=dst_id)
-        self.type = "RQ"
-        self.code = "1298"
-        self.data = "00"
-
-
-class RamsesPacket_ReqVentDemandState(RamsesPacket):
-    def __init__(self, src_id="--:------", dst_id="--:------"):
-        super().__init__(src_id=src_id, dst_id=dst_id)
-        self.type = "RQ"
-        self.code = "31E0"
-        self.data = "00"
-
-
-class RamsesPacket_SetFanMode(RamsesPacket):
-    _presets_data = {
-        "Auto": "000404",
-        "Low": "000104",
-        "Medium": "000204",
-        "High": "000304",
-        "High (15m)": "00020F03040000",
-        "High (30m)": "00021E03040000",
-        "High (60m)": "00023C03040000",
-        "Away": "000004",
-    }
-
-    def __init__(self, preset, src_id="--:------", dst_id="--:------"):
-        super().__init__(src_id=src_id, dst_id=dst_id)
-        if not self._presets_data.get(preset):
-            raise RamsesPacketException(f"Invalid preset '{preset}'")
-        self.type = "I"
-        self.data = self._presets_data.get(preset)
-        self.code = "22F1" if self.length == 3 else "22F3"
-
-    @classmethod
-    def presets(cls):
-        return list(cls._presets_data.keys())
-
-
-if __name__ == "__main__":
-    packet = json.loads(
-        '{"msg": "080  I --- 32:098366 --:------ 32:098366 1298 003 0001B2", "ts": "2025-05-14T17:35:56.828667+02:00"}'
-    )
-    r = RamsesPacket(packet)
-    print(r.payload())
-    rd = RamsesPacketDatetime(r.timestamp)
-    r2 = RamsesPacketDatetime(rd)
-    print(rd, r2)
-    r = RamsesPacket()
-    r.type = "RP"
-    r.src_id = "18:123456"
-    r.dst_id = "32:123456"
-    r.code = "22F1"
-    r.data = "000404"
-    print(r.payload())
-    r = RamsesPacket_ReqFanState(src_id="18:123456", dst_id="23:654321")
-    print(r.payload())
-    r = RamsesPacket_SetFanMode(src_id="18:123456", dst_id="23:654321", preset="Auto")
-    print(r.presets())
-    print(r.payload())
+    def packet_log(self):
+        """TODO: Save raw message to /config/packet.log or something"""
+        """Also setup rotation"""
+        pass
