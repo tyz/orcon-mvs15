@@ -1,3 +1,4 @@
+import os
 import logging
 import asyncio
 import json
@@ -50,7 +51,9 @@ class RamsesESP:
 
     async def handle_mqtt_message(self, msg):
         try:
-            self._handle_ramses_packet(json.loads(msg.payload))
+            payload = json.loads(msg.payload)
+            self._handle_ramses_packet(payload)
+            await self.packet_log(payload)
         except Exception:
             _LOGGER.error("Failed to process MQTT payload {msg}", exc_info=True)
 
@@ -80,3 +83,36 @@ class RamsesESP:
             return
         if packet.code in self.callbacks:
             self.callbacks[packet.code](payload.values)
+
+    async def packet_log(self, payload, path="/config/packet.log", max_size=1_000_000):
+        """Log raw packets to disk, rolling over at 1 MB, offloaded to executor."""
+
+        def _sync_log():
+            if not hasattr(self, "_log_f") or self._log_f is None:
+                try:
+                    self._log_f = open(path, "a")
+                except Exception as e:
+                    _LOGGER.error("Error opening %s: %s", path, e)
+                    return
+
+            print(f"{payload['ts']} {payload['msg']}", file=self._log_f)
+            self._log_f.flush()
+
+            if os.path.getsize(path) > max_size:
+                try:
+                    self._log_f.close()
+                except Exception:
+                    pass
+                for i in (2, 1):
+                    src = f"{path}{'' if i==1 else f'.{i-1}'}"
+                    dst = f"{path}.{i}"
+                    try:
+                        os.replace(src, dst)
+                    except FileNotFoundError:
+                        continue
+                try:
+                    self._log_f = open(path, "a")
+                except Exception as e:
+                    _LOGGER.error("Error reopening %s: %s", path, e)
+
+        await self.hass.async_add_executor_job(_sync_log)

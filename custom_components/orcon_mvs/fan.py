@@ -20,7 +20,6 @@ from .const import (
 # * Create devices with info from 10E0
 # * Start timer on timed fan modes (22F3)
 # * Raise some event when fan state says fault is true
-# * Save mqtt msgs to packet.log
 
 _LOGGER = logging.getLogger(__name__)
 

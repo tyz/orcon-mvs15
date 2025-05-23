@@ -67,7 +67,6 @@ class RamsesPacket:
         self._raw_packet = raw_packet
         if self._raw_packet:
             self.parse()
-            self.packet_log()
 
     def __repr__(self):
         all_attr = {k: v for k, v in vars(self).items() if not k.startswith("_")}
@@ -101,9 +100,4 @@ class RamsesPacket:
         self.code = fields[6]
         self.data = fields[8]
         assert int(fields[7]) == self.length
-        _LOGGER.debug(self.__repr__())
-
-    def packet_log(self):
-        """TODO: Save raw message to /config/packet.log or something"""
-        """Also setup rotation"""
-        pass
+        _LOGGER.debug(self)

@@ -55,7 +55,7 @@ class Code:
 
     @classmethod
     def values(cls):
-        """Return a list of optional valies for self.set"""
+        """Return a list of optional values for self.set"""
         raise NotImplementedError
 
 
@@ -350,7 +350,7 @@ class Code1fc9(Code):
     """RF bind"""
 
     def _validate_payload(self):
-        if self.packet.length != 6:  # could be a multiple of 6, not sure iof that's the case with orcon
+        if self.packet.length != 6:  # Could be a multiple of 6, not sure if that's ever the case with Orcon
             raise CodeException(f"Unexpected length: {self.packet}")
 
     def _parse_payload(self):
