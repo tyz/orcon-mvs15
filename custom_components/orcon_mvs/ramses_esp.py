@@ -4,7 +4,20 @@ import json
 from datetime import timedelta
 from homeassistant.helpers.event import async_track_time_interval
 from .ramses_packet import RamsesPacket
-from .payloads import Code, Code10e0, Code1298, Code12a0, Code22f1, Code31d9, Code31e0  # noqa: F401
+from .payloads import (  # noqa: F401
+    Code,
+    Code042f,
+    Code1060,
+    Code10e0,
+    Code10e1,
+    Code1298,
+    Code12a0,
+    Code1fc9,
+    Code22f1,
+    Code22f3,
+    Code31d9,
+    Code31e0,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,11 +72,11 @@ class RamsesESP:
         if packet.src_id not in {self.fan_id, self.co2_id, self.gateway_id}:
             return
         if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
+            _LOGGER.warning(f"Class Code{packet.code.lower()} not imported, or does not exist")
             code_class = Code
         payload = code_class(packet=packet)
-        _LOGGER.debug(payload)
         if packet.type == "RQ":
-            """Don't call handler on something we send ourselves"""
+            """Don't call callback function on something we send ourselves (TODO: timed fan with 22f3)"""
             return
         if packet.code in self.callbacks:
             self.callbacks[packet.code](payload.values)

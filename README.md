@@ -27,8 +27,10 @@ features:
 
 | Code | Description         | FAN | CO2 | RF  | Broadcast interval | Requestable | Notes                    |
 | ---- | ------------------- | --- | --- | --- | ------------------ | ----------- | ------------------------ |
-| 1060 | Battery state       | No  | No  | Yes | 15m                | Yes         | Some models (VMN-15LF01) |
+| 042F | ?                   | Yes | No  | No  | -                  | No          | Broadcasted on powerup   |
+| 1060 | Battery state       | No  | No  | Yes | 15m                | No          | Some models (VMN-15LF01) |
 | 10E0 | Device info         | Yes | Yes | No  | 24h                | Yes         |                          |
+| 10E1 | Device ID           | Yes | Yes | No  | -                  | Yes         |                          |
 | 1298 | CO2 sensor          | No  | Yes | No  | 10m                | Yes         |                          |
 | 12A0 | Indoor humidty      | Yes | No  | No  | -                  | Yes         |                          |
 | 1FC9 | RF Bind             | ?   | ?   |     | -                  | No          |                          |

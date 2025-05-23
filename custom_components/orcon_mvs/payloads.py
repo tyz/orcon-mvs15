@@ -138,6 +138,8 @@ class Code22f1(Code):
 
 
 class Code31d9(Code):
+    """Fan state"""
+
     _presets = {
         "00": "Away",
         "01": "Low",
@@ -261,6 +263,34 @@ class Code10e0(Code):
         return p
 
 
+class Code10e1(Code):
+    """Device ID"""
+
+    def _validate_payload(self):
+        if self.packet.length not in [1, 4]:
+            raise CodeException(f"Unexpected length: {self.packet}")
+
+    def _parse_payload(self):
+        self.values = {}
+        if self.packet.length == 4:
+            self.values = {
+                "device_id": self._dev_hex_to_id(self.packet.data),
+            }
+
+    def __repr__(self):
+        if "device_id" not in self.values:
+            return "Device ID request"
+        return f"Device ID: {self.values['device_id']}"
+
+    @classmethod
+    def get(cls, src_id, dst_id):
+        p = RamsesPacket(src_id=src_id, dst_id=dst_id)
+        p.type = "RQ"
+        p.code = "10E1"
+        p.data = "00"
+        return p
+
+
 class Code12a0(Code):
     """Indoor humidity"""
 
@@ -328,4 +358,22 @@ class Code1fc9(Code):
             "zone_idx": int(self.packet.data[:2], 16),
             "command": self.packet.data[2:6],
             "device_id": self._dev_hex_to_id(self.packet.data[6:]),
+        }
+
+
+class Code042f(Code):
+    """Unknown, broadcasted on startup"""
+
+    """23-5-2025: 042F 006 000042004200"""
+
+    def _validate_payload(self):
+        if self.packet.length != 6:
+            raise CodeException(f"Unexpected length: {self.packet}")
+
+    def _parse_payload(self):
+        self.values = {
+            "counter_1": f"0x{self.packer.data[2:6]}",
+            "counter_3": f"0x{self.packer.data[6:10]}",
+            "counter_5": f"0x{self.packer.data[10:14]}",
+            "unknown_7": f"0x{self.packer.data[14:]}",
         }
