@@ -1,5 +1,6 @@
 import logging
 from homeassistant.components.fan import FanEntity, FanEntityFeature
+from homeassistant.components.persistent_notification import create, dismiss
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
@@ -19,7 +20,6 @@ from .const import (
 # * Add mqtt_publish retry if no response from remote
 # * Create devices with info from 10E0
 # * Start timer on timed fan modes (22F3)
-# * Raise some event when fan state says fault is true
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ class OrconFan(FanEntity):
         self._co2 = None
         self._vent_demand = None
         self._relative_humidity = None
+        self._fault_notified = False
 
     @property
     def extra_state_attributes(self):
@@ -74,7 +75,7 @@ class OrconFan(FanEntity):
             callbacks={
                 "1298": self.co2_callback,
                 "12A0": self.relative_humidity_callback,
-                "31D9": self.fan_mode_callback,
+                "31D9": self.fan_state_callback,
                 "31E0": self.vent_demand_callback,
             },
         )
@@ -89,11 +90,23 @@ class OrconFan(FanEntity):
         if hasattr(self, "_unsub_interval"):
             self._unsub_interval()
 
-    def fan_mode_callback(self, status):
+    def fan_state_callback(self, status):
         """Update fan state"""
+        _LOGGER.info(f"Fan mode: {self._attr_preset_mode}")
         self._attr_preset_mode = status["fan_mode"]
         self.async_write_ha_state()
-        _LOGGER.info(f"Fan mode: {self._attr_preset_mode}")
+        if status["has_fault"]:
+            if not self._fault_notified:
+                _LOGGER.warning("Fan reported a fault")
+                create(
+                    self.hass, "Orcon MVS15 ventilator reported a fault", title="Orcon MVS15 error", notification_id="FAN_FAULT"
+                )
+                self._fault_notified = True
+        else:
+            if self._fault_notified:
+                _LOGGER.info("Fan fault cleared")
+                dismiss(self.hass, "FAN_FAULT")
+                self._fault_notified = False
 
     def co2_callback(self, status):
         """Update CO2 sensor + attribute"""
