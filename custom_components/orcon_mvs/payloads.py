@@ -1,6 +1,7 @@
 try:
     from .ramses_packet import RamsesPacket, RamsesPacketDatetime
-except Exception:
+except ImportError:
+    """for __main__"""
     from ramses_packet import RamsesPacket, RamsesPacketDatetime
 
 
@@ -9,6 +10,9 @@ class CodeException(Exception):
 
 
 class Code:
+    _expected_length = []
+    _code = "FFFF"
+
     def __init__(self, **kwargs):
         self.packet = kwargs.get("packet")
         self.values = {}
@@ -36,20 +40,28 @@ class Code:
 
     def _validate_payload(self):
         """Validate the payload, raise CodeException if it fails"""
-        pass
+        if self._expected_length and self.packet.length not in self._expected_length:
+            raise CodeException(f"Unexpected length: {self.packet}")
 
     def _parse_payload(self):
         """Parse the payload, put result in self.values"""
-        self.values = {"level": None, "_packet": str(self.packet)}
+        self.values = {"_label": "Unsupported code", "packet": str(self.packet)}
 
     def __repr__(self):
         """Return a human readable string of self.values"""
-        return f"Unsupported code: {self.values}"
+        if self.packet.length == 1:
+            return f"{self.values['_label']} state request"
+        keyval = ", ".join([f"{k}: {v}" for k, v in self.values.items() if not k.startswith("_")])
+        return f"{self.values['_label']}: {keyval}"
 
     @classmethod
     def get(cls, src_id, dst_id):
         """Build a RamsesPacket object that requests the current status"""
-        raise NotImplementedError
+        p = RamsesPacket(src_id=src_id, dst_id=dst_id)
+        p.type = "RQ"
+        p.code = cls._code
+        p.data = "00"
+        return p
 
     @classmethod
     def set(cls, src_id, dst_id, value):
@@ -57,7 +69,7 @@ class Code:
         raise NotImplementedError
 
     @classmethod
-    def values(cls):
+    def presets(cls):
         """Return a list of optional values for self.set"""
         raise NotImplementedError
 
@@ -65,31 +77,20 @@ class Code:
 class Code1298(Code):
     """CO2"""
 
-    def _validate_payload(self):
-        if self.packet.length not in [1, 3]:
-            raise CodeException(f"Unexpected length: {self.packet}")
+    _expected_length = [1, 3]
+    _code = "1298"
 
     def _parse_payload(self):
-        self.values = {}
+        self.values = {"_label": "CO2 level"}
         if self.packet.length == 3:
-            self.values = {"level": int(self.packet.data, 16)}
-
-    def __repr__(self):
-        if "level" not in self.values:
-            return "CO2 state request"
-        return f"CO2: {self.values['level']} ppm"
-
-    @classmethod
-    def get(cls, src_id, dst_id):
-        p = RamsesPacket(src_id=src_id, dst_id=dst_id)
-        p.type = "RQ"
-        p.code = "1298"
-        p.data = "00"
-        return p
+            self.values.update({"level": int(self.packet.data, 16)})
 
 
 class Code22f1(Code):
     """Fan mode"""
+
+    _expected_length = [1, 3]
+    _code = "22F1"
 
     _fan_modes = {
         "Auto": "000404",
@@ -102,31 +103,14 @@ class Code22f1(Code):
         "Away": "000004",
     }
 
-    def _validate_payload(self):
-        if self.packet.length not in [1, 3]:
-            raise CodeException(f"Unexpected length: {self.packet}")
-
     def _parse_payload(self):
-        self.values = {}
-        if self.packet.length in [3, 7]:
+        self.values = {"_label": "Fan mode"}
+        if self.packet.length != 1:
             try:
                 preset = next(k for k, v in self._fan_modes.items() if v == self.packet.data)
             except StopIteration:
                 preset = self.packet.data
-            self.values = {"fan_mode": preset}
-
-    def __repr__(self):
-        if "fan_mode" not in self.values:
-            return "Fan mode state request"
-        return f"Fan mode: {self.values.get('fan_mode')}"
-
-    @classmethod
-    def get(cls, src_id, dst_id):
-        cls.packet = RamsesPacket(src_id=src_id, dst_id=dst_id)
-        cls.packet.type = "RQ"
-        cls.packet.code = "22F1"
-        cls.packet.data = "00"
-        return cls.packet
+            self.values.update({"fan_mode": preset})
 
     @classmethod
     def set(cls, src_id, dst_id, preset):
@@ -146,13 +130,19 @@ class Code22f1(Code):
 class Code22f3(Code22f1):
     """Fan mode with timer"""
 
-    def _validate_payload(self):
-        if self.packet.length != 7:
-            raise CodeException(f"Unexpected length: {self.packet}")
+    _expected_length = [7]
+    _code = "22F3"
+
+    @classmethod
+    def get(cls):
+        raise NotImplementedError
 
 
 class Code31d9(Code):
     """Fan state"""
+
+    _expected_length = [1, 3]
+    _code = "31D9"
 
     _presets = {
         "00": "Away",
@@ -162,36 +152,17 @@ class Code31d9(Code):
         "04": "Auto",
     }
 
-    def _validate_payload(self):
-        if self.packet.length not in [1, 3]:
-            raise CodeException(f"Unexpected length: {self.packet}")
-
     def _parse_payload(self):
-        self.values = {}
+        self.values = {"_label": "Fan state"}
         if self.packet.length == 3:
             state = self.packet.data[4:6]
             bitmap = int(self.packet.data[2:4], 16)
-            self.values = {
-                "fan_mode": self._presets.get(state, state),
-                "passive": bool(bitmap & 0x02),
-                "damper_only": bool(bitmap & 0x04),
-                "filter_dirty": bool(bitmap & 0x20),
-                "frost_cycle": bool(bitmap & 0x40),
-                "has_fault": bool(bitmap & 0x80),
-            }
-
-    def __repr__(self):
-        if "fan_mode" not in self.values:
-            return "Fan mode state request"
-        return f"Fan state: fan_mode: {self.values.get('fan_mode')}, has_fault: {self.values.get('has_fault')}"
-
-    @classmethod
-    def get(cls, src_id, dst_id):
-        cls.packet = RamsesPacket(src_id=src_id, dst_id=dst_id)
-        cls.packet.type = "RQ"
-        cls.packet.code = "31D9"
-        cls.packet.data = "00"
-        return cls.packet
+            self.values.update(
+                {
+                    "fan_mode": self._presets.get(state, state),
+                    "has_fault": bool(bitmap & 0x80),
+                }
+            )
 
     @classmethod
     def presets(cls):
@@ -201,188 +172,130 @@ class Code31d9(Code):
 class Code31e0(Code):
     """Vent demand"""
 
-    def _validate_payload(self):
-        if self.packet.length not in [1, 8]:
-            raise CodeException(f"Unexpected length: {self.packet}")
+    _expected_length = [1, 8]
+    _code = "31E0"
 
     def _parse_payload(self):
-        self.values = {}
+        self.values = {"_label": "Vent demand"}
         if self.packet.length == 8:
-            self.values = {
-                "percentage": self._percent(self.packet.data[4:6]),
-                "flags": self.packet.data[2:4],
-                "_unknown": self.packet.data[6:],
-            }
-
-    def __repr__(self):
-        if "percentage" not in self.values:
-            return "Vent demand state request"
-        return f"Vent demand: {self.values['percentage']}%"
-
-    @classmethod
-    def get(self, src_id, dst_id):
-        p = RamsesPacket(src_id=src_id, dst_id=dst_id)
-        p.type = "RQ"
-        p.code = "31E0"
-        p.data = "00"
-        return p
+            self.values.update(
+                {
+                    "percentage": self._percent(self.packet.data[4:6]),
+                    "unknown": self.packet.data[12:14],  # 64, 1E or AA
+                }
+            )
 
 
 class Code10e0(Code):
     """Device info"""
 
-    def _validate_payload(self):
-        if self.packet.length not in [1, 29, 38]:
-            raise CodeException(f"Unexpected length: {self.packet}")
+    _expected_length = [1, 29, 38]
+    _code = "10E0"
 
     def _parse_payload(self):
+        self.values = {"_label": "Device info"}
         if self.packet.length == 1:
-            self.values = {}
             return
         description, _, _ = self.packet.data[36:].partition("00")
-        self.values = {
-            "sz_oem_code": self.packet.data[14:16],  # 00/FF is CH/DHW, 01/6x is HVAC
-            "manufacturer_group": self.packet.data[2:6],  # 0001-HVAC, 0002-CH/DHW
-            "manufacturer_sub_id": self.packet.data[6:8],
-            "product_id": self.packet.data[8:10],  # if CH/DHW: matches device_type (sometimes)
-            "date_1": RamsesPacketDatetime(self.packet.data[28:36]),
-            "date_2": RamsesPacketDatetime(self.packet.data[20:28]),
-            "software_ver_id": self.packet.data[10:12],
-            "list_ver_id": self.packet.data[12:14],  # if FF/01 is CH/DHW, then 01/FF
-            "additional_ver_a": self.packet.data[16:18],
-            "additional_ver_b": self.packet.data[18:20],
-            "signature": self.packet.data[2:20],
-            "description": bytearray.fromhex(description).decode(),
-        }
-
-    def __repr__(self):
-        if "sz_oem_code" not in self.values:
-            return "Device info request"
-        return f"Device info: {self.values}"
-
-    @classmethod
-    def get(cls, src_id, dst_id):
-        p = RamsesPacket(src_id=src_id, dst_id=dst_id)
-        p.type = "RQ"
-        p.code = "10E0"
-        p.data = "00"
-        return p
+        self.values.update(
+            {
+                "sz_oem_code": self.packet.data[14:16],  # 00/FF is CH/DHW, 01/6x is HVAC
+                "manufacturer_group": self.packet.data[2:6],  # 0001-HVAC, 0002-CH/DHW
+                "manufacturer_sub_id": self.packet.data[6:8],
+                "product_id": self.packet.data[8:10],  # if CH/DHW: matches device_type (sometimes)
+                "date_1": RamsesPacketDatetime(self.packet.data[28:36]),
+                "date_2": RamsesPacketDatetime(self.packet.data[20:28]),
+                "software_ver_id": self.packet.data[10:12],
+                "list_ver_id": self.packet.data[12:14],  # if FF/01 is CH/DHW, then 01/FF
+                "additional_ver_a": self.packet.data[16:18],
+                "additional_ver_b": self.packet.data[18:20],
+                "signature": self.packet.data[2:20],
+                "description": bytearray.fromhex(description).decode(),
+            }
+        )
 
 
 class Code10e1(Code):
     """Device ID"""
 
-    def _validate_payload(self):
-        if self.packet.length not in [1, 4]:
-            raise CodeException(f"Unexpected length: {self.packet}")
+    _expected_length = [1, 4]
+    _code = "10E1"
 
     def _parse_payload(self):
-        self.values = {}
+        self.values = {"_label": "Device ID"}
         if self.packet.length == 4:
-            self.values = {
-                "device_id": self._dev_hex_to_id(self.packet.data),
-            }
-
-    def __repr__(self):
-        if "device_id" not in self.values:
-            return "Device ID request"
-        return f"Device ID: {self.values['device_id']}"
-
-    @classmethod
-    def get(cls, src_id, dst_id):
-        p = RamsesPacket(src_id=src_id, dst_id=dst_id)
-        p.type = "RQ"
-        p.code = "10E1"
-        p.data = "00"
-        return p
+            self.values.update({"device_id": self._dev_hex_to_id(self.packet.data)})
 
 
 class Code12a0(Code):
     """Indoor humidity"""
 
-    def _validate_payload(self):
-        if self.packet.length not in [1, 2]:
-            raise CodeException(f"Unexpected length: {self.packet}")
+    _expected_length = [1, 2]
+    _code = "12A0"
 
     def _parse_payload(self):
-        self.values = {}
+        self.values = {"_label": "Indoor humidity"}
         if self.packet.length == 2:
-            self.values = {"level": int(self.packet.data, 16)}
-
-    def __repr__(self):
-        if "level" not in self.values:
-            return "Indoor humidity state request"
-        return f"Indoor humidity: {self.values['level']}%"
-
-    @classmethod
-    def get(cls, src_id, dst_id):
-        p = RamsesPacket(src_id=src_id, dst_id=dst_id)
-        p.type = "RQ"
-        p.code = "12A0"
-        p.data = "00"
-        return p
+            self.values.update({"level": int(self.packet.data, 16)})
 
 
 class Code1060(Code):
     """Battery state"""
 
-    def _validate_payload(self):
-        if self.packet.length not in [1, 6]:
-            raise CodeException(f"Unexpected length: {self.packet}")
+    _expected_length = [6]
+    _code = "1060"
 
     def _parse_payload(self):
-        self.values = {}
-        if self.packet.length == 6:
-            self.values = {
-                "level": self._percent(self.packet.data[2:4]),
-                "low": self.packet.data[4:6] == "00",
-            }
-
-    def __repr__(self):
-        if "level" not in self.values:
-            return "Battery state request"
-        return f"Battery level: {self.values['level']}%, low: {self.values['low']}"
+        self.values = {
+            "_label": "Battery status",
+            "level": self._percent(self.packet.data[2:4]),
+            "low": self.packet.data[4:6] == "00",
+        }
 
     @classmethod
-    def get(cls, src_id, dst_id):
-        p = RamsesPacket(src_id=src_id, dst_id=dst_id)
-        p.type = "RQ"
-        p.code = "1060"
-        p.data = "00"
-        return p
+    def get(cls):
+        raise NotImplementedError
 
 
 class Code1fc9(Code):
     """RF bind"""
 
-    def _validate_payload(self):
-        if self.packet.length != 6:  # Could be a multiple of 6, not sure if that's ever the case with Orcon
-            raise CodeException(f"Unexpected length: {self.packet}")
+    """ Could be a multiple of 6, not sure if that's ever the case with Orcon"""
+    _expected_length = [6]
+    _code = "1FC9"
 
     def _parse_payload(self):
         self.values = {
+            "_label": "RF Bind",
             "zone_idx": int(self.packet.data[:2], 16),
             "command": self.packet.data[2:6],
             "device_id": self._dev_hex_to_id(self.packet.data[6:]),
         }
 
+    @classmethod
+    def get(cls):
+        raise NotImplementedError
+
 
 class Code042f(Code):
-    """Unknown, broadcasted on startup"""
+    """Unknown, broadcasted on startup
+    23-5-2025: 042F 006 000042004200"""
 
-    """23-5-2025: 042F 006 000042004200"""
-
-    def _validate_payload(self):
-        if self.packet.length != 6:
-            raise CodeException(f"Unexpected length: {self.packet}")
+    _expected_length = [6]
+    _code = "042F"
 
     def _parse_payload(self):
         self.values = {
+            "_label": "Unknown (042F)",
             "counter_1": f"0x{self.packer.data[2:6]}",
             "counter_3": f"0x{self.packer.data[6:10]}",
             "counter_5": f"0x{self.packer.data[10:14]}",
             "unknown_7": f"0x{self.packer.data[14:]}",
         }
+
+    @classmethod
+    def get(cls):
+        raise NotImplementedError
 
 
 if __name__ == "__main__":
