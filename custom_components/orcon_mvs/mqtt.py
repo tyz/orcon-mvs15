@@ -17,8 +17,12 @@ class MQTT:
         self.handle_message = handle_message
 
     async def setup(self):
-        await mqtt.async_subscribe(self.hass, self.sub_topic, self.handle_message)
+        self._mqtt_unsub = await mqtt.async_subscribe(self.hass, self.sub_topic, self.handle_message)
         _LOGGER.debug(f"Subscribed to {self.sub_topic}")
+
+    async def remove(self):
+        if hasattr(self, "_mqtt_unsub") and callable(self._mqtt_unsub):
+            self._mqtt_unsub()
 
     async def publish(self, ramses_packet):
         payload = ramses_packet.payload()

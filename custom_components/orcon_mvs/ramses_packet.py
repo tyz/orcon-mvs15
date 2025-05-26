@@ -100,4 +100,3 @@ class RamsesPacket:
         self.code = fields[6]
         self.data = fields[8]
         assert int(fields[7]) == self.length
-        _LOGGER.debug(self)

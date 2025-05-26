@@ -16,12 +16,9 @@ class Code:
     def __init__(self, **kwargs):
         self.packet = kwargs.get("packet")
         self.values = {}
-        callback = kwargs.get("callback")
         if self.packet:
             self._validate_payload()
             self._parse_payload()
-            if callback:
-                callback(self.values)
 
     def _percent(self, value):
         if int(value, 16) > 200:  # FE or FF

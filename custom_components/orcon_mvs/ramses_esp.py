@@ -37,14 +37,20 @@ class RamsesESP:
         self.co2_id = co2_id
         self.callbacks = callbacks
 
-    async def setup(self, event):
+    async def setup(self, event=None):
         """Fetch fan, CO2 and vent demand state on startup"""
         await asyncio.sleep(2)  # FIXME: wait on mqtt ready state instead?
         await self.mqtt.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.mqtt.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.mqtt.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.mqtt.publish(Code31e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
-        self._req_humidity_interval = async_track_time_interval(self.hass, self._req_humidity, timedelta(minutes=5))
+        await self.mqtt.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.fan_id))
+        await self.mqtt.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
+        self._req_humidity_unsub = async_track_time_interval(self.hass, self._req_humidity, timedelta(minutes=5))
+
+    async def remove(self):
+        if hasattr(self, "_req_humidity_unsub") and callable(self._req_humidity_unsub):
+            self._req_humidity_unsub()
 
     async def _req_humidity(self, now):
         await self.mqtt.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))

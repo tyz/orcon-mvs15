@@ -1,7 +1,10 @@
 import logging
 from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.components.persistent_notification import create, dismiss
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import async_get as get_dev_reg
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import CoreState
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
 from .payloads import Code22f1
@@ -15,11 +18,9 @@ from .const import (
 )
 
 # TODO:
-# * self.ramses_esp.setup should also run on 1st install of integration
-# * Add USB support for Ramses ESP
+# * Add USB support for Ramses ESP (https://developers.home-assistant.io/docs/creating_integration_manifest?_highlight=mqtt#usb)
 # * Add mqtt_publish retry if no response from remote
-# * Create devices with info from 10E0
-# * Start timer on timed fan modes (22F3)
+# * Start home-assistant timer on timed fan modes (22F3)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ class OrconFan(FanEntity):
 
     def __init__(self, hass, gateway_id, remote_id, fan_id, co2_id, mqtt_topic):
         self.hass = hass
-        self._attr_name = "Orcon MVS Ventilation"
+        self._attr_name = "Orcon MVS-15 fan"
         self._attr_unique_id = f"orcon_mvs_{fan_id}"
         self._gateway_id = gateway_id
         self._remote_id = remote_id
@@ -64,33 +65,50 @@ class OrconFan(FanEntity):
     async def async_added_to_hass(self):
         sub_topic = f"{self._mqtt_topic}/{self._gateway_id}/rx"
         pub_topic = f"{self._mqtt_topic}/{self._gateway_id}/tx"
-        mqtt = MQTT(self.hass, sub_topic, pub_topic)
+        self.mqtt = MQTT(self.hass, sub_topic, pub_topic)
         self.ramses_esp = RamsesESP(
             hass=self.hass,
-            mqtt=mqtt,
+            mqtt=self.mqtt,
             gateway_id=self._gateway_id,
             remote_id=self._remote_id,
             fan_id=self._fan_id,
             co2_id=self._co2_id,
             callbacks={
-                "1298": self.co2_callback,
-                "12A0": self.relative_humidity_callback,
-                "31D9": self.fan_state_callback,
-                "31E0": self.vent_demand_callback,
+                "10E0": self._device_info_callback,
+                "1298": self._co2_callback,
+                "12A0": self._relative_humidity_callback,
+                "31D9": self._fan_state_callback,
+                "31E0": self._vent_demand_callback,
             },
         )
-        mqtt.handle_message = self.ramses_esp.handle_mqtt_message
-        await mqtt.setup()
-        self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self.ramses_esp.setup)
+        self.mqtt.handle_message = self.ramses_esp.handle_mqtt_message
+        await self.mqtt.setup()
+
+        if self.hass.state == CoreState.running:
+            _LOGGER.debug("Orcon MVS-15 integration has been setup")
+            self.hass.async_create_task(self.ramses_esp.setup())
+        else:
+            _LOGGER.debug("Orcon MVS-15 integration has been loaded after restart")
+            self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self.ramses_esp.setup)
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._fan_id)},
+            manufacturer="Orcon",
+            model="MVS-15",
+            name=f"{self.name} ({self._fan_id})",
+            via_device=(DOMAIN, self._gateway_id),
+        )
 
     async def async_set_preset_mode(self, preset_mode: str):
         await self.ramses_esp.set_preset_mode(preset_mode)
 
     async def async_will_remove_from_hass(self):
-        if hasattr(self, "_unsub_interval"):
-            self._unsub_interval()
+        await self.mqtt.remove()
+        await self.ramses_esp.remove()
 
-    def fan_state_callback(self, status):
+    def _fan_state_callback(self, status):
         """Update fan state"""
         _LOGGER.info(f"Fan mode: {self._attr_preset_mode}")
         self._attr_preset_mode = status["fan_mode"]
@@ -99,7 +117,10 @@ class OrconFan(FanEntity):
             if not self._fault_notified:
                 _LOGGER.warning("Fan reported a fault")
                 create(
-                    self.hass, "Orcon MVS15 ventilator reported a fault", title="Orcon MVS15 error", notification_id="FAN_FAULT"
+                    self.hass,
+                    "Orcon MVS-15 ventilator reported a fault",
+                    title="Orcon MVS-15 error",
+                    notification_id="FAN_FAULT",
                 )
                 self._fault_notified = True
         else:
@@ -108,7 +129,7 @@ class OrconFan(FanEntity):
                 dismiss(self.hass, "FAN_FAULT")
                 self._fault_notified = False
 
-    def co2_callback(self, status):
+    def _co2_callback(self, status):
         """Update CO2 sensor + attribute"""
         self._co2 = status["level"]
         if sensor := self.hass.data[DOMAIN].get("co2_sensor"):
@@ -116,16 +137,34 @@ class OrconFan(FanEntity):
         self.async_write_ha_state()
         _LOGGER.info(f"CO2: {status['level']} ppm")
 
-    def vent_demand_callback(self, status):
+    def _vent_demand_callback(self, status):
         """Update Vent demand attribute"""
         self._vent_demand = status["percentage"]
         self.async_write_ha_state()
         _LOGGER.info(f"Vent demand: {self._vent_demand}%")
 
-    def relative_humidity_callback(self, status):
+    def _relative_humidity_callback(self, status):
         """Update relative humidity attribute"""
         self._relative_humidity = status["level"]
         if sensor := self.hass.data[DOMAIN].get("humidity_sensor"):
             sensor.update_state(self._relative_humidity)
         self.async_write_ha_state()
         _LOGGER.info(f"Relative humidty: {self._relative_humidity}%")
+
+    def _device_info_callback(self, status):
+        """Update device info"""
+        dev_reg = get_dev_reg(self.hass)
+        if status["product_id"] == "26":
+            entry = dev_reg.async_get_device({(DOMAIN, self._fan_id)})
+        elif status["product_id"] == "51":
+            entry = dev_reg.async_get_device({(DOMAIN, self._co2_id)})
+        else:
+            _LOGGER.warning(f"Unknown product_id {status['product_id']}")
+            return
+        dev_info = {
+            "device_id": entry.id,
+            "sw_version": int(status["software_ver_id"], 16),
+            "model_id": status["description"],
+        }
+        dev_reg.async_update_device(**dev_info)
+        _LOGGER.info(f"Updated device info: {dev_info}")
