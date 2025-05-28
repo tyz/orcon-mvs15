@@ -21,27 +21,23 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class Co2Sensor(SensorEntity):
     def __init__(self, config):
-        self.config = config
+        self._state = None
         self._attr_name = "Orcon CO2"
         self._attr_native_unit_of_measurement = CONCENTRATION_PARTS_PER_MILLION
         self._attr_device_class = SensorDeviceClass.CO2
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_unique_id = f"orcon_co2_{config['co2_id']}"
-        self._state = None
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, config["co2_id"])},
+            manufacturer="Orcon",
+            model="MVS-15RH CO2B",
+            name=f"Orcon CO2 remote 15RF ({config['co2_id']})",
+            via_device=(DOMAIN, config["fan_id"]),
+        )
 
     @property
     def native_value(self):
         return self._state
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.config["co2_id"])},
-            manufacturer="Orcon",
-            model="MVS-15RH CO2B",
-            name="Orcon CO2 bedieningssensor 15RF",
-            via_device=(DOMAIN, self.config["fan_id"]),
-        )
 
     def update_state(self, value):
         self._state = value
@@ -50,27 +46,20 @@ class Co2Sensor(SensorEntity):
 
 class HumiditySensor(SensorEntity):
     def __init__(self, config):
-        self.config = config
+        self._state = None
         self._attr_name = "Orcon Relative Humidity"
         self._attr_native_unit_of_measurement = PERCENTAGE
         self._attr_device_class = SensorDeviceClass.HUMIDITY
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_unique_id = f"orcon_humidity_{config['fan_id']}"
-        self._state = None
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, config["fan_id"])},
+            name=f"Orcon MVS-15 fan ({config['fan_id']})",
+        )
 
     @property
     def native_value(self):
         return self._state
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.config["fan_id"])},
-            manufacturer="Orcon",
-            model="MVS-15RH CO2B",
-            name="Orcon fan humidty sensor",
-            via_device=(DOMAIN, self.config["gateway_id"]),
-        )
 
     def update_state(self, value):
         self._state = value

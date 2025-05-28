@@ -18,9 +18,12 @@ from .const import (
 )
 
 # TODO:
+# * LICENSE
 # * Add USB support for Ramses ESP (https://developers.home-assistant.io/docs/creating_integration_manifest?_highlight=mqtt#usb)
 # * Add mqtt_publish retry if no response from remote
 # * Start home-assistant timer on timed fan modes (22F3)
+# * MQTT via_device for RAMSES_ESP
+# * Add logo to https://brands.home-assistant.io/
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,18 +44,25 @@ class OrconFan(FanEntity):
 
     def __init__(self, hass, gateway_id, remote_id, fan_id, co2_id, mqtt_topic):
         self.hass = hass
-        self._attr_name = "Orcon MVS-15 fan"
-        self._attr_unique_id = f"orcon_mvs_{fan_id}"
         self._gateway_id = gateway_id
         self._remote_id = remote_id
         self._fan_id = fan_id
         self._co2_id = co2_id
         self._mqtt_topic = mqtt_topic
-        self._attr_preset_mode = "Auto"
         self._co2 = None
         self._vent_demand = None
         self._relative_humidity = None
         self._fault_notified = False
+        self._attr_name = "Orcon MVS-15 fan"
+        self._attr_unique_id = f"orcon_mvs_{fan_id}"
+        self._attr_preset_mode = "Auto"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._fan_id)},
+            manufacturer="Orcon",
+            model="MVS-15",
+            name=f"{self.name} ({self._fan_id})",
+            via_device=(DOMAIN, self._gateway_id),
+        )
 
     @property
     def extra_state_attributes(self):
@@ -63,9 +73,7 @@ class OrconFan(FanEntity):
         }
 
     async def async_added_to_hass(self):
-        sub_topic = f"{self._mqtt_topic}/{self._gateway_id}/rx"
-        pub_topic = f"{self._mqtt_topic}/{self._gateway_id}/tx"
-        self.mqtt = MQTT(self.hass, sub_topic, pub_topic)
+        self.mqtt = MQTT(self.hass, f"{self._mqtt_topic}/{self._gateway_id}")
         self.ramses_esp = RamsesESP(
             hass=self.hass,
             mqtt=self.mqtt,
@@ -81,7 +89,8 @@ class OrconFan(FanEntity):
                 "31E0": self._vent_demand_callback,
             },
         )
-        self.mqtt.handle_message = self.ramses_esp.handle_mqtt_message
+        self.mqtt.handle_message = self.ramses_esp.handle_ramses_message
+        self.mqtt.handle_version_message = self.ramses_esp.handle_ramses_version_message
         await self.mqtt.setup()
 
         if self.hass.state == CoreState.running:
@@ -90,16 +99,6 @@ class OrconFan(FanEntity):
         else:
             _LOGGER.debug("Orcon MVS-15 integration has been loaded after restart")
             self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self.ramses_esp.setup)
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._fan_id)},
-            manufacturer="Orcon",
-            model="MVS-15",
-            name=f"{self.name} ({self._fan_id})",
-            via_device=(DOMAIN, self._gateway_id),
-        )
 
     async def async_set_preset_mode(self, preset_mode: str):
         await self.ramses_esp.set_preset_mode(preset_mode)
@@ -154,6 +153,9 @@ class OrconFan(FanEntity):
     def _device_info_callback(self, status):
         """Update device info"""
         dev_reg = get_dev_reg(self.hass)
+        if status["manufacturer_sub_id"] != "C8":
+            _LOGGER.warning("This doesn't look like an Orcon device: {status}")
+            return
         if status["product_id"] == "26":
             entry = dev_reg.async_get_device({(DOMAIN, self._fan_id)})
         elif status["product_id"] == "51":

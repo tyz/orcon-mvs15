@@ -10,7 +10,6 @@ class CodeException(Exception):
 
 
 class Code:
-    _expected_length = []
     _code = "FFFF"
 
     def __init__(self, **kwargs):
@@ -19,6 +18,9 @@ class Code:
         if self.packet:
             self._validate_payload()
             self._parse_payload()
+
+    def _expected_length(self, length):
+        return True
 
     def _percent(self, value):
         if int(value, 16) > 200:  # FE or FF
@@ -37,7 +39,7 @@ class Code:
 
     def _validate_payload(self):
         """Validate the payload, raise CodeException if it fails"""
-        if self._expected_length and self.packet.length not in self._expected_length:
+        if not self._expected_length(self.packet.length):
             raise CodeException(f"Unexpected length: {self.packet}")
 
     def _parse_payload(self):
@@ -74,8 +76,10 @@ class Code:
 class Code1298(Code):
     """CO2"""
 
-    _expected_length = [1, 3]
     _code = "1298"
+
+    def _expected_length(self, length):
+        return length in [1, 3]
 
     def _parse_payload(self):
         self.values = {"_label": "CO2 level"}
@@ -86,7 +90,6 @@ class Code1298(Code):
 class Code22f1(Code):
     """Fan mode"""
 
-    _expected_length = [1, 3]
     _code = "22F1"
 
     _fan_modes = {
@@ -99,6 +102,9 @@ class Code22f1(Code):
         "High (60m)": "00023C03040000",
         "Away": "000004",
     }
+
+    def _expected_length(self, length):
+        return length in [1, 3]
 
     def _parse_payload(self):
         self.values = {"_label": "Fan mode"}
@@ -127,8 +133,10 @@ class Code22f1(Code):
 class Code22f3(Code22f1):
     """Fan mode with timer"""
 
-    _expected_length = [7]
     _code = "22F3"
+
+    def _expected_length(self, length):
+        return length == 7
 
     @classmethod
     def get(cls):
@@ -138,7 +146,6 @@ class Code22f3(Code22f1):
 class Code31d9(Code):
     """Fan state"""
 
-    _expected_length = [1, 3]
     _code = "31D9"
 
     _presets = {
@@ -148,6 +155,9 @@ class Code31d9(Code):
         "03": "High",
         "04": "Auto",
     }
+
+    def _expected_length(self, length):
+        return length in [1, 3]
 
     def _parse_payload(self):
         self.values = {"_label": "Fan state"}
@@ -169,8 +179,10 @@ class Code31d9(Code):
 class Code31e0(Code):
     """Vent demand"""
 
-    _expected_length = [1, 8]
     _code = "31E0"
+
+    def _expected_length(self, length):
+        return length in [1, 8]
 
     def _parse_payload(self):
         self.values = {"_label": "Vent demand"}
@@ -186,8 +198,10 @@ class Code31e0(Code):
 class Code10e0(Code):
     """Device info"""
 
-    _expected_length = [1, 29, 38]
     _code = "10E0"
+
+    def _expected_length(self, length):
+        return length == 1 or length >= 29
 
     def _parse_payload(self):
         self.values = {"_label": "Device info"}
@@ -200,13 +214,13 @@ class Code10e0(Code):
                 "manufacturer_group": self.packet.data[2:6],  # 0001-HVAC, 0002-CH/DHW
                 "manufacturer_sub_id": self.packet.data[6:8],
                 "product_id": self.packet.data[8:10],  # if CH/DHW: matches device_type (sometimes)
-                "date_1": RamsesPacketDatetime(self.packet.data[28:36]),
-                "date_2": RamsesPacketDatetime(self.packet.data[20:28]),
                 "software_ver_id": self.packet.data[10:12],
                 "list_ver_id": self.packet.data[12:14],  # if FF/01 is CH/DHW, then 01/FF
+                "unknown": self.packet.data[14:16],
                 "additional_ver_a": self.packet.data[16:18],
                 "additional_ver_b": self.packet.data[18:20],
-                "signature": self.packet.data[2:20],
+                "date_2": RamsesPacketDatetime(self.packet.data[20:28]),
+                "date_1": RamsesPacketDatetime(self.packet.data[28:36]),
                 "description": bytearray.fromhex(description).decode(),
             }
         )
@@ -215,8 +229,10 @@ class Code10e0(Code):
 class Code10e1(Code):
     """Device ID"""
 
-    _expected_length = [1, 4]
     _code = "10E1"
+
+    def _expected_length(self, length):
+        return length in [1, 4]
 
     def _parse_payload(self):
         self.values = {"_label": "Device ID"}
@@ -227,8 +243,10 @@ class Code10e1(Code):
 class Code12a0(Code):
     """Indoor humidity"""
 
-    _expected_length = [1, 2]
     _code = "12A0"
+
+    def _expected_length(self, length):
+        return length in [1, 2]
 
     def _parse_payload(self):
         self.values = {"_label": "Indoor humidity"}
@@ -239,8 +257,10 @@ class Code12a0(Code):
 class Code1060(Code):
     """Battery state"""
 
-    _expected_length = [6]
     _code = "1060"
+
+    def _expected_length(self, length):
+        return length in [1, 6]
 
     def _parse_payload(self):
         self.values = {
@@ -257,9 +277,14 @@ class Code1060(Code):
 class Code1fc9(Code):
     """RF bind"""
 
-    """ Could be a multiple of 6, not sure if that's ever the case with Orcon"""
-    _expected_length = [6]
+    """
+       Work in progress
+       FIXME: Length could be a multiple of 6, not sure if that's ever the case with Orcon
+    """
     _code = "1FC9"
+
+    def _expected_length(self, length):
+        return length % 6 == 0
 
     def _parse_payload(self):
         self.values = {
@@ -278,8 +303,10 @@ class Code042f(Code):
     """Unknown, broadcasted on startup
     23-5-2025: 042F 006 000042004200"""
 
-    _expected_length = [6]
     _code = "042F"
+
+    def _expected_length(self, length):
+        return length == 6
 
     def _parse_payload(self):
         self.values = {
@@ -298,30 +325,43 @@ class Code042f(Code):
 if __name__ == "__main__":
     import sys
 
-    path = sys.argv[1] if len(sys.argv) == 2 else "../../../config/packet.log"
+    path = sys.argv[1] if len(sys.argv) == 2 else "/dev/stdin"
     last_msg = ""
     with open(path) as f:
         while True:
             if (line := f.readline()) == "":
                 break
-            if line[26] == " ":  # ramses_rf packet.log
-                ts = line[:26]
-                msg = line[27:].strip()
-            else:
-                ts = line[:32]
-                msg = line[33:].strip()
+
+            try:
+                if line[26] == " ":  # ramses_rf packet.log
+                    ts = line[:26]
+                    msg = line[27:].strip()
+                else:
+                    ts = line[:32]
+                    msg = line[33:].strip()
+            except IndexError:
+                print(line, end="")
+                continue
+
             if msg[4:] == last_msg:
                 continue
             last_msg = msg[4:]
+
             try:
                 packet = RamsesPacket(raw_packet={"ts": ts, "msg": msg})
-            except Exception:
-                print(f"{ts} {msg}")
+            except AssertionError as e:
+                print(f"!!! {e}: {ts} {msg}")
                 continue
-            if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
-                print(f"WARNING: Class Code{packet.code.lower()} not imported, or does not exist")
-                code_class = Code
-            print(
-                f"{ts} {packet.signal_strength:03d} {packet.type:>2} {packet.src_id} {packet.dst_id} "
-                f"{packet.ann_id} {packet.code} {packet.length:03d} {code_class(packet=packet)}"
-            )
+            except Exception as e:
+                print(f"!!! {e}: {line}")
+
+            try:
+                if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
+                    print(f"WARNING: Class Code{packet.code.lower()} not imported, or does not exist")
+                    code_class = Code
+                print(
+                    f"{ts} {packet.signal_strength:03d} {packet.type:>2} {packet.src_id} {packet.dst_id} "
+                    f"{packet.ann_id} {packet.code} {packet.length:03d} {code_class(packet=packet)}"
+                )
+            except Exception as e:
+                print(f"!!! {e}: {line}")

@@ -90,13 +90,18 @@ class RamsesPacket:
 
     def parse(self):
         fields = self._raw_packet["msg"].split()
-        assert fields[2] == "---"
+        assert len(fields) >= 9, "Wrong number of fields"
+        assert fields[2] == "---", "Missing dashes"
         self.timestamp = RamsesPacketDatetime(self._raw_packet["ts"])
-        self.signal_strength = int(fields[0])
+        try:
+            self.signal_strength = int(fields[0])
+        except ValueError:
+            _LOGGER.warning(f"Signal strength == {fields[0]}")
+            self.signal_strength = -1
         self.type = fields[1]
         self.src_id = fields[3]
         self.dst_id = fields[4]
         self.ann_id = fields[5]
         self.code = fields[6]
         self.data = fields[8]
-        assert int(fields[7]) == self.length
+        assert int(fields[7]) == self.length, f"Wrong length ({fields[7]} vs {self.length})"
