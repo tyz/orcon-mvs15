@@ -1,0 +1,23 @@
+{
+  "entity": {
+    "fan": {
+      "fan_states": {
+        "state_attributes": {
+          "preset_mode": {
+            "default": "mdi:fan",
+            "state": {
+              "Low": "mdi:fan-speed-1",
+              "Medium": "mdi:fan-speed-2",
+              "High": "mdi:fan-speed-3",
+              "High (15m)": "mdi:fan-clock",
+              "High (30m)": "mdi:fan-clock",
+              "High (60m)": "mdi:fan-clock",
+              "Auto": "mdi:fan-auto",
+              "Away": "mdi:fan-off"
+            }
+          }
+        }
+      }
+    }
+  }
+}

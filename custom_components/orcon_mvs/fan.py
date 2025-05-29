@@ -41,6 +41,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class OrconFan(FanEntity):
     _attr_preset_modes = Code22f1.presets()
     _attr_supported_features = FanEntityFeature.PRESET_MODE
+    _attr_translation_key = "fan_states"  # see icons.json
 
     def __init__(self, hass, gateway_id, remote_id, fan_id, co2_id, mqtt_topic):
         self.hass = hass
@@ -140,7 +141,7 @@ class OrconFan(FanEntity):
         """Update Vent demand attribute"""
         self._vent_demand = status["percentage"]
         self.async_write_ha_state()
-        _LOGGER.info(f"Vent demand: {self._vent_demand}%")
+        _LOGGER.info(f"Vent demand: {self._vent_demand}%, unknown: {status['unknown']}")
 
     def _relative_humidity_callback(self, status):
         """Update relative humidity attribute"""
