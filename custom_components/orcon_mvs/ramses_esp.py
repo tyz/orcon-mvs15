@@ -125,7 +125,7 @@ class RamsesESP:
                     self._log_f.close()
                 except Exception:
                     pass
-                for i in range(5, 0, -1):
+                for i in range(10, 0, -1):  # keep up to 10 old log files
                     src = f"{path}{'' if i==1 else f'.{i-1}'}"
                     dst = f"{path}.{i}"
                     try:
