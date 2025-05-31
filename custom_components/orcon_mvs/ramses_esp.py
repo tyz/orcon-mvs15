@@ -7,7 +7,7 @@ from homeassistant.helpers.event import async_track_time_interval, async_call_la
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 from .ramses_packet import RamsesPacket
 from .const import DOMAIN
-from .payloads import (  # noqa: F401
+from .codes import (  # noqa: F401
     Code,
     Code042f,
     Code1060,

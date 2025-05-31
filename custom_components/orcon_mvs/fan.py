@@ -7,7 +7,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
-from .payloads import Code22f1
+from .codes import Code22f1
 from .const import (
     DOMAIN,
     CONF_GATEWAY_ID,
