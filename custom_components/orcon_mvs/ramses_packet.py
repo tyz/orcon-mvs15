@@ -63,6 +63,7 @@ class RamsesPacket:
         self.ann_id = ann_id
         self.code = None
         self.length = 0
+        self.expected_response = None
         self._data = None
         self._raw_packet = raw_packet
         if self._raw_packet:
@@ -72,6 +73,15 @@ class RamsesPacket:
         all_attr = {k: v for k, v in vars(self).items() if not k.startswith("_")}
         all_prop = {k: getattr(self, k) for k, v in inspect.getmembers(type(self), lambda v: isinstance(v, property))}
         return str({**all_attr, **all_prop})
+
+    def __eq__(self, b):
+        """Compare expected response to response (not the other way around)"""
+        return (
+            ((not self.type) or self.type == b.type)
+            and ((not self.code) or self.code == b.code)
+            and ((not self.src_id) or self.src_id == b.src_id)
+            and ((not self.dst_id) or self.dst_id == b.dst_id)
+        )
 
     @property
     def data(self):
@@ -90,7 +100,7 @@ class RamsesPacket:
 
     def parse(self):
         fields = self._raw_packet["msg"].split()
-        assert len(fields) >= 9, "Wrong number of fields"
+        assert len(fields) == 9, "Wrong number of fields"
         assert fields[2] == "---", "Missing dashes"
         self.timestamp = RamsesPacketDatetime(self._raw_packet["ts"])
         try:

@@ -3,7 +3,7 @@ import logging
 import asyncio
 import json
 from datetime import timedelta
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_track_time_interval, async_call_later
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 from .ramses_packet import RamsesPacket
 from .const import DOMAIN
@@ -38,6 +38,9 @@ class RamsesESP:
         self.fan_id = fan_id
         self.co2_id = co2_id
         self.callbacks = callbacks
+        self._send_queue_lock = asyncio.Lock()
+        self._send_queue = []
+        self._retry_timeout = 2
 
     async def setup(self, event=None):
         """Fetch fan, CO2 and vent demand state on startup"""
@@ -54,17 +57,31 @@ class RamsesESP:
     async def remove(self):
         if hasattr(self, "_req_humidity_unsub") and callable(self._req_humidity_unsub):
             self._req_humidity_unsub()
+        async with self._send_queue_lock:
+            if not self._send_queue:
+                return
+            for q_packet in self._send_queue:
+                q_packet.expected_response.cancel_retry_handler()
 
     async def _req_humidity(self, now):
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
 
     async def publish(self, packet):
         await self.mqtt.publish(packet)
+        if not packet.expected_response:
+            return
+        packet.expected_response.cancel_retry_handler = async_call_later(
+            # Try again if expected_response wasn't received
+            self.hass,
+            self._retry_timeout,
+            lambda now, pkt=packet: self._schedule_retry(pkt),
+        )
+        self._send_queue.append(packet)
 
     async def handle_ramses_message(self, msg):
         try:
             payload = json.loads(msg.payload)
-            self._handle_ramses_packet(payload)
+            await self._handle_ramses_packet(payload)
             await self.packet_log(payload)
         except Exception:
             _LOGGER.error("Failed to process MQTT payload {msg}", exc_info=True)
@@ -88,7 +105,38 @@ class RamsesESP:
         _LOGGER.info(f"Setting fan preset mode to {mode}")
         await self.publish(sfm)
 
-    def _handle_ramses_packet(self, packet):
+    def _schedule_retry(self, packet):
+        self.hass.loop.call_soon_threadsafe(lambda: self.hass.async_create_task(self._retry_pending_request(packet)))
+
+    async def _retry_pending_request(self, packet):
+        """Outgoing request timed out, retry it"""
+        async with self._send_queue_lock:
+            if not self._send_queue:
+                _LOGGER.error("_send_queue empty in _retry_pending_request??")
+                return
+            self._send_queue = [x for x in self._send_queue if x.expected_response != packet]
+        packet.expected_response.max_retries -= 1
+        if packet.expected_response.max_retries < 0:
+            _LOGGER.debug(f"Removing from queue: Timed out {packet}")
+            return
+        _LOGGER.debug(f"Retry {packet}")
+        await self.publish(packet)  # will add packet back to _send_queue
+
+    async def _ack_request(self, packet):
+        """Check if an incoming packet is an expected response to a request"""
+        async with self._send_queue_lock:
+            if not self._send_queue:
+                return
+            new_queue = []
+            for q_packet in self._send_queue:
+                if q_packet.expected_response == packet:
+                    _LOGGER.debug(f"Removing from queue: Got expected response for {packet}")
+                    q_packet.expected_response.cancel_retry_handler()
+                else:
+                    new_queue.append(q_packet)
+            self._send_queue = new_queue
+
+    async def _handle_ramses_packet(self, packet):
         try:
             packet = RamsesPacket(packet)
         except Exception:
@@ -96,6 +144,7 @@ class RamsesESP:
             return
         if packet.src_id not in {self.fan_id, self.co2_id, self.gateway_id}:
             return
+        await self._ack_request(packet)
         if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
             _LOGGER.warning(f"Class Code{packet.code.lower()} not imported, or does not exist")
             code_class = Code

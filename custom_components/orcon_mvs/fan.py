@@ -19,8 +19,8 @@ from .const import (
 
 # TODO:
 # * LICENSE
+# * ramses_esp._send_queue should be a dict with a unique key per packet
 # * Add USB support for Ramses ESP (https://developers.home-assistant.io/docs/creating_integration_manifest?_highlight=mqtt#usb)
-# * Add mqtt_publish retry if no response from remote
 # * Start home-assistant timer on timed fan modes (22F3)
 # * MQTT via_device for RAMSES_ESP
 # * Add logo to https://brands.home-assistant.io/
@@ -110,9 +110,9 @@ class OrconFan(FanEntity):
 
     def _fan_state_callback(self, status):
         """Update fan state"""
-        _LOGGER.info(f"Fan mode: {self._attr_preset_mode}")
         self._attr_preset_mode = status["fan_mode"]
         self.async_write_ha_state()
+        _LOGGER.info(f"Fan mode: {self._attr_preset_mode}")
         if status["has_fault"]:
             if not self._fault_notified:
                 _LOGGER.warning("Fan reported a fault")

@@ -60,6 +60,12 @@ class Code:
         p.type = "RQ"
         p.code = cls._code
         p.data = "00"
+        """The expected response to the above request"""
+        p.expected_response = RamsesPacket(src_id=dst_id, dst_id=src_id)
+        p.expected_response.type = "RP"
+        p.expected_response.code = cls._code
+        p.expected_response.max_retries = 2
+        p.expected_response.cancel_retry_handler = None
         return p
 
     @classmethod
@@ -123,6 +129,12 @@ class Code22f1(Code):
         cls.packet.type = "I"
         cls.packet.data = cls._fan_modes[preset]
         cls.packet.code = "22F1" if cls.packet.length == 3 else "22F3"
+        """The expected response"""
+        cls.packet.expected_response = RamsesPacket(src_id=dst_id, dst_id="--:------")
+        cls.packet.expected_response.type = "I"
+        cls.packet.expected_response.code = "31D9"
+        cls.packet.expected_response.max_retries = 2
+        cls.packet.expected_response.cancel_retry_handler = None
         return cls.packet
 
     @classmethod
