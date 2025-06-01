@@ -1,8 +1,8 @@
 try:
-    from .ramses_packet import RamsesPacket, RamsesPacketDatetime
+    from .ramses_packet import RamsesPacket, RamsesPacketResponse, RamsesPacketDatetime
 except ImportError:
     """for __main__"""
-    from ramses_packet import RamsesPacket, RamsesPacketDatetime
+    from ramses_packet import RamsesPacket, RamsesPacketResponse, RamsesPacketDatetime
 
 
 class CodeException(Exception):
@@ -28,7 +28,7 @@ class Code:
         return int(value, 16) // 2
 
     def _dev_hex_to_id(self, device_hex: str) -> str:
-        """Convert (say) '06368E' to '01:145038' (or 'CTL:145038')."""
+        """Convert (say) '06368E' to '01:145038'"""
         if device_hex == "FFFFFF":  # aka '63:262143'
             return f"{'':9}"
         if not device_hex.strip():  # aka '--:------'
@@ -56,16 +56,19 @@ class Code:
     @classmethod
     def get(cls, src_id, dst_id):
         """Build a RamsesPacket object that requests the current status"""
-        p = RamsesPacket(src_id=src_id, dst_id=dst_id)
-        p.type = "RQ"
-        p.code = cls._code
-        p.data = "00"
-        """The expected response to the above request"""
-        p.expected_response = RamsesPacket(src_id=dst_id, dst_id=src_id)
-        p.expected_response.type = "RP"
-        p.expected_response.code = cls._code
-        p.expected_response.max_retries = 2
-        p.expected_response.cancel_retry_handler = None
+        p = RamsesPacket(
+            src_id=src_id,
+            dst_id=dst_id,
+            type="RQ",
+            code=cls._code,
+            data="00",
+            expected_response=RamsesPacketResponse(
+                src_id=dst_id,
+                dst_id=src_id,
+                type="RP",
+                code=cls._code,
+            ),
+        )
         return p
 
     @classmethod
@@ -125,16 +128,19 @@ class Code22f1(Code):
     def set(cls, src_id, dst_id, preset):
         if preset not in cls._fan_modes:
             raise CodeException(f"Invalid preset '{preset}'")
-        cls.packet = RamsesPacket(src_id=src_id, dst_id=dst_id)
-        cls.packet.type = "I"
-        cls.packet.data = cls._fan_modes[preset]
-        cls.packet.code = "22F1" if cls.packet.length == 3 else "22F3"
-        """The expected response"""
-        cls.packet.expected_response = RamsesPacket(src_id=dst_id, dst_id="--:------")
-        cls.packet.expected_response.type = "I"
-        cls.packet.expected_response.code = "31D9"
-        cls.packet.expected_response.max_retries = 2
-        cls.packet.expected_response.cancel_retry_handler = None
+        cls.packet = RamsesPacket(
+            src_id=src_id,
+            dst_id=dst_id,
+            type="I",
+            data=cls._fan_modes[preset],
+            code="22F1" if cls.packet.length == 3 else "22F3",
+            expected_response=RamsesPacketResponse(
+                src_id=dst_id,
+                dst_id="--:------",
+                type="I",
+                code="31D9",
+            ),
+        )
         return cls.packet
 
     @classmethod
@@ -267,7 +273,9 @@ class Code12a0(Code):
 
 
 class Code1060(Code):
-    """Battery state"""
+    """Battery state
+    Not used by the RF15 remote, but I occasionally receive it
+    from one of my neighbours with another Orcon system"""
 
     _code = "1060"
 
@@ -335,6 +343,8 @@ class Code042f(Code):
 
 
 if __name__ == "__main__":
+    """Parse Ramses logfile, from stdin or 1st cli arg"""
+
     import sys
 
     path = sys.argv[1] if len(sys.argv) == 2 else "/dev/stdin"

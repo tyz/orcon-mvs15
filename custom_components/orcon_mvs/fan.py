@@ -5,7 +5,6 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState
-from .mqtt import MQTT
 from .ramses_esp import RamsesESP
 from .codes import Code22f1
 from .const import (
@@ -24,18 +23,18 @@ from .const import (
 # * Start home-assistant timer on timed fan modes (22F3)
 # * MQTT via_device for RAMSES_ESP
 # * Add logo to https://brands.home-assistant.io/
+# * Add ramses-esp as device/via_device again
+# * Auto discovery
+#   - turn off/on fan
+#   - fan_id == msg 042F
+#   - bind as remote with random remote_id (1FC9)
+#   - autodetect 15RF (remote_id = code 1298 to fan_id)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    config = hass.data[DOMAIN][entry.entry_id]
-    gateway_id = config.get(CONF_GATEWAY_ID)
-    remote_id = config.get(CONF_REMOTE_ID)
-    fan_id = config.get(CONF_FAN_ID)
-    co2_id = config.get(CONF_CO2_ID)
-    mqtt_topic = config.get(CONF_MQTT_TOPIC)
-    async_add_entities([OrconFan(hass, gateway_id, remote_id, fan_id, co2_id, mqtt_topic)])
+    async_add_entities([OrconFan(hass, entry)])
 
 
 class OrconFan(FanEntity):
@@ -43,26 +42,26 @@ class OrconFan(FanEntity):
     _attr_supported_features = FanEntityFeature.PRESET_MODE
     _attr_translation_key = "fan_states"  # see icons.json
 
-    def __init__(self, hass, gateway_id, remote_id, fan_id, co2_id, mqtt_topic):
+    def __init__(self, hass, config_entry):
         self.hass = hass
-        self._gateway_id = gateway_id
-        self._remote_id = remote_id
-        self._fan_id = fan_id
-        self._co2_id = co2_id
-        self._mqtt_topic = mqtt_topic
+        self._config_entry = config_entry
+        self._mqtt_topic = config_entry.data.get(CONF_MQTT_TOPIC)
+        self._gateway_id = config_entry.data.get(CONF_GATEWAY_ID)  # auto-detected
+        self._remote_id = config_entry.data.get(CONF_REMOTE_ID)
+        self._fan_id = config_entry.data.get(CONF_FAN_ID)
+        self._co2_id = config_entry.data.get(CONF_CO2_ID)
         self._co2 = None
         self._vent_demand = None
         self._relative_humidity = None
         self._fault_notified = False
         self._attr_name = "Orcon MVS-15 fan"
-        self._attr_unique_id = f"orcon_mvs_{fan_id}"
+        self._attr_unique_id = f"orcon_mvs_{self._fan_id}"
         self._attr_preset_mode = "Auto"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._fan_id)},
             manufacturer="Orcon",
             model="MVS-15",
             name=f"{self.name} ({self._fan_id})",
-            via_device=(DOMAIN, self._gateway_id),
         )
 
     @property
@@ -74,10 +73,9 @@ class OrconFan(FanEntity):
         }
 
     async def async_added_to_hass(self):
-        self.mqtt = MQTT(self.hass, f"{self._mqtt_topic}/{self._gateway_id}")
         self.ramses_esp = RamsesESP(
             hass=self.hass,
-            mqtt=self.mqtt,
+            mqtt_base_topic=self._mqtt_topic,
             gateway_id=self._gateway_id,
             remote_id=self._remote_id,
             fan_id=self._fan_id,
@@ -90,22 +88,25 @@ class OrconFan(FanEntity):
                 "31E0": self._vent_demand_callback,
             },
         )
-        self.mqtt.handle_message = self.ramses_esp.handle_ramses_message
-        self.mqtt.handle_version_message = self.ramses_esp.handle_ramses_version_message
-        await self.mqtt.setup()
 
         if self.hass.state == CoreState.running:
             _LOGGER.debug("Orcon MVS-15 integration has been setup")
-            self.hass.async_create_task(self.ramses_esp.setup())
+            self.hass.async_create_task(self.setup())
         else:
             _LOGGER.debug("Orcon MVS-15 integration has been loaded after restart")
-            self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self.ramses_esp.setup)
+            self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self.setup)
+
+    async def setup(self, event=None):
+        await self.ramses_esp.setup(event)
+        if not self._gateway_id:
+            _LOGGER.debug(f"Storing auto-detected gateway {self.ramses_esp.gateway_id} in config")
+            new_data = {**self._config_entry.data, CONF_GATEWAY_ID: self.ramses_esp.gateway_id}
+            self.hass.config_entries.async_update_entry(self._config_entry, data=new_data)
 
     async def async_set_preset_mode(self, preset_mode: str):
         await self.ramses_esp.set_preset_mode(preset_mode)
 
     async def async_will_remove_from_hass(self):
-        await self.mqtt.remove()
         await self.ramses_esp.remove()
 
     def _fan_state_callback(self, status):

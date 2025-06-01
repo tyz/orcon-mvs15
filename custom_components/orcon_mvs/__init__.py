@@ -1,8 +1,7 @@
 import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import async_get as get_dev_reg
-from .const import DOMAIN, CONF_GATEWAY_ID
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -12,17 +11,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = entry.data
     hass.data[DOMAIN]["co2_sensor"] = None
     hass.data[DOMAIN]["humidity_sensor"] = None
-
-    gateway_id = hass.data[DOMAIN][entry.entry_id].get(CONF_GATEWAY_ID)
-    dev_reg = get_dev_reg(hass)
-    dev_reg.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, gateway_id)},
-        manufacturer="Indalo-Tech",
-        model="RAMSES_ESP",
-        name=f"Indalo-Tech RAMSES_ESP ({gateway_id})",
-    )
-
     await hass.config_entries.async_forward_entry_setups(entry, ["fan", "sensor"])
     return True
 

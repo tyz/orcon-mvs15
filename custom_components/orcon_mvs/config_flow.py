@@ -2,7 +2,6 @@ import voluptuous as vol
 from homeassistant import config_entries
 from .const import (
     DOMAIN,
-    CONF_GATEWAY_ID,
     CONF_REMOTE_ID,
     CONF_FAN_ID,
     CONF_CO2_ID,
@@ -21,7 +20,6 @@ class OrconConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_GATEWAY_ID): str,
                     vol.Required(CONF_REMOTE_ID): str,
                     vol.Required(CONF_FAN_ID): str,
                     vol.Required(CONF_CO2_ID): str,

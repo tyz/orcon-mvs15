@@ -1,5 +1,6 @@
 import logging
 import json
+import uuid
 import inspect
 from datetime import datetime
 
@@ -54,17 +55,28 @@ class RamsesPacketDatetime:
 
 
 class RamsesPacket:
-    def __init__(self, raw_packet=None, src_id="--:------", dst_id="--:------", ann_id="--:------"):
+    def __init__(
+        self,
+        raw_packet=None,
+        src_id="--:------",
+        dst_id="--:------",
+        ann_id="--:------",
+        type=None,
+        code=None,
+        data=None,
+        expected_response=None,
+    ):
         self._timestamp = RamsesPacketDatetime(datetime.now())
         self.signal_strength = -1
-        self.type = None
+        self.type = type
         self.src_id = src_id
         self.dst_id = dst_id
         self.ann_id = ann_id
-        self.code = None
+        self.code = code
         self.length = 0
-        self.expected_response = None
-        self._data = None
+        self.packet_id = uuid.uuid4().hex
+        self.expected_response = expected_response
+        self.data = data
         self._raw_packet = raw_packet
         if self._raw_packet:
             self.parse()
@@ -73,15 +85,6 @@ class RamsesPacket:
         all_attr = {k: v for k, v in vars(self).items() if not k.startswith("_")}
         all_prop = {k: getattr(self, k) for k, v in inspect.getmembers(type(self), lambda v: isinstance(v, property))}
         return str({**all_attr, **all_prop})
-
-    def __eq__(self, b):
-        """Compare expected response to response (not the other way around)"""
-        return (
-            ((not self.type) or self.type == b.type)
-            and ((not self.code) or self.code == b.code)
-            and ((not self.src_id) or self.src_id == b.src_id)
-            and ((not self.dst_id) or self.dst_id == b.dst_id)
-        )
 
     @property
     def data(self):
@@ -115,3 +118,26 @@ class RamsesPacket:
         self.code = fields[6]
         self.data = fields[8]
         assert int(fields[7]) == self.length, f"Wrong length ({fields[7]} vs {self.length})"
+
+
+class RamsesPacketResponse(RamsesPacket):
+    def __init__(
+        self,
+        max_retries=2,
+        timeout=1,
+        cancel_retry_handler=None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.max_retries = max_retries
+        self.timeout = timeout
+        self.cancel_retry_handler = cancel_retry_handler
+
+    def __eq__(self, b):
+        """Compare expected response to response"""
+        return (
+            ((not self.type) or self.type == b.type)
+            and ((not self.code) or self.code == b.code)
+            and ((not self.src_id) or self.src_id == b.src_id)
+            and ((not self.dst_id) or self.dst_id == b.dst_id)
+        )
