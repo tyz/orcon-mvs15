@@ -18,10 +18,16 @@ from .const import (
 
 # TODO:
 # * LICENSE
-# * ramses_esp._send_queue should be a dict with a unique key per packet
 # * Add USB support for Ramses ESP (https://developers.home-assistant.io/docs/creating_integration_manifest?_highlight=mqtt#usb)
 # * Start home-assistant timer on timed fan modes (22F3)
 # * MQTT via_device for RAMSES_ESP
+# * Add ramses-esp as device/via_device again
+# * Auto discovery
+#   - turn off/on fan
+#   - fan_id == msg 042F
+#   - bind as remote with random remote_id (1FC9)
+#   - auto-detect 15RF: remote_id is a type I, code 1298 to fan_id)
+#   - auto-detect humidty: create sensor + poll after first succesful poll
 # * Add logo to https://brands.home-assistant.io/
 # * Add ramses-esp as device/via_device again
 # * Auto discovery
