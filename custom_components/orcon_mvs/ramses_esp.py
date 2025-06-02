@@ -90,8 +90,8 @@ class RamsesESP:
     async def set_preset_mode(self, mode):
         try:
             sfm = Code22f1.set(preset=mode, src_id=self.remote_id, dst_id=self.fan_id)
-        except Exception:
-            _LOGGER.error(f"Error setting fan preset mode: {mode}")
+        except Exception as e:
+            _LOGGER.error(f"Error setting fan preset mode '{mode}': {e}")
             return
         _LOGGER.info(f"Setting fan preset mode to {mode}")
         await self.publish(sfm)

@@ -128,12 +128,11 @@ class Code22f1(Code):
     def set(cls, src_id, dst_id, preset):
         if preset not in cls._fan_modes:
             raise CodeException(f"Invalid preset '{preset}'")
-        cls.packet = RamsesPacket(
+        p = RamsesPacket(
             src_id=src_id,
             dst_id=dst_id,
             type="I",
             data=cls._fan_modes[preset],
-            code="22F1" if cls.packet.length == 3 else "22F3",
             expected_response=RamsesPacketResponse(
                 src_id=dst_id,
                 dst_id="--:------",
@@ -141,7 +140,8 @@ class Code22f1(Code):
                 code="31D9",
             ),
         )
-        return cls.packet
+        p.code = "22F1" if p.length == 3 else "22F3"
+        return p
 
     @classmethod
     def presets(cls):
