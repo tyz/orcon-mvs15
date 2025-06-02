@@ -97,7 +97,7 @@ class Code1298(Code):
 
 
 class Code22f1(Code):
-    """Fan mode"""
+    """Fan mode, will act as 22F3 if needed"""
 
     _code = "22F1"
 

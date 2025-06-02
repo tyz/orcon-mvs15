@@ -1,8 +1,10 @@
 import logging
+from datetime import timedelta
 from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.components.persistent_notification import create, dismiss
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState
 from .ramses_esp import RamsesESP
@@ -27,7 +29,7 @@ from .const import (
 #   - fan_id == msg 042F
 #   - bind as remote with random remote_id (1FC9)
 #   - auto-detect 15RF: remote_id is a type I, code 1298 to fan_id)
-#   - auto-detect humidty: create sensor + poll after first succesful poll
+#   - auto-detect humidty: create sensor after first succesful poll
 # * Add logo to https://brands.home-assistant.io/
 # * Add ramses-esp as device/via_device again
 # * Auto discovery
@@ -60,6 +62,7 @@ class OrconFan(FanEntity):
         self._vent_demand = None
         self._relative_humidity = None
         self._fault_notified = False
+        self._req_humidity_unsub = None
         self._attr_name = "Orcon MVS-15 fan"
         self._attr_unique_id = f"orcon_mvs_{self._fan_id}"
         self._attr_preset_mode = "Auto"
@@ -96,10 +99,10 @@ class OrconFan(FanEntity):
         )
 
         if self.hass.state == CoreState.running:
-            _LOGGER.debug("Orcon MVS-15 integration has been setup")
+            _LOGGER.info("Orcon MVS-15 integration has been setup")
             self.hass.async_create_task(self.setup())
         else:
-            _LOGGER.debug("Orcon MVS-15 integration has been loaded after restart")
+            _LOGGER.info("Orcon MVS-15 integration has been loaded after restart")
             self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self.setup)
 
     async def setup(self, event=None):
@@ -113,13 +116,15 @@ class OrconFan(FanEntity):
         await self.ramses_esp.set_preset_mode(preset_mode)
 
     async def async_will_remove_from_hass(self):
+        if callable(self._req_humidity_unsub):
+            self._req_humidity_unsub()
         await self.ramses_esp.remove()
 
     def _fan_state_callback(self, status):
         """Update fan state"""
         self._attr_preset_mode = status["fan_mode"]
         self.async_write_ha_state()
-        _LOGGER.info(f"Fan mode: {self._attr_preset_mode}")
+        _LOGGER.info(f"Current fan mode: {self._attr_preset_mode}")
         if status["has_fault"]:
             if not self._fault_notified:
                 _LOGGER.warning("Fan reported a fault")
@@ -142,7 +147,7 @@ class OrconFan(FanEntity):
         if sensor := self.hass.data[DOMAIN].get("co2_sensor"):
             sensor.update_state(self._co2)
         self.async_write_ha_state()
-        _LOGGER.info(f"CO2: {status['level']} ppm")
+        _LOGGER.info(f"Current CO2 level: {status['level']} ppm")
 
     def _vent_demand_callback(self, status):
         """Update Vent demand attribute"""
@@ -152,11 +157,17 @@ class OrconFan(FanEntity):
 
     def _relative_humidity_callback(self, status):
         """Update relative humidity attribute"""
+        poll_interval = 5
         self._relative_humidity = status["level"]
         if sensor := self.hass.data[DOMAIN].get("humidity_sensor"):
             sensor.update_state(self._relative_humidity)
         self.async_write_ha_state()
-        _LOGGER.info(f"Relative humidty: {self._relative_humidity}%")
+        _LOGGER.info(f"Current humidty level: {self._relative_humidity}%")
+        if not self._req_humidity_unsub:
+            self._req_humidity_unsub = async_track_time_interval(
+                self.hass, self.ramses_esp.req_humidity, timedelta(minutes=poll_interval)
+            )
+            _LOGGER.info(f"Humidity sensor detected, fetching value every {poll_interval} minutes")
 
     def _device_info_callback(self, status):
         """Update device info"""

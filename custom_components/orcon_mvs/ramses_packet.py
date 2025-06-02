@@ -92,8 +92,12 @@ class RamsesPacket:
 
     @data.setter
     def data(self, value):
-        self._data = RamsesPacketData(value)
-        self.length = len(self._data)
+        if value:
+            self._data = RamsesPacketData(value)
+            self.length = len(self._data)
+        else:
+            self._data = None
+            self.length = 0
 
     def payload(self):
         return {"msg": f" {self.type} --- {self.src_id} {self.dst_id} {self.ann_id} {self.code} {self.length:03d} {self.data}"}

@@ -27,6 +27,8 @@ class MQTT:
             self._mqtt_unsubs.append(await mqtt.async_subscribe(self.hass, self.online_topic, self._handle_online_message))
             _LOGGER.debug(f"Subscribed to {self.online_topic}")
             await self._online_event.wait()  # wait on _handle_online_message
+        else:
+            _LOGGER.info(f"Using previously auto-detected gateway {self.gateway_id}")
         self.sub_topic = f"{self.base_topic}/{self.gateway_id}/rx"
         self.pub_topic = f"{self.base_topic}/{self.gateway_id}/tx"
         self.version_topic = f"{self.base_topic}/{self.gateway_id}/info/version"
@@ -38,7 +40,7 @@ class MQTT:
 
     async def _handle_online_message(self, msg):
         self.gateway_id = msg.topic.split("/")[-1]
-        _LOGGER.info(f"Detected gateway is {self.gateway_id}")
+        _LOGGER.info(f"Auto-detected gateway is {self.gateway_id}")
         await self.remove()  # unsubscribe
         self._online_event.set()
 

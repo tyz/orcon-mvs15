@@ -2,8 +2,7 @@ import os
 import logging
 import asyncio
 import json
-from datetime import timedelta
-from homeassistant.helpers.event import async_track_time_interval, async_call_later
+from homeassistant.helpers.event import async_call_later
 from .ramses_packet import RamsesPacket
 from .ramses_packet_queue import RamsesPacketQueue
 from .mqtt import MQTT
@@ -47,29 +46,31 @@ class RamsesESP:
         if event:  # only on Home-Assistant restart
             await asyncio.sleep(2)  # FIXME: wait on mqtt ready state instead?
         self.gateway_id = self.mqtt.gateway_id
+        if not self.gateway_id:
+            """Auto-detected"""
+            self.gateway_id = self.mqtt.gateway_id
+        """Update fan/co2/humidty/device state"""
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.publish(Code31e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
-        self._req_humidity_unsub = async_track_time_interval(self.hass, self._req_humidity, timedelta(minutes=5))
 
     async def remove(self):
-        if hasattr(self, "_req_humidity_unsub") and callable(self._req_humidity_unsub):
-            self._req_humidity_unsub()
         await self._send_queue.empty()
         await self.mqtt.remove()
 
-    async def _req_humidity(self, now):
+    async def req_humidity(self, now):
+        """Is not being announced by the fan, so we have to fetch it ourselves"""
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
 
     async def publish(self, packet):
         await self.mqtt.publish(packet)
         if not packet.expected_response:
             return
+        # Try again if expected_response wasn't received within packet.expected_response.timeout seconds
         packet.expected_response.cancel_retry_handler = async_call_later(
-            # Try again if expected_response wasn't received
             self.hass,
             packet.expected_response.timeout,
             lambda now, pkt=packet: self._schedule_retry(pkt),
@@ -77,6 +78,7 @@ class RamsesESP:
         await self._send_queue.add(packet)
 
     async def handle_ramses_message(self, msg):
+        """Decode JSON, parse the payload and log it to file"""
         try:
             payload = json.loads(msg.payload)
             await self._handle_ramses_packet(payload)
@@ -85,16 +87,17 @@ class RamsesESP:
             _LOGGER.error("Failed to process Ramses payload {msg}", exc_info=True)
 
     async def handle_ramses_version_message(self, msg):
+        """Could create the Rames-ESP device?"""
         pass
 
     async def set_preset_mode(self, mode):
         try:
-            sfm = Code22f1.set(preset=mode, src_id=self.remote_id, dst_id=self.fan_id)
+            packet = Code22f1.set(preset=mode, src_id=self.remote_id, dst_id=self.fan_id)
         except Exception as e:
             _LOGGER.error(f"Error setting fan preset mode '{mode}': {e}")
             return
         _LOGGER.info(f"Setting fan preset mode to {mode}")
-        await self.publish(sfm)
+        await self.publish(packet)
 
     def _schedule_retry(self, packet):
         self.hass.loop.call_soon_threadsafe(lambda: self.hass.async_create_task(self._retry_pending_request(packet)))
@@ -103,8 +106,8 @@ class RamsesESP:
         """Outgoing request timed out, retry it"""
         packet.expected_response.max_retries -= 1
         if packet.expected_response.max_retries < 0:
-            _LOGGER.debug(f"Removing from queue: Timed out {packet}")
-            await self._send_queue.remove(packet.packet)
+            _LOGGER.warning(f"Request timed out: {packet}")
+            await self._send_queue.remove(packet)
             return
         _LOGGER.debug(f"Retry {packet}")
         await self.publish(packet)
