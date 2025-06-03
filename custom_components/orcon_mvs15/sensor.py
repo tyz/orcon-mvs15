@@ -21,7 +21,7 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.coordinator = coordinator
         self._state = None
-        self._attr_name = "Orcon CO2"
+        self._attr_name = "Orcon MVS-15 CO2"
         self._attr_native_unit_of_measurement = CONCENTRATION_PARTS_PER_MILLION
         self._attr_device_class = SensorDeviceClass.CO2
         self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -45,7 +45,7 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
     def __init__(self, fan_id, coordinator):
         super().__init__(coordinator)
         self.coordinator = coordinator
-        self._attr_name = "Orcon Relative Humidity"
+        self._attr_name = "Orcon MVS-15 Relative Humidity"
         self._attr_native_unit_of_measurement = PERCENTAGE
         self._attr_device_class = SensorDeviceClass.HUMIDITY
         self._attr_state_class = SensorStateClass.MEASUREMENT
