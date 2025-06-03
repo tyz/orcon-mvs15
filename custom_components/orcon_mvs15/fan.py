@@ -63,6 +63,7 @@ class OrconFan(FanEntity):
             manufacturer="Orcon",
             model="MVS-15",
             name=f"{self.name} ({self._fan_id})",
+            via_device=(DOMAIN, self._gateway_id),
         )
 
     @property

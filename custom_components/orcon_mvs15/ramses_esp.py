@@ -2,9 +2,13 @@ import os
 import logging
 import asyncio
 import json
+
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.device_registry import async_get as get_dev_reg
+
 from .ramses_packet import RamsesPacket
 from .ramses_packet_queue import RamsesPacketQueue
+from .const import DOMAIN
 from .codes import (  # noqa: F401
     Code,
     Code042f,
@@ -42,11 +46,7 @@ class RamsesESP:
         await self.mqtt.setup(self.handle_ramses_message, self.handle_ramses_version_message)
         if event:  # only on Home-Assistant restart
             await asyncio.sleep(2)  # FIXME: wait on mqtt ready state instead?
-        self.gateway_id = self.mqtt.gateway_id
-        if not self.gateway_id:
-            """Auto-detected"""
-            self.gateway_id = self.mqtt.gateway_id
-        """Update fan/co2/humidty/device state"""
+        """Update fan/co2/vent_demand/device state"""
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.publish(Code31e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
@@ -83,8 +83,15 @@ class RamsesESP:
             _LOGGER.error(f"Failed to process Ramses payload {msg}", exc_info=True)
 
     async def handle_ramses_version_message(self, msg):
-        """TODO: Could create the Rames-ESP device?"""
-        pass
+        """Update Ramses-ESP device"""
+        dev_reg = get_dev_reg(self.hass)
+        entry = dev_reg.async_get_device({(DOMAIN, self.gateway_id)})
+        dev_info = {
+            "device_id": entry.id,
+            "sw_version": msg.payload,
+        }
+        dev_reg.async_update_device(**dev_info)
+        _LOGGER.info(f"Updated device info: {dev_info}")
 
     async def set_preset_mode(self, mode):
         try:

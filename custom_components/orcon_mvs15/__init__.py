@@ -6,6 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
 from .typing import OrconMVS15RuntimeData
 from .coordinator import OrconMVS15DataUpdateCoordinator
@@ -44,6 +45,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.debug(f"Storing auto-detected gateway {mqtt.gateway_id} in config")
         new_data = {**entry.data, CONF_GATEWAY_ID: mqtt.gateway_id}
         hass.config_entries.async_update_entry(entry, data=new_data)
+
+    dev_reg = get_dev_reg(hass)
+    dev_reg.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, mqtt.gateway_id)},
+        manufacturer="Indalo-Tech",
+        model="RAMSES_ESP",
+        name=f"Indalo-Tech RAMSES_ESP ({mqtt.gateway_id})",
+    )
 
     try:
         ramses_esp = RamsesESP(

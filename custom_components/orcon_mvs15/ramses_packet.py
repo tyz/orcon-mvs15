@@ -127,7 +127,7 @@ class RamsesPacket:
 class RamsesPacketResponse(RamsesPacket):
     def __init__(
         self,
-        max_retries=3,
+        max_retries=2,
         timeout=2,
         cancel_retry_handler=None,
         **kwargs,
