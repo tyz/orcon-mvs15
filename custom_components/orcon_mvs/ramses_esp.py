@@ -84,7 +84,7 @@ class RamsesESP:
             await self._handle_ramses_packet(payload)
             await self.packet_log(payload)
         except Exception:
-            _LOGGER.error("Failed to process Ramses payload {msg}", exc_info=True)
+            _LOGGER.error(f"Failed to process Ramses payload {msg}", exc_info=True)
 
     async def handle_ramses_version_message(self, msg):
         """Could create the Rames-ESP device?"""

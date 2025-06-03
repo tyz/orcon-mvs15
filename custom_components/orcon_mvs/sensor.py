@@ -5,7 +5,6 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.const import CONCENTRATION_PARTS_PER_MILLION, PERCENTAGE
-
 from .const import DOMAIN
 
 
@@ -52,10 +51,7 @@ class HumiditySensor(SensorEntity):
         self._attr_device_class = SensorDeviceClass.HUMIDITY
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_unique_id = f"orcon_humidity_{config['fan_id']}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, config["fan_id"])},
-            name=f"Orcon MVS-15 fan ({config['fan_id']})",
-        )
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, config["fan_id"])})
 
     @property
     def native_value(self):

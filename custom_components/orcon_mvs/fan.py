@@ -20,23 +20,19 @@ from .const import (
 
 # TODO:
 # * LICENSE
+# * Rewrite to use DataUpdateCoordinator
 # * Add USB support for Ramses ESP (https://developers.home-assistant.io/docs/creating_integration_manifest?_highlight=mqtt#usb)
 # * Start home-assistant timer on timed fan modes (22F3)
 # * MQTT via_device for RAMSES_ESP
 # * Add ramses-esp as device/via_device again
 # * Auto discovery
-#   - turn off/on fan
-#   - fan_id == msg 042F
+#   - use async_setup_platform?
+#   - turn off/on fan, fan_id == msg 042F
 #   - bind as remote with random remote_id (1FC9)
-#   - auto-detect 15RF: remote_id is a type I, code 1298 to fan_id)
-#   - auto-detect humidty: create sensor after first succesful poll
+#   - auto-detect CO2: remote_id is a type I, code 1298 to fan_id
+#   - auto-detect humidity: create sensor after first succesfull poll
 # * Add logo to https://brands.home-assistant.io/
 # * Add ramses-esp as device/via_device again
-# * Auto discovery
-#   - turn off/on fan
-#   - fan_id == msg 042F
-#   - bind as remote with random remote_id (1FC9)
-#   - autodetect 15RF (remote_id = code 1298 to fan_id)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -162,7 +158,7 @@ class OrconFan(FanEntity):
         if sensor := self.hass.data[DOMAIN].get("humidity_sensor"):
             sensor.update_state(self._relative_humidity)
         self.async_write_ha_state()
-        _LOGGER.info(f"Current humidty level: {self._relative_humidity}%")
+        _LOGGER.info(f"Current humidity level: {self._relative_humidity}%")
         if not self._req_humidity_unsub:
             self._req_humidity_unsub = async_track_time_interval(
                 self.hass, self.ramses_esp.req_humidity, timedelta(minutes=poll_interval)

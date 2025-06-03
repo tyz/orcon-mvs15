@@ -2,6 +2,7 @@ import logging
 import asyncio
 import json
 from homeassistant.components import mqtt
+from homeassistant.core import callback
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class MQTT:
         _LOGGER.debug(f"Subscribed to {self.version_topic}")
         _LOGGER.debug("MQTT setup finished")
 
+    @callback
     async def _handle_online_message(self, msg):
         self.gateway_id = msg.topic.split("/")[-1]
         _LOGGER.info(f"Auto-detected gateway is {self.gateway_id}")
