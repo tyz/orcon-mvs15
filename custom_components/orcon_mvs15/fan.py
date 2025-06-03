@@ -20,7 +20,6 @@ from .const import (
 # * Add USB support for Ramses ESP (https://developers.home-assistant.io/docs/creating_integration_manifest?_highlight=mqtt#usb)
 # * Start home-assistant timer on timed fan modes (22F3)
 # * MQTT via_device for RAMSES_ESP
-# * Add ramses-esp as device/via_device again
 # * Auto discovery
 #   - use async_setup_platform?
 #   - turn off/on fan, fan_id == msg 042F
@@ -28,7 +27,6 @@ from .const import (
 #   - auto-detect CO2: remote_id is a type I, code 1298 to fan_id
 #   - auto-detect humidity: create sensor after first succesfull poll
 # * Add logo to https://brands.home-assistant.io/
-# * Add ramses-esp as device/via_device again
 # * Create RemoteEntity for fan
 
 _LOGGER = logging.getLogger(__name__)
@@ -102,6 +100,7 @@ class OrconFan(FanEntity):
         self._attr_preset_mode = status["fan_mode"]
         self.async_write_ha_state()
         _LOGGER.info(f"Current fan mode: {self._attr_preset_mode}")
+        notification_id = f"FAN_FAULT-{self._fan_id}"
         if status["has_fault"]:
             if not self._fault_notified:
                 _LOGGER.warning("Fan reported a fault")
@@ -109,13 +108,13 @@ class OrconFan(FanEntity):
                     self.hass,
                     "Orcon MVS-15 ventilator reported a fault",
                     title="Orcon MVS-15 error",
-                    notification_id="FAN_FAULT",
+                    notification_id=notification_id,
                 )
                 self._fault_notified = True
         else:
             if self._fault_notified:
                 _LOGGER.info("Fan fault cleared")
-                dismiss(self.hass, "FAN_FAULT")
+                dismiss(self.hass, notification_id)
                 self._fault_notified = False
 
     def _co2_callback(self, status):
