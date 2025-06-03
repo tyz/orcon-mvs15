@@ -25,7 +25,7 @@ from .const import (
 #   - turn off/on fan, fan_id == msg 042F
 #   - bind as remote with random remote_id (1FC9)
 #   - auto-detect CO2: remote_id is a type I, code 1298 to fan_id
-#   - auto-detect humidity: create sensor after first succesfull poll
+#   - auto-detect humidity: create sensor after first succesfull pull
 # * Add logo to https://brands.home-assistant.io/
 # * Create RemoteEntity for fan
 
@@ -43,7 +43,8 @@ class OrconFan(FanEntity):
 
     def __init__(self, hass, config_entry):
         self.hass = hass
-        self.coordinator = config_entry.runtime_data.coordinator
+        self.pull_coordinator = config_entry.runtime_data.pull_coordinator
+        self.push_coordinator = config_entry.runtime_data.push_coordinator
         self._config_entry = config_entry
         self._mqtt_topic = config_entry.data.get(CONF_MQTT_TOPIC)
         self._gateway_id = config_entry.data.get(CONF_GATEWAY_ID)  # auto-detected
@@ -66,11 +67,12 @@ class OrconFan(FanEntity):
 
     @property
     def extra_state_attributes(self):
-        data = self.coordinator.data
+        pull_data = self.pull_coordinator.data
+        push_data = self.push_coordinator.data
         return {
-            "co2": data.get("co2"),
-            "vent_demand": data.get("vent_demand"),
-            "relative_humidity": data.get("relative_humidity"),
+            "co2": push_data.get("co2"),
+            "vent_demand": push_data.get("vent_demand"),
+            "relative_humidity": pull_data.get("relative_humidity"),
         }
 
     async def async_added_to_hass(self):
@@ -119,20 +121,20 @@ class OrconFan(FanEntity):
 
     def _co2_callback(self, status):
         """Update CO2 sensor + attribute"""
-        new_data = {**self.coordinator.data, "co2": status["level"]}
-        self.coordinator.async_set_updated_data(new_data)
+        new_data = {**self.push_coordinator.data, "co2": status["level"]}
+        self.push_coordinator.async_set_updated_data(new_data)
         _LOGGER.info(f"Current CO2 level: {status['level']} ppm")
 
     def _vent_demand_callback(self, status):
         """Update Vent demand attribute"""
-        new_data = {**self.coordinator.data, "vent_demand": status["percentage"]}
-        self.coordinator.async_set_updated_data(new_data)
+        new_data = {**self.push_coordinator.data, "vent_demand": status["percentage"]}
+        self.push_coordinator.async_set_updated_data(new_data)
         _LOGGER.info(f"Vent demand: {status['percentage']}%, unknown: {status['unknown']}")
 
     def _relative_humidity_callback(self, status):
         """Update relative humidity attribute"""
-        new_data = {**self.coordinator.data, "relative_humidity": status["level"]}
-        self.coordinator.async_set_updated_data(new_data)
+        new_data = {**self.pull_coordinator.data, "relative_humidity": status["level"]}
+        self.pull_coordinator.async_set_updated_data(new_data)
         _LOGGER.info(f"Current humidity level: {status['level']}%")
 
     def _device_info_callback(self, status):

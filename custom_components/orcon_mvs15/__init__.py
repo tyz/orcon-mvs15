@@ -5,11 +5,11 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
 from .typing import OrconMVS15RuntimeData
-from .coordinator import OrconMVS15DataUpdateCoordinator
+from .coordinator import OrconMVS15PushDataUpdateCoordinator, OrconMVS15PullDataUpdateCoordinator
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
 from .const import (
@@ -38,8 +38,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         await mqtt.init()
     except Exception as e:
-        _LOGGER.debug(f"mqtt ConfigEntryNotReady: {e}")
-        raise ConfigEntryNotReady
+        raise PlatformNotReady(f"MQTT: {e}")
 
     if not entry.data.get(CONF_GATEWAY_ID):
         _LOGGER.debug(f"Storing auto-detected gateway {mqtt.gateway_id} in config")
@@ -65,18 +64,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             co2_id=entry.data.get(CONF_CO2_ID),
         )
     except Exception as e:
-        _LOGGER.debug(f"ramses_esp ConfigEntryNotReady: {e}")
-        raise ConfigEntryNotReady
+        raise PlatformNotReady(f"RamsesESP: {e}")
 
-    coordinator = OrconMVS15DataUpdateCoordinator(
+    pull_coordinator = OrconMVS15PullDataUpdateCoordinator(
         hass,
         entry,
         update_interval=timedelta(minutes=5),
         callback_func=ramses_esp.req_humidity,
     )
-    await coordinator.async_config_entry_first_refresh()
+    await pull_coordinator.async_config_entry_first_refresh()
 
-    entry.runtime_data = OrconMVS15RuntimeData(coordinator=coordinator, ramses_esp=ramses_esp)
+    push_coordinator = OrconMVS15PushDataUpdateCoordinator(
+        hass,
+        entry,
+    )
+    await push_coordinator.async_config_entry_first_refresh()
+
+    entry.runtime_data = OrconMVS15RuntimeData(
+        pull_coordinator=pull_coordinator, push_coordinator=push_coordinator, ramses_esp=ramses_esp
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

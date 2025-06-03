@@ -9,9 +9,10 @@ from .const import DOMAIN
 async def async_setup_entry(hass, entry, async_add_entities):
     co2_id = hass.data[DOMAIN][entry.entry_id]["co2_id"]
     fan_id = hass.data[DOMAIN][entry.entry_id]["fan_id"]
-    coordinator = entry.runtime_data.coordinator
-    co2_sensor = Co2Sensor(co2_id, fan_id, coordinator)
-    hum_sensor = HumiditySensor(fan_id, coordinator)
+    pull_coordinator = entry.runtime_data.pull_coordinator
+    push_coordinator = entry.runtime_data.push_coordinator
+    co2_sensor = Co2Sensor(co2_id, fan_id, push_coordinator)
+    hum_sensor = HumiditySensor(fan_id, pull_coordinator)
     async_add_entities([co2_sensor, hum_sensor])
 
 
@@ -35,6 +36,8 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
+        if not self.coordinator.data:
+            return None
         return self.coordinator.data.get("co2")
 
 
@@ -51,4 +54,6 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
+        if not self.coordinator.data:
+            return None
         return self.coordinator.data.get("relative_humidity")

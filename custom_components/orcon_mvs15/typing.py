@@ -8,7 +8,8 @@ from .ramses_esp import RamsesESP
 
 @dataclass
 class OrconMVS15RuntimeData:
-    coordinator: DataUpdateCoordinator[Any] = None
+    pull_coordinator: DataUpdateCoordinator[Any] = None
+    push_coordinator: DataUpdateCoordinator[Any] = None
     ramses_esp: RamsesESP = None
 
 
