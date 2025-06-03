@@ -1,4 +1,4 @@
-DOMAIN = "orcon_mvs"
+DOMAIN = "orcon_mvs15"
 CONF_GATEWAY_ID = "gateway_id"
 CONF_REMOTE_ID = "remote_id"
 CONF_FAN_ID = "fan_id"

@@ -5,7 +5,6 @@ import json
 from homeassistant.helpers.event import async_call_later
 from .ramses_packet import RamsesPacket
 from .ramses_packet_queue import RamsesPacketQueue
-from .mqtt import MQTT
 from .codes import (  # noqa: F401
     Code,
     Code042f,
@@ -29,20 +28,18 @@ class RamsesESPException(Exception):
 
 
 class RamsesESP:
-    def __init__(self, hass, mqtt_base_topic, remote_id, fan_id, co2_id, gateway_id, callbacks):
+    def __init__(self, hass, mqtt, remote_id, fan_id, co2_id, gateway_id):
         self.hass = hass
-        self.mqtt = MQTT(
-            hass, mqtt_base_topic, self.handle_ramses_message, self.handle_ramses_version_message, gateway_id=gateway_id
-        )
+        self.mqtt = mqtt
         self.remote_id = remote_id
         self.fan_id = fan_id
         self.co2_id = co2_id
         self.gateway_id = gateway_id
-        self.callbacks = callbacks
+        self._callbacks = {}
         self._send_queue = RamsesPacketQueue()
 
     async def setup(self, event=None):
-        await self.mqtt.setup()
+        await self.mqtt.setup(self.handle_ramses_message, self.handle_ramses_version_message)
         if event:  # only on Home-Assistant restart
             await asyncio.sleep(2)  # FIXME: wait on mqtt ready state instead?
         self.gateway_id = self.mqtt.gateway_id
@@ -51,7 +48,6 @@ class RamsesESP:
             self.gateway_id = self.mqtt.gateway_id
         """Update fan/co2/humidty/device state"""
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
-        await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.publish(Code31e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.fan_id))
@@ -61,7 +57,7 @@ class RamsesESP:
         await self._send_queue.empty()
         await self.mqtt.remove()
 
-    async def req_humidity(self, now):
+    async def req_humidity(self):
         """Is not being announced by the fan, so we have to fetch it ourselves"""
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
 
@@ -69,8 +65,8 @@ class RamsesESP:
         await self.mqtt.publish(packet)
         if not packet.expected_response:
             return
-        # Try again if expected_response wasn't received within packet.expected_response.timeout seconds
         packet.expected_response.cancel_retry_handler = async_call_later(
+            # Try again if expected_response wasn't received within packet.expected_response.timeout seconds
             self.hass,
             packet.expected_response.timeout,
             lambda now, pkt=packet: self._schedule_retry(pkt),
@@ -87,7 +83,7 @@ class RamsesESP:
             _LOGGER.error(f"Failed to process Ramses payload {msg}", exc_info=True)
 
     async def handle_ramses_version_message(self, msg):
-        """Could create the Rames-ESP device?"""
+        """TODO: Could create the Rames-ESP device?"""
         pass
 
     async def set_preset_mode(self, mode):
@@ -98,6 +94,10 @@ class RamsesESP:
             return
         _LOGGER.info(f"Setting fan preset mode to {mode}")
         await self.publish(packet)
+
+    def add_callback(self, code, func):
+        _LOGGER.debug(f"Adding callback for code {code}")
+        self._callbacks[code] = func
 
     def _schedule_retry(self, packet):
         self.hass.loop.call_soon_threadsafe(lambda: self.hass.async_create_task(self._retry_pending_request(packet)))
@@ -118,7 +118,7 @@ class RamsesESP:
         except Exception:
             _LOGGER.error(f"Error parsing MQTT message {packet}", exc_info=True)
             return
-        if packet.src_id not in {self.fan_id, self.co2_id, self.gateway_id}:
+        if packet.src_id not in {self.fan_id, self.co2_id, self.gateway_id, self.remote_id}:
             return
         if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
             _LOGGER.warning(f"Class Code{packet.code.lower()} not imported, or does not exist")
@@ -129,8 +129,8 @@ class RamsesESP:
             return
         if (q_packet := await self._send_queue.match(packet)) is not None:
             await self._send_queue.remove(q_packet)
-        if packet.code in self.callbacks:
-            self.callbacks[packet.code](payload.values)
+        if packet.code in self._callbacks:
+            self._callbacks[packet.code](payload.values)
 
     async def packet_log(self, payload, path="/config/packet.log", max_size=10_000_000):
         """Log raw packets to disk, rolling over at 10 MB, offloaded to executor."""

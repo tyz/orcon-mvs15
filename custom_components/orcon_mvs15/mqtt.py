@@ -12,17 +12,16 @@ class MQTTException(Exception):
 
 
 class MQTT:
-    def __init__(self, hass, base_topic, handle_message, handle_version_message, gateway_id=None):
+    def __init__(self, hass, base_topic, gateway_id=None):
         self.hass = hass
-        self.gateway_id = gateway_id
         self.base_topic = base_topic
+        self.gateway_id = gateway_id
         self.online_topic = f"{base_topic}/+"
-        self.handle_message = handle_message
-        self.handle_version_message = handle_version_message
         self._mqtt_unsubs = []
         self._online_event = asyncio.Event()
 
-    async def setup(self):
+    async def init(self):
+        """Initialise class (needs asyncio so can't be done in __init__)"""
         if not self.gateway_id:
             """Auto-detect gateway if not known yet"""
             self._mqtt_unsubs.append(await mqtt.async_subscribe(self.hass, self.online_topic, self._handle_online_message))
@@ -33,25 +32,30 @@ class MQTT:
         self.sub_topic = f"{self.base_topic}/{self.gateway_id}/rx"
         self.pub_topic = f"{self.base_topic}/{self.gateway_id}/tx"
         self.version_topic = f"{self.base_topic}/{self.gateway_id}/info/version"
-        self._mqtt_unsubs.append(await mqtt.async_subscribe(self.hass, self.sub_topic, self.handle_message))
+
+    async def setup(self, handle_message, handle_version_message):
+        """Setup message handlers"""
+        self._mqtt_unsubs.append(await mqtt.async_subscribe(self.hass, self.sub_topic, handle_message))
         _LOGGER.debug(f"Subscribed to {self.sub_topic}")
-        self._mqtt_unsubs.append(await mqtt.async_subscribe(self.hass, self.version_topic, self.handle_version_message))
+        self._mqtt_unsubs.append(await mqtt.async_subscribe(self.hass, self.version_topic, handle_version_message))
         _LOGGER.debug(f"Subscribed to {self.version_topic}")
-        _LOGGER.debug("MQTT setup finished")
 
     @callback
     async def _handle_online_message(self, msg):
+        """Message handler for online_topic"""
         self.gateway_id = msg.topic.split("/")[-1]
         _LOGGER.info(f"Auto-detected gateway is {self.gateway_id}")
         await self.remove()  # unsubscribe
         self._online_event.set()
 
     async def remove(self):
+        """Cleanup when unloading/deconfiguring this integration"""
         for unsub in self._mqtt_unsubs:
             unsub()
         self._mqtt_unsubs = []
 
     async def publish(self, ramses_packet):
+        """Transmit a Ramses packet"""
         payload = ramses_packet.payload()
         try:
             _LOGGER.debug(f"Send payload to {self.pub_topic} [{ramses_packet.packet_id}]: {payload}")
