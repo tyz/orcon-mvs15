@@ -21,4 +21,4 @@ class OrconMVS15DataUpdateCoordinator(DataUpdateCoordinator[Any]):
     async def _async_update_data(self) -> dict:
         """Data will be updated as soon as the Ramses II reply has been received"""
         await self.callback_func()
-        return {}
+        return {"_dummy": None}

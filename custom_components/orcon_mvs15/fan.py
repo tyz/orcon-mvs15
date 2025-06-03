@@ -82,12 +82,12 @@ class OrconFan(FanEntity):
             self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self.setup)
 
     async def setup(self, event=None):
-        await self._ramses_esp.setup(event)
         self._ramses_esp.add_callback("10E0", self._device_info_callback)
         self._ramses_esp.add_callback("1298", self._co2_callback)
         self._ramses_esp.add_callback("12A0", self._relative_humidity_callback)
         self._ramses_esp.add_callback("31D9", self._fan_state_callback)
         self._ramses_esp.add_callback("31E0", self._vent_demand_callback)
+        await self._ramses_esp.setup(event)
 
     async def async_set_preset_mode(self, preset_mode: str):
         await self._ramses_esp.set_preset_mode(preset_mode)
