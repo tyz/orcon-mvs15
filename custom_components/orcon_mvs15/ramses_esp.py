@@ -51,7 +51,7 @@ class RamsesESP:
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
 
     async def remove(self):
-        await self._send_queue.empty()
+        self._send_queue.clear()
         await self.mqtt.remove()
 
     async def req_humidity(self):
@@ -68,7 +68,7 @@ class RamsesESP:
             packet.expected_response.timeout,
             lambda now, pkt=packet: self._schedule_retry(pkt),
         )
-        await self._send_queue.add(packet)
+        self._send_queue.add(packet)
 
     async def handle_ramses_message(self, msg):
         """Decode JSON, parse the payload and log it to file"""
@@ -115,7 +115,7 @@ class RamsesESP:
         packet.expected_response.max_retries -= 1
         if packet.expected_response.max_retries < 0:
             _LOGGER.warning(f"Request timed out: {packet}")
-            await self._send_queue.remove(packet)
+            self._send_queue.remove(packet)
             return
         _LOGGER.debug(f"Retry {packet}")
         await self.publish(packet)
@@ -142,8 +142,8 @@ class RamsesESP:
         if packet.type == "RQ":
             """Don't call callback function on something we send ourselves (TODO: timed fan with 22f3)"""
             return
-        if (q_packet := await self._send_queue.match(packet)) is not None:
-            await self._send_queue.remove(q_packet)
+        if (q_packet := self._send_queue.get(packet)) is not None:
+            self._send_queue.remove(q_packet)
         if packet.code in self._callbacks:
             self._callbacks[packet.code](payload.values)
 
