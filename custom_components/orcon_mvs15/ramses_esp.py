@@ -36,9 +36,13 @@ class RamsesESP:
     async def setup(self, event=None):
         if not await mqtt_client.async_wait_for_mqtt_client(self.hass):
             raise ConfigEntryNotReady("MQTT integration is not available")
-        await self.mqtt.setup(self.handle_ramses_message, self.handle_ramses_version_message)
+        await self.mqtt.setup(
+            self.handle_ramses_message, self.handle_ramses_version_message
+        )
         if event:  # only on Home-Assistant restart
-            await asyncio.sleep(2)  # mqtt (or the stick) is not ready yet for some reason
+            await asyncio.sleep(
+                2
+            )  # mqtt (or the stick) is not ready yet for some reason
         """Update fan/co2/vent_demand/device state"""
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
@@ -88,7 +92,9 @@ class RamsesESP:
 
     async def set_preset_mode(self, mode):
         try:
-            packet = Code22f1.set(preset=mode, src_id=self.remote_id, dst_id=self.fan_id)
+            packet = Code22f1.set(
+                preset=mode, src_id=self.remote_id, dst_id=self.fan_id
+            )
         except Exception as e:
             _LOGGER.error(f"Error setting fan preset mode '{mode}': {e}")
             return
@@ -100,7 +106,9 @@ class RamsesESP:
         self._callbacks[code] = func
 
     def _schedule_retry(self, packet):
-        self.hass.loop.call_soon_threadsafe(lambda: self.hass.async_create_task(self._retry_pending_request(packet)))
+        self.hass.loop.call_soon_threadsafe(
+            lambda: self.hass.async_create_task(self._retry_pending_request(packet))
+        )
 
     async def _retry_pending_request(self, packet):
         """Outgoing request timed out, retry it"""
@@ -118,10 +126,17 @@ class RamsesESP:
         except Exception:
             _LOGGER.error(f"Error parsing MQTT message {packet}", exc_info=True)
             return
-        if packet.src_id not in {self.fan_id, self.co2_id, self.gateway_id, self.remote_id}:
+        if packet.src_id not in {
+            self.fan_id,
+            self.co2_id,
+            self.gateway_id,
+            self.remote_id,
+        }:
             return
         if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
-            _LOGGER.warning(f"Class Code{packet.code.lower()} not imported, or does not exist")
+            _LOGGER.warning(
+                f"Class Code{packet.code.lower()} not imported, or does not exist"
+            )
             code_class = Code
         payload = code_class(packet=packet)
         if packet.type == "RQ":
@@ -152,7 +167,7 @@ class RamsesESP:
                 except Exception:
                     pass
                 for i in range(10, 0, -1):  # keep up to 10 old log files
-                    src = f"{path}{'' if i==1 else f'.{i-1}'}"
+                    src = f"{path}{'' if i == 1 else f'.{i - 1}'}"
                     dst = f"{path}.{i}"
                     try:
                         os.replace(src, dst)

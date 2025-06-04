@@ -14,8 +14,20 @@ _LOGGER = logging.getLogger(__name__)
 class OrconMVS15PullDataUpdateCoordinator(DataUpdateCoordinator[Any]):
     config_entry: ConfigEntry
 
-    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, update_interval, callback_func: Any) -> None:
-        super().__init__(hass, _LOGGER, name=DOMAIN, config_entry=config_entry, update_interval=update_interval)
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        update_interval,
+        callback_func: Any,
+    ) -> None:
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=DOMAIN,
+            config_entry=config_entry,
+            update_interval=update_interval,
+        )
         self.callback_func = callback_func
 
     async def _async_update_data(self) -> dict:

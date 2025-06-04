@@ -65,7 +65,9 @@ class Code:
         """Return a human readable string of self.values"""
         if self.packet.length == 1:
             return f"{self.values['_label']} state request"
-        keyval = ", ".join([f"{k}: {v}" for k, v in self.values.items() if not k.startswith("_")])
+        keyval = ", ".join(
+            [f"{k}: {v}" for k, v in self.values.items() if not k.startswith("_")]
+        )
         return f"{self.values['_label']}: {keyval}"
 
     @classmethod
@@ -134,7 +136,9 @@ class Code22f1(Code):
         self.values = {"_label": "Fan mode", "fan_mode": None}
         if self.packet.length != 1:
             try:
-                preset = next(k for k, v in self._fan_modes.items() if v == self.packet.data)
+                preset = next(
+                    k for k, v in self._fan_modes.items() if v == self.packet.data
+                )
             except StopIteration:
                 preset = self.packet.data
             self.values.update({"fan_mode": preset})
@@ -243,12 +247,18 @@ class Code10e0(Code):
         description, _, _ = self.packet.data[36:].partition("00")
         self.values.update(
             {
-                "sz_oem_code": self.packet.data[14:16],  # 00/FF is CH/DHW, 01/6x is HVAC
+                "sz_oem_code": self.packet.data[
+                    14:16
+                ],  # 00/FF is CH/DHW, 01/6x is HVAC
                 "manufacturer_group": self.packet.data[2:6],  # 0001-HVAC, 0002-CH/DHW
                 "manufacturer_sub_id": self.packet.data[6:8],
-                "product_id": self.packet.data[8:10],  # if CH/DHW: matches device_type (sometimes)
+                "product_id": self.packet.data[
+                    8:10
+                ],  # if CH/DHW: matches device_type (sometimes)
                 "software_ver_id": self.packet.data[10:12],
-                "list_ver_id": self.packet.data[12:14],  # if FF/01 is CH/DHW, then 01/FF
+                "list_ver_id": self.packet.data[
+                    12:14
+                ],  # if FF/01 is CH/DHW, then 01/FF
                 "unknown": self.packet.data[14:16],
                 "additional_ver_a": self.packet.data[16:18],
                 "additional_ver_b": self.packet.data[18:20],
@@ -394,7 +404,9 @@ if __name__ == "__main__":
 
             try:
                 if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
-                    print(f"WARNING: Class Code{packet.code.lower()} not imported, or does not exist")
+                    print(
+                        f"WARNING: Class Code{packet.code.lower()} not imported, or does not exist"
+                    )
                     code_class = Code
                 print(
                     f"{ts} {packet.signal_strength:03d} {packet.type:>2} {packet.src_id} {packet.dst_id} "

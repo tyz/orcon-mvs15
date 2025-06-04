@@ -83,7 +83,12 @@ class RamsesPacket:
 
     def __repr__(self):
         all_attr = {k: v for k, v in vars(self).items() if not k.startswith("_")}
-        all_prop = {k: getattr(self, k) for k, v in inspect.getmembers(type(self), lambda v: isinstance(v, property))}
+        all_prop = {
+            k: getattr(self, k)
+            for k, v in inspect.getmembers(
+                type(self), lambda v: isinstance(v, property)
+            )
+        }
         return str({**all_attr, **all_prop})
 
     @property
@@ -100,7 +105,9 @@ class RamsesPacket:
             self.length = 0
 
     def payload(self):
-        return {"msg": f" {self.type} --- {self.src_id} {self.dst_id} {self.ann_id} {self.code} {self.length:03d} {self.data}"}
+        return {
+            "msg": f" {self.type} --- {self.src_id} {self.dst_id} {self.ann_id} {self.code} {self.length:03d} {self.data}"
+        }
 
     def json(self):
         return json.dumps(self.payload())
@@ -121,7 +128,9 @@ class RamsesPacket:
         self.ann_id = fields[5]
         self.code = fields[6]
         self.data = fields[8]
-        assert int(fields[7]) == self.length, f"Wrong length ({fields[7]} vs {self.length})"
+        assert int(fields[7]) == self.length, (
+            f"Wrong length ({fields[7]} vs {self.length})"
+        )
 
 
 class RamsesPacketResponse(RamsesPacket):

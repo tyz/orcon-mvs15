@@ -9,7 +9,10 @@ from homeassistant.exceptions import ConfigEntryNotReady, PlatformNotReady
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
 from .typing import OrconMVS15RuntimeData
-from .coordinator import OrconMVS15PushDataUpdateCoordinator, OrconMVS15PullDataUpdateCoordinator
+from .coordinator import (
+    OrconMVS15PushDataUpdateCoordinator,
+    OrconMVS15PullDataUpdateCoordinator,
+)
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
 from .const import (
@@ -83,7 +86,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await push_coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = OrconMVS15RuntimeData(
-        pull_coordinator=pull_coordinator, push_coordinator=push_coordinator, ramses_esp=ramses_esp
+        pull_coordinator=pull_coordinator,
+        push_coordinator=push_coordinator,
+        ramses_esp=ramses_esp,
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

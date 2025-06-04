@@ -16,6 +16,7 @@ from .const import (
 )
 
 # TODO:
+# * pytest
 # * LICENSE
 # * Add USB support for Ramses ESP (https://developers.home-assistant.io/docs/creating_integration_manifest?_highlight=mqtt#usb)
 # * Start home-assistant timer on timed fan modes (22F3)
@@ -25,7 +26,7 @@ from .const import (
 #   - turn off/on fan, fan_id == msg 042F
 #   - bind as remote with random remote_id (1FC9)
 #   - auto-detect CO2: remote_id is a type I, code 1298 to fan_id
-#   - auto-detect humidity: create sensor after first succesfull pull
+#   - auto-detect humidity: create sensor after first successful pull
 # * Add logo to https://brands.home-assistant.io/
 # * Create RemoteEntity for fan
 
@@ -123,7 +124,9 @@ class OrconFan(FanEntity):
         new_data = {**self.push_coordinator.data, "has_fault": status["has_fault"]}
         self.push_coordinator.async_set_updated_data(new_data)
         self.async_write_ha_state()
-        _LOGGER.info(f"Current fan mode: {self._attr_preset_mode}, has_fault: {status['has_fault']}")
+        _LOGGER.info(
+            f"Current fan mode: {self._attr_preset_mode}, has_fault: {status['has_fault']}"
+        )
         if status["has_fault"]:
             self._report_fault()
         else:
@@ -141,7 +144,9 @@ class OrconFan(FanEntity):
         new_data = {**self.push_coordinator.data, "vent_demand": status["percentage"]}
         self.push_coordinator.async_set_updated_data(new_data)
         self.async_write_ha_state()
-        _LOGGER.info(f"Vent demand: {status['percentage']}%, unknown: {status['unknown']}")
+        _LOGGER.info(
+            f"Vent demand: {status['percentage']}%, unknown: {status['unknown']}"
+        )
 
     def _relative_humidity_callback(self, status):
         """Update relative humidity attribute"""

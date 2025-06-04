@@ -59,7 +59,11 @@ class MQTT:
         """Transmit a Ramses packet"""
         payload = ramses_packet.payload()
         try:
-            _LOGGER.debug(f"Send payload to {self.pub_topic} [{ramses_packet.packet_id}]: {payload}")
+            _LOGGER.debug(
+                f"Send payload to {self.pub_topic} [{ramses_packet.packet_id}]: {payload}"
+            )
             await mqtt.async_publish(self.hass, self.pub_topic, json.dumps(payload))
         except Exception as e:
-            raise MQTTException(f"Failed to publish payload {payload} to {self.pub_topic}: {e}")
+            raise MQTTException(
+                f"Failed to publish payload {payload} to {self.pub_topic}: {e}"
+            )
