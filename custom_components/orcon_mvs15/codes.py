@@ -4,6 +4,21 @@ except ImportError:
     """for __main__"""
     from ramses_packet import RamsesPacket, RamsesPacketResponse, RamsesPacketDatetime
 
+__all__ = [
+    "Code",
+    "Code042f",
+    "Code1060",
+    "Code10e0",
+    "Code10e1",
+    "Code1298",
+    "Code12a0",
+    "Code1fc9",
+    "Code22f1",
+    "Code22f3",
+    "Code31d9",
+    "Code31e0",
+]
+
 
 class CodeException(Exception):
     pass
@@ -91,7 +106,7 @@ class Code1298(Code):
         return length in [1, 3]
 
     def _parse_payload(self):
-        self.values = {"_label": "CO2 level"}
+        self.values = {"_label": "CO2 level", "level": None}
         if self.packet.length == 3:
             self.values.update({"level": int(self.packet.data, 16)})
 
@@ -116,7 +131,7 @@ class Code22f1(Code):
         return length in [1, 3]
 
     def _parse_payload(self):
-        self.values = {"_label": "Fan mode"}
+        self.values = {"_label": "Fan mode", "fan_mode": None}
         if self.packet.length != 1:
             try:
                 preset = next(k for k, v in self._fan_modes.items() if v == self.packet.data)
@@ -178,7 +193,7 @@ class Code31d9(Code):
         return length in [1, 3]
 
     def _parse_payload(self):
-        self.values = {"_label": "Fan state"}
+        self.values = {"_label": "Fan state", "fan_mode": None, "has_fault": None}
         if self.packet.length == 3:
             state = self.packet.data[4:6]
             bitmap = int(self.packet.data[2:4], 16)
@@ -203,7 +218,7 @@ class Code31e0(Code):
         return length in [1, 8]
 
     def _parse_payload(self):
-        self.values = {"_label": "Vent demand"}
+        self.values = {"_label": "Vent demand", "percentage": None, "unknown": None}
         if self.packet.length == 8:
             self.values.update(
                 {
@@ -253,7 +268,7 @@ class Code10e1(Code):
         return length in [1, 4]
 
     def _parse_payload(self):
-        self.values = {"_label": "Device ID"}
+        self.values = {"_label": "Device ID", "device_id": None}
         if self.packet.length == 4:
             self.values.update({"device_id": self._dev_hex_to_id(self.packet.data)})
 
@@ -267,7 +282,7 @@ class Code12a0(Code):
         return length in [1, 2]
 
     def _parse_payload(self):
-        self.values = {"_label": "Indoor humidity"}
+        self.values = {"_label": "Indoor humidity", "level": None}
         if self.packet.length == 2:
             self.values.update({"level": int(self.packet.data, 16)})
 

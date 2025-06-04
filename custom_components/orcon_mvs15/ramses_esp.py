@@ -3,26 +3,17 @@ import logging
 import asyncio
 import json
 
+from homeassistant.components import mqtt as mqtt_client
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
 from .ramses_packet import RamsesPacket
 from .ramses_packet_queue import RamsesPacketQueue
 from .const import DOMAIN
-from .codes import (  # noqa: F401
-    Code,
-    Code042f,
-    Code1060,
-    Code10e0,
-    Code10e1,
-    Code1298,
-    Code12a0,
-    Code1fc9,
-    Code22f1,
-    Code22f3,
-    Code31d9,
-    Code31e0,
-)
+from .codes import *  # noqa: F403
+
+# flake8: noqa: F405
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,9 +34,11 @@ class RamsesESP:
         self._send_queue = RamsesPacketQueue()
 
     async def setup(self, event=None):
+        if not await mqtt_client.async_wait_for_mqtt_client(self.hass):
+            raise ConfigEntryNotReady("MQTT integration is not available")
         await self.mqtt.setup(self.handle_ramses_message, self.handle_ramses_version_message)
         if event:  # only on Home-Assistant restart
-            await asyncio.sleep(2)  # FIXME: wait on mqtt ready state instead?
+            await asyncio.sleep(2)  # mqtt (or the stick) is not ready yet for some reason
         """Update fan/co2/vent_demand/device state"""
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))

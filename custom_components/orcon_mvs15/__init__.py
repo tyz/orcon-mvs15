@@ -5,7 +5,7 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import PlatformNotReady
+from homeassistant.exceptions import ConfigEntryNotReady, PlatformNotReady
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
 from .typing import OrconMVS15RuntimeData
@@ -63,6 +63,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             fan_id=entry.data.get(CONF_FAN_ID),
             co2_id=entry.data.get(CONF_CO2_ID),
         )
+    except ConfigEntryNotReady:
+        raise
     except Exception as e:
         raise PlatformNotReady(f"RamsesESP: {e}")
 

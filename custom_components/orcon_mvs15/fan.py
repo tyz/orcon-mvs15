@@ -52,7 +52,7 @@ class OrconFan(FanEntity):
         self._fan_id = config_entry.data.get(CONF_FAN_ID)
         self._co2_id = config_entry.data.get(CONF_CO2_ID)
         self._co2 = None
-        self._fault_notified = False
+        self._notification_id = None
         self._ramses_esp = config_entry.runtime_data.ramses_esp
         self._attr_name = "Orcon MVS-15 fan"
         self._attr_unique_id = f"orcon_mvs15_{self._fan_id}"
@@ -73,6 +73,7 @@ class OrconFan(FanEntity):
             "co2": push_data.get("co2"),
             "vent_demand": push_data.get("vent_demand"),
             "relative_humidity": pull_data.get("relative_humidity"),
+            "has_fault": push_data.get("has_fault"),
         }
 
     async def async_added_to_hass(self):
@@ -96,45 +97,57 @@ class OrconFan(FanEntity):
 
     async def async_will_remove_from_hass(self):
         await self._ramses_esp.remove()
+        self._report_fault(clear=True)
+
+    def _report_fault(self, clear=False):
+        if clear:
+            if self._notification_id:
+                dismiss(self.hass, self._notification_id)
+                self._notification_id = None
+                _LOGGER.info("Fan fault notification cleared")
+            return
+        if self._notification_id:
+            return  # already reported
+        _LOGGER.warning("Fan reported a fault, notifying")
+        self._notification_id = f"FAN_FAULT-{self._fan_id}"
+        create(
+            self.hass,
+            "Orcon MVS-15 ventilator reported a fault",
+            title="Orcon MVS-15 error",
+            notification_id=self._notification_id,
+        )
 
     def _fan_state_callback(self, status):
         """Update fan preset mode"""
         self._attr_preset_mode = status["fan_mode"]
+        new_data = {**self.push_coordinator.data, "has_fault": status["has_fault"]}
+        self.push_coordinator.async_set_updated_data(new_data)
         self.async_write_ha_state()
-        _LOGGER.info(f"Current fan mode: {self._attr_preset_mode}")
-        notification_id = f"FAN_FAULT-{self._fan_id}"
+        _LOGGER.info(f"Current fan mode: {self._attr_preset_mode}, has_fault: {status['has_fault']}")
         if status["has_fault"]:
-            if not self._fault_notified:
-                _LOGGER.warning("Fan reported a fault")
-                create(
-                    self.hass,
-                    "Orcon MVS-15 ventilator reported a fault",
-                    title="Orcon MVS-15 error",
-                    notification_id=notification_id,
-                )
-                self._fault_notified = True
+            self._report_fault()
         else:
-            if self._fault_notified:
-                _LOGGER.info("Fan fault cleared")
-                dismiss(self.hass, notification_id)
-                self._fault_notified = False
+            self._report_fault(clear=True)
 
     def _co2_callback(self, status):
         """Update CO2 sensor + attribute"""
         new_data = {**self.push_coordinator.data, "co2": status["level"]}
         self.push_coordinator.async_set_updated_data(new_data)
+        self.async_write_ha_state()
         _LOGGER.info(f"Current CO2 level: {status['level']} ppm")
 
     def _vent_demand_callback(self, status):
         """Update Vent demand attribute"""
         new_data = {**self.push_coordinator.data, "vent_demand": status["percentage"]}
         self.push_coordinator.async_set_updated_data(new_data)
+        self.async_write_ha_state()
         _LOGGER.info(f"Vent demand: {status['percentage']}%, unknown: {status['unknown']}")
 
     def _relative_humidity_callback(self, status):
         """Update relative humidity attribute"""
         new_data = {**self.pull_coordinator.data, "relative_humidity": status["level"]}
         self.pull_coordinator.async_set_updated_data(new_data)
+        self.async_write_ha_state()
         _LOGGER.info(f"Current humidity level: {status['level']}%")
 
     def _device_info_callback(self, status):
