@@ -6,7 +6,6 @@
         "description": "Enter the settings for your Orcon ventilation unit.",
         "data": {
           "fan_id": "Fan ID (e.g., 32:096887)",
-          "co2_id": "CO2 Sensor ID (e.g., 29:224547)",
           "remote_id": "Remote ID (e.g., 29:183031)",
           "mqtt_topic": "MQTT Topic Prefix (e.g., RAMSES/GATEWAY)"
         }

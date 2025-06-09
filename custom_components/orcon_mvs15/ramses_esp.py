@@ -32,6 +32,8 @@ class RamsesESP:
         self.gateway_id = gateway_id
         self._callbacks = {}
         self._send_queue = RamsesPacketQueue()
+        if self.co2_id:
+            _LOGGER.info(f"Using previously discovered CO2 sensor ({self.co2_id})")
 
     async def setup(self, event=None):
         if not await mqtt_client.async_wait_for_mqtt_client(self.hass):
@@ -40,15 +42,15 @@ class RamsesESP:
             self.handle_ramses_message, self.handle_ramses_version_message
         )
         if event:  # only on Home-Assistant restart
-            await asyncio.sleep(
-                2
-            )  # mqtt (or the stick) is not ready yet for some reason
+            """sleep for a bit, mqtt (or the stick) is not ready yet for some reason"""
+            await asyncio.sleep(2)
         """Update fan/co2/vent_demand/device state"""
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
-        await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
-        await self.publish(Code31e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.fan_id))
-        await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
+        if self.co2_id:
+            await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
+            await self.publish(Code31e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
+            await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
 
     async def remove(self):
         self._send_queue.clear()
@@ -126,26 +128,37 @@ class RamsesESP:
         except Exception:
             _LOGGER.error(f"Error parsing MQTT message {packet}", exc_info=True)
             return
-        if packet.src_id not in {
-            self.fan_id,
-            self.co2_id,
-            self.gateway_id,
-            self.remote_id,
-        }:
-            return
         if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
             _LOGGER.warning(
                 f"Class Code{packet.code.lower()} not imported, or does not exist"
             )
             code_class = Code
         payload = code_class(packet=packet)
+        if packet.src_id not in {
+            self.fan_id,
+            self.co2_id,
+            self.gateway_id,
+            self.remote_id,
+        }:
+            if (
+                not self.co2_id
+                and packet.type == "I"
+                and packet.code == "31E0"
+                and packet.length == 8
+                and packet.dst_id == self.fan_id
+            ):
+                """Fan received a vent demand payload, that's our CO2 sensor, callback func will handle it"""
+                self.co2_id = packet.src_id
+                _LOGGER.debug(f"Discovered CO2 sensor ({self.co2_id})")
+            else:
+                return
         if packet.type == "RQ":
-            """Don't call callback function on something we send ourselves (TODO: timed fan with 22f3)"""
+            """Don't call callback function on something we send ourselves (TODO: needed w/ timed fan with 22f3)"""
             return
         if (q_packet := self._send_queue.get(packet)) is not None:
             self._send_queue.remove(q_packet)
         if packet.code in self._callbacks:
-            self._callbacks[packet.code](payload.values)
+            self._callbacks[packet.code](payload)
 
     async def packet_log(self, payload, path="/config/packet.log", max_size=10_000_000):
         """Log raw packets to disk, rolling over at 10 MB, offloaded to executor."""

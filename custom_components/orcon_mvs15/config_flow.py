@@ -4,7 +4,6 @@ from .const import (
     DOMAIN,
     CONF_REMOTE_ID,
     CONF_FAN_ID,
-    CONF_CO2_ID,
     CONF_MQTT_TOPIC,
 )
 
@@ -22,7 +21,6 @@ class OrconConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_REMOTE_ID): str,
                     vol.Required(CONF_FAN_ID): str,
-                    vol.Required(CONF_CO2_ID): str,
                     vol.Required(CONF_MQTT_TOPIC, default="RAMSES/GATEWAY"): str,
                 }
             ),

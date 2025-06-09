@@ -44,7 +44,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise PlatformNotReady(f"MQTT: {e}")
 
     if not entry.data.get(CONF_GATEWAY_ID):
-        _LOGGER.debug(f"Storing auto-detected gateway {mqtt.gateway_id} in config")
+        _LOGGER.debug(f"Storing discovered gateway ({mqtt.gateway_id}) in config")
         new_data = {**entry.data, CONF_GATEWAY_ID: mqtt.gateway_id}
         hass.config_entries.async_update_entry(entry, data=new_data)
 
