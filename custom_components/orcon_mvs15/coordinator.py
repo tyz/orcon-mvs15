@@ -31,9 +31,11 @@ class OrconMVS15PullDataUpdateCoordinator(DataUpdateCoordinator[Any]):
         self.callback_func = callback_func
 
     async def _async_update_data(self) -> dict:
-        """Data will be updated as soon as the Ramses II reply has been received"""
+        """Sends a pull payload every self.update_interval seconds, data will
+        not be updated by callback_func, but with async_set_updated_data
+        as soon as the Ramses II reply has been received"""
         await self.callback_func()
-        return {"_dummy": None}
+        return {}
 
 
 class OrconMVS15PushDataUpdateCoordinator(DataUpdateCoordinator[Any]):
@@ -43,5 +45,6 @@ class OrconMVS15PushDataUpdateCoordinator(DataUpdateCoordinator[Any]):
         super().__init__(hass, _LOGGER, name=DOMAIN, config_entry=config_entry)
 
     async def _async_update_data(self) -> dict:
-        """Raises NotImplementedError if this doesn't exist"""
+        """Will be called once, polling will be disabled as soon as the first
+        Ramses II informational or response payload has been received"""
         return {}
