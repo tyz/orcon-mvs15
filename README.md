@@ -14,8 +14,8 @@ Used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://gi
 - Creates a fan entity with all supported presets (Away, Auto, Low, Medium, High + 15/30/60m timed modes)
 - The fan reported mode is used to update the fan's current preset, so it will notice when the mode was changed by an RF15 remote for example
 - Auto-detects a CO₂ remote and creates a sensor
-- (not yet) Auto-detects a humidity sensor and creates a sensor
-- Will create a Home-Assistant notification if the fan reports a fault
+- Auto-detects a humidity sensor and creates a sensor
+- Sets an attribute if the fan reports a fault
 
 ## TODO
 
@@ -40,11 +40,6 @@ features:
 ## Alert on fault
 
 ```
-template:
-  - binary_sensor:
-      - name: "Orcon MVS-15 fault"
-        state: "{{ state_attr('fan.orcon_mvs_15_fan', 'has_fault') }}"
-
 alert:
   orcon_mvs_15_fault:
     title: Orcon MVS-15 fault

@@ -19,7 +19,7 @@ from .const import (
     CONF_MQTT_TOPIC,
 )
 
-PLATFORMS = [Platform.FAN, Platform.SENSOR]
+PLATFORMS = [Platform.FAN, Platform.SENSOR, Platform.BINARY_SENSOR]
 
 _LOGGER = logging.getLogger(__name__)
 

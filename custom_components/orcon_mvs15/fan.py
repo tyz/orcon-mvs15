@@ -81,8 +81,12 @@ class OrconFan(FanEntity):
             "co2": data.get("co2"),
             "vent_demand": data.get("vent_demand"),
             "relative_humidity": data.get("relative_humidity"),
-            "has_fault": data.get("has_fault"),
+            "fan_fault": data.get("fan_fault"),
         }
+
+    @property
+    def preset_mode(self):
+        return self.coordinator.data.get("fan_mode")
 
     async def async_added_to_hass(self):
         if self.hass.state == CoreState.running:
@@ -122,16 +126,15 @@ class OrconFan(FanEntity):
 
     def _fan_state_callback(self, payload):
         """Update fan preset mode"""
-        self._attr_preset_mode = payload.values["fan_mode"]
         new_data = {
             **self.coordinator.data,
-            "has_fault": payload.values["has_fault"],
+            "fan_mode": payload.values["fan_mode"],
+            "fan_fault": payload.values["has_fault"],
             "fan_rssi": payload.values["rssi"],
         }
         self.coordinator.async_set_updated_data(new_data)
-        self.async_write_ha_state()
         _LOGGER.info(
-            f"Current fan mode: {self._attr_preset_mode}, "
+            f"Current fan mode: {payload.values['fan_mode']}, "
             f"has_fault: {payload.values['has_fault']}, "
             f"RSSI: {payload.values['rssi']} dBm"
         )
@@ -144,7 +147,6 @@ class OrconFan(FanEntity):
             "co2_rssi": payload.values["rssi"],
         }
         self.coordinator.async_set_updated_data(new_data)
-        self.async_write_ha_state()
         _LOGGER.info(
             f"Current CO2 level: {payload.values['level']} ppm, RSSI: {payload.values['rssi']} dBm"
         )
@@ -159,7 +161,6 @@ class OrconFan(FanEntity):
             "co2_rssi": payload.values["rssi"],
         }
         self.coordinator.async_set_updated_data(new_data)
-        self.async_write_ha_state()
         _LOGGER.info(
             f"Vent demand: {payload.values['percentage']}%, "
             f"unknown: {payload.values['unknown']}, "
@@ -174,7 +175,6 @@ class OrconFan(FanEntity):
             "fan_rssi": payload.values["rssi"],
         }
         self.coordinator.async_set_updated_data(new_data)
-        self.async_write_ha_state()
         _LOGGER.info(
             f"Current humidity level: {payload.values['level']}%, RSSI: {payload.values['rssi']} dBm"
         )
