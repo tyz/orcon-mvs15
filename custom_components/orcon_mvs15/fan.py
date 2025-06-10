@@ -3,7 +3,6 @@ import logging
 from datetime import timedelta
 
 from homeassistant.components.fan import FanEntity, FanEntityFeature
-from homeassistant.components.persistent_notification import create, dismiss
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.event import async_track_time_interval
@@ -62,7 +61,6 @@ class OrconFan(FanEntity):
         self._fan_id = entry.data.get(CONF_FAN_ID)
         self._co2_id = entry.data.get(CONF_CO2_ID)
         self._co2 = None
-        self._notification_id = None
         self._ramses_esp = entry.runtime_data.ramses_esp
         self._req_humidity_unsub = None
         self._attr_name = "Orcon MVS-15 fan"
@@ -108,7 +106,6 @@ class OrconFan(FanEntity):
     async def async_will_remove_from_hass(self):
         self._req_humidity_unsub()
         await self._ramses_esp.remove()
-        self._report_fault(clear=True)
 
     async def _add_co2_sensor(self, co2_id):
         self._co2_id = co2_id
@@ -121,24 +118,6 @@ class OrconFan(FanEntity):
         await self._platform.async_add_entities([co2_sensor, co2_rssi_sensor])
         _LOGGER.info(
             f"Discovered CO2 sensor {self._co2_id} created and stored in config"
-        )
-
-    def _report_fault(self, clear=False):
-        if clear:
-            if self._notification_id:
-                dismiss(self.hass, self._notification_id)
-                self._notification_id = None
-                _LOGGER.info("Fan fault notification cleared")
-            return
-        if self._notification_id:
-            return  # already reported
-        _LOGGER.warning("Fan reported a fault, notifying")
-        self._notification_id = f"FAN_FAULT-{self._fan_id}"
-        create(
-            self.hass,
-            "Orcon MVS-15 ventilator reported a fault",
-            title="Orcon MVS-15 error",
-            notification_id=self._notification_id,
         )
 
     def _fan_state_callback(self, payload):
@@ -156,10 +135,6 @@ class OrconFan(FanEntity):
             f"has_fault: {payload.values['has_fault']}, "
             f"RSSI: {payload.values['rssi']} dBm"
         )
-        if payload.values["has_fault"]:
-            self._report_fault()
-        else:
-            self._report_fault(clear=True)
 
     def _co2_callback(self, payload):
         """Update CO2 sensor + attribute"""

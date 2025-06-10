@@ -37,6 +37,26 @@ features:
     style: dropdown
 ```
 
+## Alert on fault
+
+```
+template:
+  - binary_sensor:
+      - name: "Orcon MVS-15 fault"
+        state: "{{ state_attr('fan.orcon_mvs_15_fan', 'has_fault') }}"
+
+alert:
+  orcon_mvs_15_fault:
+    title: Orcon MVS-15 fault
+    name: The fan reported a fault
+    done_message: The fan fault was cleared
+    entity_id: binary_sensor.orcon_mvs_15_fault
+    repeat: 1440
+    notifiers:
+      - persistent_notification  # create an alert in the web ui
+      - mobile_app_your_phone  # send a notification through the companion app
+```
+
 ## Supported Ramses II codes
 
 The following codes are supported by the Orcon MVS-15 fan. Not all codes are used (yet) by the integration.
