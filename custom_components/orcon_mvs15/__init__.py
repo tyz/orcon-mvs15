@@ -46,10 +46,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     dev_reg = get_dev_reg(hass)
     dev_reg.async_get_or_create(
         config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, mqtt.gateway_id)},
+        identifiers={(DOMAIN, entry.data.get(CONF_GATEWAY_ID))},
         manufacturer="Indalo-Tech",
         model="RAMSES_ESP",
-        name=f"Indalo-Tech RAMSES_ESP ({mqtt.gateway_id})",
+        name=f"Indalo-Tech RAMSES_ESP ({entry.data.get(CONF_GATEWAY_ID)})",
     )
 
     try:

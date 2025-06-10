@@ -12,7 +12,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState
 
 from .codes import Code22f1
-from .sensor import Co2Sensor
+from .sensor import Co2Sensor, SignalStrengthSensor
 from .const import (
     DOMAIN,
     CONF_GATEWAY_ID,
@@ -115,9 +115,10 @@ class OrconFan(FanEntity):
         """Store CONF_CO2_ID in config"""
         new_data = {**self._entry.data, CONF_CO2_ID: self._co2_id}
         self.hass.config_entries.async_update_entry(self._entry, data=new_data)
-        """Create sensor"""
+        """Create sensor (should call something in sensor.py to set them up)"""
         co2_sensor = Co2Sensor(self._co2_id, self._fan_id, self.coordinator)
-        await self._platform.async_add_entities([co2_sensor])
+        co2_rssi_sensor = SignalStrengthSensor(self._co2_id, self.coordinator, "CO2")
+        await self._platform.async_add_entities([co2_sensor, co2_rssi_sensor])
         _LOGGER.info(
             f"Discovered CO2 sensor {self._co2_id} created and stored in config"
         )

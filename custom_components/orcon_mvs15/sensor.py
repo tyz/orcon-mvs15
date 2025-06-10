@@ -11,24 +11,21 @@ from homeassistant.const import (
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
 )
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_FAN_ID, CONF_GATEWAY_ID, CONF_CO2_ID
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = entry.runtime_data.coordinator
-    fan_id = hass.data[DOMAIN][entry.entry_id]["fan_id"]
-    gateway_id = hass.data[DOMAIN][entry.entry_id]["gateway_id"]
+    fan_id = entry.data.get(CONF_FAN_ID)
+    gateway_id = entry.data.get(CONF_GATEWAY_ID)
+    co2_id = entry.data.get(CONF_CO2_ID)
     hum_sensor = HumiditySensor(fan_id, coordinator)
     fan_rssi_sensor = SignalStrengthSensor(fan_id, coordinator, "fan")
     async_add_entities([hum_sensor, fan_rssi_sensor])
-    if (
-        "co2_id" in hass.data[DOMAIN][entry.entry_id]
-        and (co2_id := hass.data[DOMAIN][entry.entry_id]["co2_id"]) is not None
-    ):
+    if co2_id is not None:
         """Found in config, previously discovered"""
-        coordinator = entry.runtime_data.coordinator
         co2_sensor = Co2Sensor(co2_id, gateway_id, coordinator)
-        co2_rssi_sensor = SignalStrengthSensor(co2_id, coordinator, "co2")
+        co2_rssi_sensor = SignalStrengthSensor(co2_id, coordinator, "CO2")
         async_add_entities([co2_sensor, co2_rssi_sensor])
 
 
@@ -91,4 +88,4 @@ class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
     def native_value(self):
         if not self.coordinator.data:
             return None
-        return self.coordinator.data.get(f"{self.device_type}_rssi")
+        return self.coordinator.data.get(f"{self.device_type.lower()}_rssi")

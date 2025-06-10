@@ -57,7 +57,7 @@ class RamsesESP:
         self._send_queue.clear()
         await self.mqtt.remove()
 
-    async def req_humidity(self):
+    async def req_humidity(self, now=None):
         """12A0 is not announced so we need to fetch it ourselves
         Will be called by async_track_time_interval, if the 12A0 call from self.setup responds"""
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
