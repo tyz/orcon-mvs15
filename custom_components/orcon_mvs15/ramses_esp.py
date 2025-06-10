@@ -30,10 +30,14 @@ class RamsesESP:
         self.fan_id = fan_id
         self.co2_id = co2_id
         self.gateway_id = gateway_id
-        self._callbacks = {}
+        self._handlers = {}
         self._send_queue = RamsesPacketQueue()
         if self.co2_id:
             _LOGGER.info(f"Using previously discovered CO2 sensor ({self.co2_id})")
+        else:
+            _LOGGER.info(
+                "CO2 sensor has not yet been discovered, waiting for vent_demand announcement to the fan"
+            )
 
     async def setup(self, event=None):
         if not await mqtt_client.async_wait_for_mqtt_client(self.hass):
@@ -44,18 +48,25 @@ class RamsesESP:
         if event:  # only on Home-Assistant restart
             """sleep for a bit, mqtt (or the stick) is not ready yet for some reason"""
             await asyncio.sleep(2)
-        """Update fan/co2/vent_demand/device state"""
-        await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
-        await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.fan_id))
-        await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
+        await self.init_fan()
         if self.co2_id:
-            await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
-            await self.publish(Code31e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
-            await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
+            await self.init_co2()
 
     async def remove(self):
         self._send_queue.clear()
         await self.mqtt.remove()
+
+    async def init_fan(self):
+        """Fetch current fan state + device info on startup"""
+        await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.fan_id))
+        await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
+        await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
+
+    async def init_co2(self):
+        """Fetch current CO2 sensor state + device info on startup or discovery"""
+        await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
+        await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
+        await self.publish(Code31e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
 
     async def req_humidity(self, now=None):
         """12A0 is not announced so we need to fetch it ourselves
@@ -105,9 +116,9 @@ class RamsesESP:
         _LOGGER.info(f"Setting fan preset mode to {mode}")
         await self.publish(packet)
 
-    def add_callback(self, code, func):
-        _LOGGER.debug(f"Adding callback for code {code}")
-        self._callbacks[code] = func
+    def add_handler(self, code, func):
+        _LOGGER.debug(f"Adding handler for code {code}")
+        self._handlers[code] = func
 
     def _schedule_retry(self, packet):
         self.hass.loop.call_soon_threadsafe(
@@ -149,18 +160,18 @@ class RamsesESP:
                 and packet.length == 8
                 and packet.dst_id == self.fan_id
             ):
-                """Fan received a vent demand payload, that's our CO2 sensor, callback func will handle it"""
+                """Fan received a vent demand payload, that's our CO2 sensor, handler func will handle it"""
                 self.co2_id = packet.src_id
                 _LOGGER.debug(f"Discovered CO2 sensor ({self.co2_id})")
             else:
                 return
         if packet.type == "RQ":
-            """Don't call callback function on something we send ourselves (TODO: needed w/ timed fan with 22f3)"""
+            """Don't call handler function on something we send ourselves (TODO: needed w/ timed fan with 22f3)"""
             return
         if (q_packet := self._send_queue.get(packet)) is not None:
             self._send_queue.remove(q_packet)
-        if packet.code in self._callbacks:
-            self._callbacks[packet.code](payload)
+        if packet.code in self._handlers:
+            self._handlers[packet.code](payload)
 
     async def packet_log(self, payload, path="/config/packet.log", max_size=10_000_000):
         """Log raw packets to disk, rolling over at 10 MB, offloaded to executor."""

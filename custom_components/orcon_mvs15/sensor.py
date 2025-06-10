@@ -1,3 +1,5 @@
+import logging
+
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorDeviceClass,
@@ -13,6 +15,8 @@ from homeassistant.const import (
 
 from .const import DOMAIN, CONF_FAN_ID, CONF_GATEWAY_ID, CONF_CO2_ID
 
+_LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = entry.runtime_data.coordinator
@@ -22,11 +26,22 @@ async def async_setup_entry(hass, entry, async_add_entities):
     hum_sensor = HumiditySensor(fan_id, coordinator)
     fan_rssi_sensor = SignalStrengthSensor(fan_id, coordinator, "fan")
     async_add_entities([hum_sensor, fan_rssi_sensor])
-    if co2_id is not None:
-        """Found in config, previously discovered"""
-        co2_sensor = Co2Sensor(co2_id, gateway_id, coordinator)
-        co2_rssi_sensor = SignalStrengthSensor(co2_id, coordinator, "CO2")
-        async_add_entities([co2_sensor, co2_rssi_sensor])
+
+    def _add_dynamic_co2_sensor():
+        """Create discovered sensors"""
+        if (co2_id := coordinator.data.get("discovered_co2_id")) is None:
+            return
+        new_entities = [
+            Co2Sensor(co2_id, gateway_id, coordinator),
+            SignalStrengthSensor(co2_id, coordinator, "CO2"),
+        ]
+        async_add_entities(new_entities, True)
+        _LOGGER.info(f"Discovered CO2 sensor {co2_id}")
+
+    if co2_id is None:
+        """Setup for discovery"""
+        coordinator.async_add_listener(_add_dynamic_co2_sensor)
+        await coordinator.async_refresh()
 
 
 class Co2Sensor(CoordinatorEntity, SensorEntity):

@@ -6,12 +6,10 @@ from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.helpers import entity_platform
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState
 
 from .codes import Code22f1
-from .sensor import Co2Sensor, SignalStrengthSensor
 from .const import (
     DOMAIN,
     CONF_GATEWAY_ID,
@@ -28,11 +26,10 @@ from .const import (
 # * Start home-assistant timer on timed fan modes (22F3)
 # * MQTT via_device for RAMSES_ESP
 # * Auto discovery
-#   - use async_setup_platform?
-#   - turn off/on the fan unit, fan_id == src_id of 1st msg 042F
+#   - Discover fan_id: turn off/on the fan unit, fan_id == src_id of 1st 042F message
 #   - bind as remote with random remote_id (1FC9)
 #   - [DONE] Discover CO2: remote_id is a type I, code 31E0 to fan_id
-#   - Discover humidity: create sensor after first successful pull
+#   - Discover humidity: create sensor only after first successful pull
 # * Add logo to https://brands.home-assistant.io/
 # * Req 10e0, 31e0 and 1298 when CO2 discovered
 
@@ -40,8 +37,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    platform = entity_platform.async_get_current_platform()
-    async_add_entities([OrconFan(hass, entry, platform)])
+    async_add_entities([OrconFan(hass, entry)])
     return True
 
 
@@ -50,10 +46,9 @@ class OrconFan(FanEntity):
     _attr_supported_features = FanEntityFeature.PRESET_MODE
     _attr_translation_key = "fan_states"  # see icons.json
 
-    def __init__(self, hass, entry, platform):
+    def __init__(self, hass, entry):
         self.hass = hass
         self._entry = entry
-        self._platform = platform
         self.coordinator = entry.runtime_data.coordinator
         self._mqtt_topic = entry.data.get(CONF_MQTT_TOPIC)
         self._gateway_id = entry.data.get(CONF_GATEWAY_ID)
@@ -96,14 +91,6 @@ class OrconFan(FanEntity):
             _LOGGER.info("Orcon MVS-15 integration has been loaded after restart")
             self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self.setup)
 
-    async def setup(self, event=None):
-        self._ramses_esp.add_callback("10E0", self._device_info_callback)
-        self._ramses_esp.add_callback("1298", self._co2_callback)
-        self._ramses_esp.add_callback("12A0", self._relative_humidity_callback)
-        self._ramses_esp.add_callback("31D9", self._fan_state_callback)
-        self._ramses_esp.add_callback("31E0", self._vent_demand_callback)
-        await self._ramses_esp.setup(event)
-
     async def async_set_preset_mode(self, preset_mode: str):
         await self._ramses_esp.set_preset_mode(preset_mode)
 
@@ -111,21 +98,27 @@ class OrconFan(FanEntity):
         self._req_humidity_unsub()
         await self._ramses_esp.remove()
 
+    async def setup(self, event=None):
+        self._ramses_esp.add_handler("10E0", self._device_info_handler)
+        self._ramses_esp.add_handler("1298", self._co2_handler)
+        self._ramses_esp.add_handler("12A0", self._relative_humidity_handler)
+        self._ramses_esp.add_handler("31D9", self._fan_state_handler)
+        self._ramses_esp.add_handler("31E0", self._vent_demand_handler)
+        await self._ramses_esp.setup(event)
+
     async def _add_co2_sensor(self, co2_id):
         self._co2_id = co2_id
         """Store CONF_CO2_ID in config"""
-        new_data = {**self._entry.data, CONF_CO2_ID: self._co2_id}
-        self.hass.config_entries.async_update_entry(self._entry, data=new_data)
-        """Create sensor (should call something in sensor.py to set them up)"""
-        co2_sensor = Co2Sensor(self._co2_id, self._fan_id, self.coordinator)
-        co2_rssi_sensor = SignalStrengthSensor(self._co2_id, self.coordinator, "CO2")
-        await self._platform.async_add_entities([co2_sensor, co2_rssi_sensor])
-        _LOGGER.info(
-            f"Discovered CO2 sensor {self._co2_id} created and stored in config"
-        )
+        new_cfg = {**self._entry.data, CONF_CO2_ID: self._co2_id}
+        self.hass.config_entries.async_update_entry(self._entry, data=new_cfg)
+        """Update coordinator to create the sensors"""
+        new_data = {**self.coordinator.data, "discovered_co2_id": self._co2_id}
+        self.coordinator.async_set_updated_data(new_data)
+        """Fetch current sensor state and device info"""
+        await self._ramses_esp.init_co2()
 
-    def _fan_state_callback(self, payload):
-        """Update fan preset mode"""
+    def _fan_state_handler(self, payload):
+        """Update fan mode and fault state"""
         new_data = {
             **self.coordinator.data,
             "fan_mode": payload.values["fan_mode"],
@@ -139,7 +132,7 @@ class OrconFan(FanEntity):
             f"RSSI: {payload.values['rssi']} dBm"
         )
 
-    def _co2_callback(self, payload):
+    def _co2_handler(self, payload):
         """Update CO2 sensor + attribute"""
         new_data = {
             **self.coordinator.data,
@@ -151,9 +144,10 @@ class OrconFan(FanEntity):
             f"Current CO2 level: {payload.values['level']} ppm, RSSI: {payload.values['rssi']} dBm"
         )
 
-    def _vent_demand_callback(self, payload):
+    def _vent_demand_handler(self, payload):
         """Update Vent demand attribute"""
         if not self._co2_id:
+            """Discovered the CO2 sensor"""
             self.hass.async_create_task(self._add_co2_sensor(payload.packet.src_id))
         new_data = {
             **self.coordinator.data,
@@ -167,7 +161,7 @@ class OrconFan(FanEntity):
             f"RSSI: {payload.values['rssi']} dBm"
         )
 
-    def _relative_humidity_callback(self, payload):
+    def _relative_humidity_handler(self, payload):
         """Update relative humidity attribute"""
         new_data = {
             **self.coordinator.data,
@@ -189,7 +183,7 @@ class OrconFan(FanEntity):
                 f"Humidity sensor detected, fetching value every {poll_interval} minutes"
             )
 
-    def _device_info_callback(self, payload):
+    def _device_info_handler(self, payload):
         """Update device info"""
         dev_reg = get_dev_reg(self.hass)
         if payload.values["manufacturer_sub_id"] != "C8":
