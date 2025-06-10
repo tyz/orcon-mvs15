@@ -11,34 +11,7 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
-class OrconMVS15PullDataUpdateCoordinator(DataUpdateCoordinator[Any]):
-    config_entry: ConfigEntry
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        config_entry: ConfigEntry,
-        update_interval,
-        callback_func: Any,
-    ) -> None:
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=DOMAIN,
-            config_entry=config_entry,
-            update_interval=update_interval,
-        )
-        self.callback_func = callback_func
-
-    async def _async_update_data(self) -> dict:
-        """Sends a pull payload every self.update_interval seconds, data will
-        not be updated by callback_func, but with async_set_updated_data
-        as soon as the Ramses II reply has been received"""
-        await self.callback_func()
-        return {}
-
-
-class OrconMVS15PushDataUpdateCoordinator(DataUpdateCoordinator[Any]):
+class OrconMVS15DataUpdateCoordinator(DataUpdateCoordinator[Any]):
     config_entry: ConfigEntry
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
@@ -46,5 +19,6 @@ class OrconMVS15PushDataUpdateCoordinator(DataUpdateCoordinator[Any]):
 
     async def _async_update_data(self) -> dict:
         """Will be called once, polling will be disabled as soon as the first
-        Ramses II informational or response payload has been received"""
+        Ramses II informational or response payload has been received and
+        async_set_updated_data gets called"""
         return {}

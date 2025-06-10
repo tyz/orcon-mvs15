@@ -1,7 +1,5 @@
 import logging
 
-from datetime import timedelta
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -9,10 +7,7 @@ from homeassistant.exceptions import ConfigEntryNotReady, PlatformNotReady
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
 from .typing import OrconMVS15RuntimeData
-from .coordinator import (
-    OrconMVS15PushDataUpdateCoordinator,
-    OrconMVS15PullDataUpdateCoordinator,
-)
+from .coordinator import OrconMVS15DataUpdateCoordinator
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
 from .const import (
@@ -71,23 +66,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as e:
         raise PlatformNotReady(f"RamsesESP: {e}")
 
-    pull_coordinator = OrconMVS15PullDataUpdateCoordinator(
-        hass,
-        entry,
-        update_interval=timedelta(minutes=5),
-        callback_func=ramses_esp.req_humidity,
-    )
-    await pull_coordinator.async_config_entry_first_refresh()
-
-    push_coordinator = OrconMVS15PushDataUpdateCoordinator(
+    coordinator = OrconMVS15DataUpdateCoordinator(
         hass,
         entry,
     )
-    await push_coordinator.async_config_entry_first_refresh()
+    await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = OrconMVS15RuntimeData(
-        pull_coordinator=pull_coordinator,
-        push_coordinator=push_coordinator,
+        coordinator=coordinator,
         ramses_esp=ramses_esp,
     )
 

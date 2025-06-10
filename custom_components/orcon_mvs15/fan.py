@@ -1,11 +1,16 @@
 import logging
+
+from datetime import timedelta
+
 from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.components.persistent_notification import create, dismiss
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers import entity_platform
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState
+
 from .codes import Code22f1
 from .sensor import Co2Sensor
 from .const import (
@@ -50,8 +55,7 @@ class OrconFan(FanEntity):
         self.hass = hass
         self._entry = entry
         self._platform = platform
-        self.pull_coordinator = entry.runtime_data.pull_coordinator
-        self.push_coordinator = entry.runtime_data.push_coordinator
+        self.coordinator = entry.runtime_data.coordinator
         self._mqtt_topic = entry.data.get(CONF_MQTT_TOPIC)
         self._gateway_id = entry.data.get(CONF_GATEWAY_ID)
         self._remote_id = entry.data.get(CONF_REMOTE_ID)
@@ -60,6 +64,7 @@ class OrconFan(FanEntity):
         self._co2 = None
         self._notification_id = None
         self._ramses_esp = entry.runtime_data.ramses_esp
+        self._req_humidity_unsub = None
         self._attr_name = "Orcon MVS-15 fan"
         self._attr_unique_id = f"orcon_mvs15_{self._fan_id}"
         self._attr_preset_mode = "Auto"
@@ -73,13 +78,12 @@ class OrconFan(FanEntity):
 
     @property
     def extra_state_attributes(self):
-        pull_data = self.pull_coordinator.data
-        push_data = self.push_coordinator.data
+        data = self.coordinator.data
         return {
-            "co2": push_data.get("co2"),
-            "vent_demand": push_data.get("vent_demand"),
-            "relative_humidity": pull_data.get("relative_humidity"),
-            "has_fault": push_data.get("has_fault"),
+            "co2": data.get("co2"),
+            "vent_demand": data.get("vent_demand"),
+            "relative_humidity": data.get("relative_humidity"),
+            "has_fault": data.get("has_fault"),
         }
 
     async def async_added_to_hass(self):
@@ -102,6 +106,7 @@ class OrconFan(FanEntity):
         await self._ramses_esp.set_preset_mode(preset_mode)
 
     async def async_will_remove_from_hass(self):
+        self._req_humidity_unsub()
         await self._ramses_esp.remove()
         self._report_fault(clear=True)
 
@@ -111,7 +116,7 @@ class OrconFan(FanEntity):
         new_data = {**self._entry.data, CONF_CO2_ID: self._co2_id}
         self.hass.config_entries.async_update_entry(self._entry, data=new_data)
         """Create sensor"""
-        co2_sensor = Co2Sensor(self._co2_id, self._fan_id, self.push_coordinator)
+        co2_sensor = Co2Sensor(self._co2_id, self._fan_id, self.coordinator)
         await self._platform.async_add_entities([co2_sensor])
         _LOGGER.info(
             f"Discovered CO2 sensor {self._co2_id} created and stored in config"
@@ -139,14 +144,16 @@ class OrconFan(FanEntity):
         """Update fan preset mode"""
         self._attr_preset_mode = payload.values["fan_mode"]
         new_data = {
-            **self.push_coordinator.data,
+            **self.coordinator.data,
             "has_fault": payload.values["has_fault"],
             "fan_rssi": payload.values["rssi"],
         }
-        self.push_coordinator.async_set_updated_data(new_data)
+        self.coordinator.async_set_updated_data(new_data)
         self.async_write_ha_state()
         _LOGGER.info(
-            f"Current fan mode: {self._attr_preset_mode}, has_fault: {payload.values['has_fault']}"
+            f"Current fan mode: {self._attr_preset_mode}, "
+            f"has_fault: {payload.values['has_fault']}, "
+            f"RSSI: {payload.values['rssi']} dBm"
         )
         if payload.values["has_fault"]:
             self._report_fault()
@@ -156,39 +163,55 @@ class OrconFan(FanEntity):
     def _co2_callback(self, payload):
         """Update CO2 sensor + attribute"""
         new_data = {
-            **self.push_coordinator.data,
+            **self.coordinator.data,
             "co2": payload.values["level"],
-            "fan_rssi": payload.values["rssi"],
+            "co2_rssi": payload.values["rssi"],
         }
-        self.push_coordinator.async_set_updated_data(new_data)
+        self.coordinator.async_set_updated_data(new_data)
         self.async_write_ha_state()
-        _LOGGER.info(f"Current CO2 level: {payload.values['level']} ppm")
+        _LOGGER.info(
+            f"Current CO2 level: {payload.values['level']} ppm, RSSI: {payload.values['rssi']} dBm"
+        )
 
     def _vent_demand_callback(self, payload):
         """Update Vent demand attribute"""
         if not self._co2_id:
             self.hass.async_create_task(self._add_co2_sensor(payload.packet.src_id))
         new_data = {
-            **self.push_coordinator.data,
+            **self.coordinator.data,
             "vent_demand": payload.values["percentage"],
-            "fan_rssi": payload.values["rssi"],
+            "co2_rssi": payload.values["rssi"],
         }
-        self.push_coordinator.async_set_updated_data(new_data)
+        self.coordinator.async_set_updated_data(new_data)
         self.async_write_ha_state()
         _LOGGER.info(
-            f"Vent demand: {payload.values['percentage']}%, unknown: {payload.values['unknown']}"
+            f"Vent demand: {payload.values['percentage']}%, "
+            f"unknown: {payload.values['unknown']}, "
+            f"RSSI: {payload.values['rssi']} dBm"
         )
 
     def _relative_humidity_callback(self, payload):
         """Update relative humidity attribute"""
         new_data = {
-            **self.pull_coordinator.data,
+            **self.coordinator.data,
             "relative_humidity": payload.values["level"],
             "fan_rssi": payload.values["rssi"],
         }
-        self.pull_coordinator.async_set_updated_data(new_data)
+        self.coordinator.async_set_updated_data(new_data)
         self.async_write_ha_state()
-        _LOGGER.info(f"Current humidity level: {payload.values['level']}%")
+        _LOGGER.info(
+            f"Current humidity level: {payload.values['level']}%, RSSI: {payload.values['rssi']} dBm"
+        )
+        if not self._req_humidity_unsub:
+            poll_interval = 5
+            self._req_humidity_unsub = async_track_time_interval(
+                self.hass,
+                self._ramses_esp.req_humidity,
+                timedelta(minutes=poll_interval),
+            )
+            _LOGGER.info(
+                f"Humidity sensor detected, fetching value every {poll_interval} minutes"
+            )
 
     def _device_info_callback(self, payload):
         """Update device info"""
@@ -209,4 +232,6 @@ class OrconFan(FanEntity):
             "model_id": payload.values["description"],
         }
         dev_reg.async_update_device(**dev_info)
-        _LOGGER.info(f"Updated device info: {dev_info}")
+        _LOGGER.info(
+            f"Updated device info: {dev_info}, RSSI: {payload.values['rssi']} dBm"
+        )

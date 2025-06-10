@@ -47,6 +47,7 @@ class RamsesESP:
         """Update fan/co2/vent_demand/device state"""
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.fan_id))
+        await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         if self.co2_id:
             await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
             await self.publish(Code31e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
@@ -57,7 +58,8 @@ class RamsesESP:
         await self.mqtt.remove()
 
     async def req_humidity(self):
-        """Is not being announced by the fan, so we have to fetch it ourselves"""
+        """12A0 is not announced so we need to fetch it ourselves
+        Will be called by async_track_time_interval, if the 12A0 call from self.setup responds"""
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
 
     async def publish(self, packet):
