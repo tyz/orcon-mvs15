@@ -13,7 +13,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     OrconSensor(
         hass=hass,
         async_add_entities=async_add_entities,
-        entry=entry,
+        config=entry.data,
+        coordinator=entry.runtime_data.fan_coordinator,
         ramses_id=entry.data.get(CONF_FAN_ID),
         label="fan",
         entities=[FaultBinarySensor],

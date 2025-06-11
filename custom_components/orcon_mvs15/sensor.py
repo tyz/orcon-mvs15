@@ -1,5 +1,3 @@
-import logging
-
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorDeviceClass,
@@ -16,14 +14,13 @@ from homeassistant.const import (
 from .const import DOMAIN, CONF_FAN_ID, CONF_GATEWAY_ID, CONF_CO2_ID
 from .orcon_sensor import OrconSensor
 
-_LOGGER = logging.getLogger(__name__)
-
 
 async def async_setup_entry(hass, entry, async_add_entities):
     OrconSensor(
         hass=hass,
         async_add_entities=async_add_entities,
-        entry=entry,
+        config=entry.data,
+        coordinator=entry.runtime_data.fan_coordinator,
         ramses_id=entry.data.get(CONF_FAN_ID),
         label="fan",
         entities=[HumiditySensor, SignalStrengthSensor],
@@ -31,7 +28,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     OrconSensor(
         hass=hass,
         async_add_entities=async_add_entities,
-        entry=entry,
+        config=entry.data,
+        coordinator=entry.runtime_data.co2_coordinator,
         ramses_id=entry.data.get(CONF_CO2_ID),
         label="CO2",
         entities=[Co2Sensor, SignalStrengthSensor],

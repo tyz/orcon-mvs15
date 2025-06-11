@@ -66,14 +66,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as e:
         raise PlatformNotReady(f"RamsesESP: {e}")
 
-    coordinator = OrconMVS15DataUpdateCoordinator(
-        hass,
-        entry,
-    )
-    await coordinator.async_config_entry_first_refresh()
+    fan_coordinator = OrconMVS15DataUpdateCoordinator(hass, entry)
+    await fan_coordinator.async_config_entry_first_refresh()
+    co2_coordinator = OrconMVS15DataUpdateCoordinator(hass, entry)
+    await co2_coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = OrconMVS15RuntimeData(
-        coordinator=coordinator,
+        fan_coordinator=fan_coordinator,
+        co2_coordinator=co2_coordinator,
         ramses_esp=ramses_esp,
     )
 
