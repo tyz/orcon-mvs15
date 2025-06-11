@@ -15,7 +15,9 @@ class OrconMVS15DataUpdateCoordinator(DataUpdateCoordinator[Any]):
     config_entry: ConfigEntry
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
-        super().__init__(hass, _LOGGER, name=DOMAIN, config_entry=config_entry)
+        super().__init__(
+            hass, _LOGGER, name=DOMAIN, config_entry=config_entry, always_update=False
+        )
 
     async def _async_update_data(self) -> dict:
         """Will be called once, polling will be disabled as soon as the first

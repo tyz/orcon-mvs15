@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from typing import Any
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .ramses_esp import RamsesESP
@@ -12,4 +11,4 @@ class OrconMVS15RuntimeData:
     ramses_esp: RamsesESP = None
 
 
-type OrconMVS15ConfigEntry = ConfigEntry[OrconMVS15RuntimeData]  # noqa: E999
+# type OrconMVS15ConfigEntry = ConfigEntry[OrconMVS15RuntimeData]  # noqa: E999

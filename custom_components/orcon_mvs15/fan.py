@@ -27,11 +27,12 @@ from .const import (
 # * MQTT via_device for RAMSES_ESP
 # * Auto discovery
 #   - Discover fan_id: turn off/on the fan unit, fan_id == src_id of 1st 042F message
-#   - bind as remote with random remote_id (1FC9)
+#   - Bind as remote with random remote_id (1FC9)
+#   - or: Discover existing remote by 22F1/22F3 messages to use that remote_id
 #   - [DONE] Discover CO2: remote_id is a type I, code 31E0 to fan_id
 #   - Discover humidity: create sensor only after first successful pull
 # * Add logo to https://brands.home-assistant.io/
-# * Req 10e0, 31e0 and 1298 when CO2 discovered
+# * Req 10e0, 31e0 and 1298 after CO2 sensors have been created
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +46,8 @@ class OrconFan(FanEntity):
     _attr_preset_modes = Code22f1.presets()
     _attr_supported_features = FanEntityFeature.PRESET_MODE
     _attr_translation_key = "fan_states"  # see icons.json
+    _attr_name = "Orcon MVS-15 fan"
+    _attr_preset_mode = "Auto"
 
     def __init__(self, hass, entry):
         self.hass = hass
@@ -58,9 +61,7 @@ class OrconFan(FanEntity):
         self._co2 = None
         self._ramses_esp = entry.runtime_data.ramses_esp
         self._req_humidity_unsub = None
-        self._attr_name = "Orcon MVS-15 fan"
         self._attr_unique_id = f"orcon_mvs15_{self._fan_id}"
-        self._attr_preset_mode = "Auto"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._fan_id)},
             manufacturer="Orcon",
@@ -95,7 +96,8 @@ class OrconFan(FanEntity):
         await self._ramses_esp.set_preset_mode(preset_mode)
 
     async def async_will_remove_from_hass(self):
-        self._req_humidity_unsub()
+        if self._req_humidity_unsub:
+            self._req_humidity_unsub()
         await self._ramses_esp.remove()
 
     async def setup(self, event=None):
@@ -106,16 +108,12 @@ class OrconFan(FanEntity):
         self._ramses_esp.add_handler("31E0", self._vent_demand_handler)
         await self._ramses_esp.setup(event)
 
-    async def _add_co2_sensor(self, co2_id):
-        self._co2_id = co2_id
-        """Store CONF_CO2_ID in config"""
-        new_cfg = {**self._entry.data, CONF_CO2_ID: self._co2_id}
-        self.hass.config_entries.async_update_entry(self._entry, data=new_cfg)
-        """Update coordinator to create the sensors"""
+    async def _add_co2_sensor(self, payload):
+        """Add the CO2 sensor to the config, create the sensors and device, and update the sensors with the current state"""
         new_data = {**self.coordinator.data, "discovered_co2_id": self._co2_id}
         self.coordinator.async_set_updated_data(new_data)
-        """Fetch current sensor state and device info"""
-        await self._ramses_esp.init_co2()
+        # FIXME, wait until sensors are setup:
+        # await self._ramses_esp.init_co2()
 
     def _fan_state_handler(self, payload):
         """Update fan mode and fault state"""
@@ -147,12 +145,18 @@ class OrconFan(FanEntity):
     def _vent_demand_handler(self, payload):
         """Update Vent demand attribute"""
         if not self._co2_id:
-            """Discovered the CO2 sensor"""
-            self.hass.async_create_task(self._add_co2_sensor(payload.packet.src_id))
+            """Discovered CO2 sensor, setup sensors + device"""
+            _LOGGER.debug(
+                f"Adding discovered CO2 sensor {payload.packet.src_id} to config"
+            )
+            self._co2_id = payload.packet.src_id
+            new_cfg = {**self._entry.data, CONF_CO2_ID: self._co2_id}
+            self.hass.config_entries.async_update_entry(self._entry, data=new_cfg)
         new_data = {
             **self.coordinator.data,
             "vent_demand": payload.values["percentage"],
             "co2_rssi": payload.values["rssi"],
+            "co2_id": self._co2_id,
         }
         self.coordinator.async_set_updated_data(new_data)
         _LOGGER.info(
@@ -185,17 +189,14 @@ class OrconFan(FanEntity):
 
     def _device_info_handler(self, payload):
         """Update device info"""
-        dev_reg = get_dev_reg(self.hass)
         if payload.values["manufacturer_sub_id"] != "C8":
             _LOGGER.warning("This doesn't look like an Orcon device: {payload.values}")
             return
-        if payload.values["product_id"] == "26":
-            entry = dev_reg.async_get_device({(DOMAIN, self._fan_id)})
-        elif payload.values["product_id"] == "51":
-            entry = dev_reg.async_get_device({(DOMAIN, self._co2_id)})
-        else:
+        if payload.values["product_id"] not in ["26", "51"]:
             _LOGGER.warning(f"Unknown product_id {payload.values['product_id']}")
             return
+        dev_reg = get_dev_reg(self.hass)
+        entry = dev_reg.async_get_device({(DOMAIN, payload.packet.src_id)})
         dev_info = {
             "device_id": entry.id,
             "sw_version": int(payload.values["software_ver_id"], 16),

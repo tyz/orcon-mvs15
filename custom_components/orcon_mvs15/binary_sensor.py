@@ -6,25 +6,31 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, CONF_FAN_ID
+from .orcon_sensor import OrconSensor
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    coordinator = entry.runtime_data.coordinator
-    fan_id = entry.data.get(CONF_FAN_ID)
-    fan_fault_sensor = FaultBinarySensor(fan_id, coordinator, "fan")
-    async_add_entities([fan_fault_sensor])
+    OrconSensor(
+        hass=hass,
+        async_add_entities=async_add_entities,
+        entry=entry,
+        ramses_id=entry.data.get(CONF_FAN_ID),
+        label="fan",
+        entities=[FaultBinarySensor],
+    )
 
 
 class FaultBinarySensor(CoordinatorEntity, BinarySensorEntity):
-    def __init__(self, ramses_id, coordinator, device_type):
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, ramses_id, config, coordinator, label):
         super().__init__(coordinator)
         self.coordinator = coordinator
-        self.device_type = device_type
-        self._attr_name = f"Orcon MVS-15 {device_type} fault"
-        self._attr_device_class = BinarySensorDeviceClass.PROBLEM
-        self._attr_unique_id = f"orcon_mvs15_fault_{ramses_id}"
+        self.label = label
+        self._attr_name = f"Orcon MVS-15 {label} fault"
+        self._attr_unique_id = f"orcon_mvs15_{label}_fault_{ramses_id}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, ramses_id)})
 
     @property
     def is_on(self):
-        return self.coordinator.data.get(f"{self.device_type.lower()}_fault")
+        return self.coordinator.data.get(f"{self.label.lower()}_fault")

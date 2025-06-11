@@ -120,6 +120,10 @@ class RamsesESP:
         _LOGGER.debug(f"Adding handler for code {code}")
         self._handlers[code] = func
 
+    def remove_handler(self, code):
+        _LOGGER.debug(f"Remove handler for code {code}")
+        del self._handlers[code]
+
     def _schedule_retry(self, packet):
         self.hass.loop.call_soon_threadsafe(
             lambda: self.hass.async_create_task(self._retry_pending_request(packet))

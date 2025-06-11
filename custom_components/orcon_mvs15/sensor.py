@@ -14,40 +14,35 @@ from homeassistant.const import (
 )
 
 from .const import DOMAIN, CONF_FAN_ID, CONF_GATEWAY_ID, CONF_CO2_ID
+from .orcon_sensor import OrconSensor
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    coordinator = entry.runtime_data.coordinator
-    fan_id = entry.data.get(CONF_FAN_ID)
-    gateway_id = entry.data.get(CONF_GATEWAY_ID)
-    co2_id = entry.data.get(CONF_CO2_ID)
-    hum_sensor = HumiditySensor(fan_id, coordinator)
-    fan_rssi_sensor = SignalStrengthSensor(fan_id, coordinator, "fan")
-    async_add_entities([hum_sensor, fan_rssi_sensor])
-
-    def _add_dynamic_co2_sensor():
-        """Create discovered sensors"""
-        if (co2_id := coordinator.data.get("discovered_co2_id")) is None:
-            return
-        new_entities = [
-            Co2Sensor(co2_id, gateway_id, coordinator),
-            SignalStrengthSensor(co2_id, coordinator, "CO2"),
-        ]
-        async_add_entities(new_entities, True)
-        _LOGGER.info(f"Discovered CO2 sensor {co2_id}")
-
-    if co2_id is None:
-        """Setup for discovery"""
-        coordinator.async_add_listener(_add_dynamic_co2_sensor)
-        await coordinator.async_refresh()
+    OrconSensor(
+        hass=hass,
+        async_add_entities=async_add_entities,
+        entry=entry,
+        ramses_id=entry.data.get(CONF_FAN_ID),
+        label="fan",
+        entities=[HumiditySensor, SignalStrengthSensor],
+    )
+    OrconSensor(
+        hass=hass,
+        async_add_entities=async_add_entities,
+        entry=entry,
+        ramses_id=entry.data.get(CONF_CO2_ID),
+        label="CO2",
+        entities=[Co2Sensor, SignalStrengthSensor],
+    )
 
 
 class Co2Sensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, co2_id, gateway_id, coordinator):
+    def __init__(self, co2_id, config, coordinator, noop):
         super().__init__(coordinator)
         self.coordinator = coordinator
+        gateway_id = config.get(CONF_GATEWAY_ID)
         self._state = None
         self._attr_name = "Orcon MVS-15 CO2"
         self._attr_native_unit_of_measurement = CONCENTRATION_PARTS_PER_MILLION
@@ -70,13 +65,14 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
 
 
 class HumiditySensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, fan_id, coordinator):
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_device_class = SensorDeviceClass.HUMIDITY
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, fan_id, config, coordinator, noop):
         super().__init__(coordinator)
         self.coordinator = coordinator
         self._attr_name = "Orcon MVS-15 Relative Humidity"
-        self._attr_native_unit_of_measurement = PERCENTAGE
-        self._attr_device_class = SensorDeviceClass.HUMIDITY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_unique_id = f"orcon_mvs15_humidity_{fan_id}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, fan_id)})
 
@@ -88,14 +84,15 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
 
 
 class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, ramses_id, coordinator, device_type):
+    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, ramses_id, config, coordinator, device_type):
         super().__init__(coordinator)
         self.coordinator = coordinator
         self.device_type = device_type
         self._attr_name = f"Orcon MVS-15 {device_type} RSSI"
-        self._attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
-        self._attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
-        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_unique_id = f"orcon_mvs15_rssi_{ramses_id}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, ramses_id)})
 
