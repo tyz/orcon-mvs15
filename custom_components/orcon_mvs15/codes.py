@@ -31,8 +31,8 @@ class Code:
         self.packet = kwargs.get("packet")
         self.values = {}
         if self.packet:
-            self._validate_payload()
-            self._parse_payload()
+            self._validate_packet()
+            self._parse_packet()
 
     def _expected_length(self, length):
         return True
@@ -52,13 +52,13 @@ class Code:
         dev_type = (_tmp & 0xFC0000) >> 18
         return f"{dev_type:02d}:{_tmp & 0x03FFFF:06d}"
 
-    def _validate_payload(self):
-        """Validate the payload, raise CodeException if it fails"""
+    def _validate_packet(self):
+        """Validate the RamsesPacket, raise CodeException if it fails"""
         if not self._expected_length(self.packet.length):
             raise CodeException(f"Unexpected length: {self.packet}")
 
-    def _parse_payload(self):
-        """Parse the payload, put result in self.values"""
+    def _parse_packet(self):
+        """Parse the RamsesPacket, put result in self.values"""
         self.values = {"_label": "Unsupported code", "packet": str(self.packet)}
 
     def __repr__(self):
@@ -107,10 +107,10 @@ class Code1298(Code):
     def _expected_length(self, length):
         return length in [1, 3]
 
-    def _parse_payload(self):
+    def _parse_packet(self):
         self.values = {
             "_label": "CO2 level",
-            "rssi": self.packet.signal_strength,
+            "signal_strength": -self.packet.signal_strength,
             "level": None,
         }
         if self.packet.length == 3:
@@ -136,10 +136,10 @@ class Code22f1(Code):
     def _expected_length(self, length):
         return length in [1, 3]
 
-    def _parse_payload(self):
+    def _parse_packet(self):
         self.values = {
             "_label": "Fan mode",
-            "rssi": self.packet.signal_strength,
+            "signal_strength": -self.packet.signal_strength,
             "fan_mode": None,
         }
         if self.packet.length != 1:
@@ -204,10 +204,10 @@ class Code31d9(Code):
     def _expected_length(self, length):
         return length in [1, 3]
 
-    def _parse_payload(self):
+    def _parse_packet(self):
         self.values = {
             "_label": "Fan state",
-            "rssi": self.packet.signal_strength,
+            "signal_strength": -self.packet.signal_strength,
             "fan_mode": None,
             "has_fault": None,
         }
@@ -234,10 +234,10 @@ class Code31e0(Code):
     def _expected_length(self, length):
         return length in [1, 8]
 
-    def _parse_payload(self):
+    def _parse_packet(self):
         self.values = {
             "_label": "Vent demand",
-            "rssi": self.packet.signal_strength,
+            "signal_strength": -self.packet.signal_strength,
             "percentage": None,
             "unknown": None,
         }
@@ -258,8 +258,11 @@ class Code10e0(Code):
     def _expected_length(self, length):
         return length == 1 or length >= 29
 
-    def _parse_payload(self):
-        self.values = {"_label": "Device info", "rssi": self.packet.signal_strength}
+    def _parse_packet(self):
+        self.values = {
+            "_label": "Device info",
+            "signal_strength": -self.packet.signal_strength,
+        }
         if self.packet.length == 1:
             return
         description, _, _ = self.packet.data[36:].partition("00")
@@ -295,10 +298,10 @@ class Code10e1(Code):
     def _expected_length(self, length):
         return length in [1, 4]
 
-    def _parse_payload(self):
+    def _parse_packet(self):
         self.values = {
             "_label": "Device ID",
-            "rssi": self.packet.signal_strength,
+            "signal_strength": -self.packet.signal_strength,
             "device_id": None,
         }
         if self.packet.length == 4:
@@ -313,10 +316,10 @@ class Code12a0(Code):
     def _expected_length(self, length):
         return length in [1, 2]
 
-    def _parse_payload(self):
+    def _parse_packet(self):
         self.values = {
             "_label": "Indoor humidity",
-            "rssi": self.packet.signal_strength,
+            "signal_strength": -self.packet.signal_strength,
             "level": None,
         }
         if self.packet.length == 2:
@@ -333,10 +336,10 @@ class Code1060(Code):
     def _expected_length(self, length):
         return length in [1, 6]
 
-    def _parse_payload(self):
+    def _parse_packet(self):
         self.values = {
             "_label": "Battery status",
-            "rssi": self.packet.signal_strength,
+            "signal_strength": -self.packet.signal_strength,
             "level": self._percent(self.packet.data[2:4]),
             "low": self.packet.data[4:6] == "00",
         }
@@ -358,10 +361,10 @@ class Code1fc9(Code):
     def _expected_length(self, length):
         return length % 6 == 0
 
-    def _parse_payload(self):
+    def _parse_packet(self):
         self.values = {
             "_label": "RF Bind",
-            "rssi": self.packet.signal_strength,
+            "signal_strength": -self.packet.signal_strength,
             "zone_idx": int(self.packet.data[:2], 16),
             "command": self.packet.data[2:6],
             "device_id": self._dev_hex_to_id(self.packet.data[6:]),
@@ -381,10 +384,10 @@ class Code042f(Code):
     def _expected_length(self, length):
         return length == 6
 
-    def _parse_payload(self):
+    def _parse_packet(self):
         self.values = {
             "_label": "Unknown (042F)",
-            "rssi": self.packet.signal_strength,
+            "signal_strength": -self.packet.signal_strength,
             "counter_1": f"0x{self.packer.data[2:6]}",
             "counter_3": f"0x{self.packer.data[6:10]}",
             "counter_5": f"0x{self.packer.data[10:14]}",

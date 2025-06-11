@@ -104,7 +104,7 @@ class RamsesPacket:
             self._data = None
             self.length = 0
 
-    def payload(self):
+    def ramses_esp_envelope(self):
         return {
             "msg": f" {self.type} --- {self.src_id} {self.dst_id} {self.ann_id} {self.code} {self.length:03d} {self.data}"
         }

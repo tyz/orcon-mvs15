@@ -10,4 +10,5 @@ from .ramses_esp import RamsesESP
 class OrconMVS15RuntimeData:
     fan_coordinator: DataUpdateCoordinator[Any] = None
     co2_coordinator: DataUpdateCoordinator[Any] = None
+    rem_coordinator: DataUpdateCoordinator[Any] = None
     ramses_esp: RamsesESP = None

@@ -14,7 +14,11 @@ class OrconSensor:
         self.label = label
         self.entities = entities
         self.coordinator = coordinator
+        self.discovery_key = f"discovered_{label.lower()}_id"
         if ramses_id is None:
+            _LOGGER.debug(
+                f"Setting up discovery for {label} sensors on '{self.discovery_key}'"
+            )
             self.unsub_listener[label] = self.coordinator.async_add_listener(
                 self._add_discovered_sensors
             )
@@ -33,10 +37,9 @@ class OrconSensor:
         self.async_add_entities(new_entities, True)
 
     def _add_discovered_sensors(self):
-        self.ramses_id = self.coordinator.data.get(
-            f"discovered_{self.label.lower()}_id"
-        )
+        self.ramses_id = self.coordinator.data.get(self.discovery_key)
         if not self.ramses_id:
             return
+        _LOGGER.debug(f"Creating discovered {self.label} sensors")
         self._add_sensors()
         self.unsub_listener[self.label]()  # done, unsubscribe from DataCoordinator

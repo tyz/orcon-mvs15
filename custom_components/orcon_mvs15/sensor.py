@@ -90,12 +90,12 @@ class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.coordinator = coordinator
         self.device_type = device_type
-        self._attr_name = f"Orcon MVS-15 {device_type} RSSI"
-        self._attr_unique_id = f"orcon_mvs15_rssi_{ramses_id}"
+        self._attr_name = f"Orcon MVS-15 {device_type} signal strength"
+        self._attr_unique_id = f"orcon_mvs15_dbm_{ramses_id}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, ramses_id)})
 
     @property
     def native_value(self):
         if not self.coordinator.data:
             return None
-        return self.coordinator.data.get(f"{self.device_type.lower()}_rssi")
+        return self.coordinator.data.get(f"{self.device_type.lower()}_signal_strength")

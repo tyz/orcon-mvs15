@@ -24,9 +24,54 @@ PLATFORMS = [Platform.FAN, Platform.SENSOR, Platform.BINARY_SENSOR]
 _LOGGER = logging.getLogger(__name__)
 
 
+async def _setup_coordinator(hass, entry, discover_key, config_key):
+    coordinator = OrconMVS15DataUpdateCoordinator(hass, entry)
+    await coordinator.async_config_entry_first_refresh()
+    unsub = None
+
+    def _device_discovered():
+        if entry.data.get(config_key):
+            _LOGGER.debug(f"Discovered {config_key} already in config")
+            unsub()
+            return
+        if (ramses_id := coordinator.data.get(discover_key)) is None:
+            _LOGGER.debug(
+                f"_device_discovered: Got {coordinator.data} without {discover_key}"
+            )
+            return
+        _LOGGER.debug(f"Storing discovered {config_key} ({ramses_id}) in config")
+        new_data = {**entry.data, config_key: ramses_id}
+        hass.config_entries.async_update_entry(entry, data=new_data)
+        # TODO?
+        # dev_reg = get_dev_reg(hass)
+        # dev_reg.async_get_or_create(
+        #    config_entry_id=entry.entry_id,
+        #    identifiers={(DOMAIN, ramses_id)},
+        #    manufacturer="TODO",
+        #    model="TODO",
+        #    name=f"TODO ({ramses_id})",
+        # )
+        unsub()
+
+    unsub = coordinator.async_add_listener(_device_discovered)
+    return coordinator
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = entry.data
+
+    entry.runtime_data = OrconMVS15RuntimeData()
+
+    entry.runtime_data.fan_coordinator = await _setup_coordinator(
+        hass, entry, "discovered_fan_id", CONF_FAN_ID
+    )
+    entry.runtime_data.co2_coordinator = await _setup_coordinator(
+        hass, entry, "discovered_co2_id", CONF_CO2_ID
+    )
+    entry.runtime_data.rem_coordinator = await _setup_coordinator(
+        hass, entry, "discovered_rem_id", CONF_REMOTE_ID
+    )
 
     try:
         mqtt = MQTT(
@@ -66,16 +111,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as e:
         raise PlatformNotReady(f"RamsesESP: {e}")
 
-    fan_coordinator = OrconMVS15DataUpdateCoordinator(hass, entry)
-    await fan_coordinator.async_config_entry_first_refresh()
-    co2_coordinator = OrconMVS15DataUpdateCoordinator(hass, entry)
-    await co2_coordinator.async_config_entry_first_refresh()
-
-    entry.runtime_data = OrconMVS15RuntimeData(
-        fan_coordinator=fan_coordinator,
-        co2_coordinator=co2_coordinator,
-        ramses_esp=ramses_esp,
-    )
+    entry.runtime_data.ramses_esp = ramses_esp
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

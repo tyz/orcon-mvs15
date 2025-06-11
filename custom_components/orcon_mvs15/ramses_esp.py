@@ -43,7 +43,7 @@ class RamsesESP:
         if not await mqtt_client.async_wait_for_mqtt_client(self.hass):
             raise ConfigEntryNotReady("MQTT integration is not available")
         await self.mqtt.setup(
-            self.handle_ramses_message, self.handle_ramses_version_message
+            self.handle_ramses_mqtt_message, self.handle_ramses_mqtt_version_message
         )
         if event:  # only on Home-Assistant restart
             """sleep for a bit, mqtt (or the stick) is not ready yet for some reason"""
@@ -85,16 +85,19 @@ class RamsesESP:
         )
         self._send_queue.add(packet)
 
-    async def handle_ramses_message(self, msg):
+    async def handle_ramses_mqtt_message(self, msg):
         """Decode JSON, parse the payload and log it to file"""
         try:
-            payload = json.loads(msg.payload)
-            await self._handle_ramses_packet(payload)
-            await self.packet_log(payload)
+            envelope = json.loads(msg.payload)
+            await self._handle_ramses_packet(envelope)
+            await self.packet_log(envelope)
         except Exception:
-            _LOGGER.error(f"Failed to process Ramses payload {msg}", exc_info=True)
+            _LOGGER.error(
+                f"Failed to process Ramses-ESP MQTT message {msg.payload}",
+                exc_info=True,
+            )
 
-    async def handle_ramses_version_message(self, msg):
+    async def handle_ramses_mqtt_version_message(self, msg):
         """Update Ramses-ESP device"""
         dev_reg = get_dev_reg(self.hass)
         entry = dev_reg.async_get_device({(DOMAIN, self.gateway_id)})
@@ -177,7 +180,9 @@ class RamsesESP:
         if packet.code in self._handlers:
             self._handlers[packet.code](payload)
 
-    async def packet_log(self, payload, path="/config/packet.log", max_size=10_000_000):
+    async def packet_log(
+        self, envelope, path="/config/packet.log", max_size=10_000_000
+    ):
         """Log raw packets to disk, rolling over at 10 MB, offloaded to executor."""
 
         def _sync_log():
@@ -188,7 +193,7 @@ class RamsesESP:
                     _LOGGER.error("Error opening %s: %s", path, e)
                     return
 
-            print(f"{payload['ts']} {payload['msg']}", file=self._log_f)
+            print(f"{envelope['ts']} {envelope['msg']}", file=self._log_f)
             self._log_f.flush()
 
             if os.path.getsize(path) > max_size:

@@ -1,5 +1,4 @@
 import logging
-import asyncio
 
 from datetime import timedelta
 
@@ -26,10 +25,11 @@ from .const import (
 # * Add USB support for Ramses ESP (https://developers.home-assistant.io/docs/creating_integration_manifest?_highlight=mqtt#usb)
 # * Start home-assistant timer on timed fan modes (22F3)
 # * MQTT via_device for RAMSES_ESP
+# * Create devices in __init__._setup_coordinator, sensors and such only set identifiers
 # * Auto discovery
-#   - Discover fan_id: turn off/on the fan unit, fan_id == src_id of 1st 042F message
+#   - Discover fan_id: turn off/on the fan unit, fan_id == src_id of 1st 042F packet
 #   - Bind as remote with random remote_id (1FC9)
-#   - or: Discover existing remote by 22F1/22F3 messages to use that remote_id
+#   - or: Discover existing remote by 22F1/22F3 packets to use that remote_id
 #   - [DONE] Discover CO2: remote_id is a type I, code 31E0 to fan_id
 #   - Discover humidity: create sensor only after first successful pull
 # * Add logo to https://brands.home-assistant.io/
@@ -111,26 +111,19 @@ class OrconFan(FanEntity):
         self._ramses_esp.add_handler("31E0", self._vent_demand_handler)
         await self._ramses_esp.setup(event)
 
-    async def _add_co2_sensor(self, payload):
-        """Add the CO2 sensor to the config, create the sensors and device, and update the sensors with the current state"""
-        new_data = {**self._co2_coordinator.data, "discovered_co2_id": self._co2_id}
-        self._co2_coordinator.async_set_updated_data(new_data)
-        await asyncio.sleep(1)  # wait for sensors to get created
-        await self._ramses_esp.init_co2()
-
     def _fan_state_handler(self, payload):
         """Update fan mode and fault state"""
         new_data = {
             **self._fan_coordinator.data,
             "fan_mode": payload.values["fan_mode"],
             "fan_fault": payload.values["has_fault"],
-            "fan_rssi": payload.values["rssi"],
+            "fan_signal_strength": payload.values["signal_strength"],
         }
         self._fan_coordinator.async_set_updated_data(new_data)
         _LOGGER.info(
             f"Current fan mode: {payload.values['fan_mode']}, "
             f"has_fault: {payload.values['has_fault']}, "
-            f"RSSI: {payload.values['rssi']} dBm"
+            f"Signal strength: {payload.values['signal_strength']} dBm"
         )
 
     def _co2_handler(self, payload):
@@ -138,34 +131,28 @@ class OrconFan(FanEntity):
         new_data = {
             **self._co2_coordinator.data,
             "co2": payload.values["level"],
-            "co2_rssi": payload.values["rssi"],
+            "co2_signal_strength": payload.values["signal_strength"],
         }
         self._co2_coordinator.async_set_updated_data(new_data)
         _LOGGER.info(
-            f"Current CO2 level: {payload.values['level']} ppm, RSSI: {payload.values['rssi']} dBm"
+            f"Current CO2 level: {payload.values['level']} ppm, Signal strength: {payload.values['signal_strength']} dBm"
         )
 
     def _vent_demand_handler(self, payload):
         """Update Vent demand attribute"""
-        if not self._co2_id:
-            """Discovered CO2 sensor, setup sensors + device"""
-            _LOGGER.debug(
-                f"Adding discovered CO2 sensor {payload.packet.src_id} to config"
-            )
+        if not self._co2_id:  # discovered CO2 sensor
             self._co2_id = payload.packet.src_id
-            new_cfg = {**self._entry.data, CONF_CO2_ID: self._co2_id}
-            self.hass.config_entries.async_update_entry(self._entry, data=new_cfg)
         new_data = {
             **self._co2_coordinator.data,
             "vent_demand": payload.values["percentage"],
-            "co2_rssi": payload.values["rssi"],
-            "discovery_co2_id": self._co2_id,
+            "co2_signal_strength": payload.values["signal_strength"],
+            "discovered_co2_id": self._co2_id,
         }
         self._co2_coordinator.async_set_updated_data(new_data)
         _LOGGER.info(
             f"Vent demand: {payload.values['percentage']}%, "
             f"unknown: {payload.values['unknown']}, "
-            f"RSSI: {payload.values['rssi']} dBm"
+            f"Signal strength: {payload.values['signal_strength']} dBm"
         )
 
     def _relative_humidity_handler(self, payload):
@@ -173,11 +160,11 @@ class OrconFan(FanEntity):
         new_data = {
             **self._fan_coordinator.data,
             "relative_humidity": payload.values["level"],
-            "fan_rssi": payload.values["rssi"],
+            "fan_signal_strength": payload.values["signal_strength"],
         }
         self._fan_coordinator.async_set_updated_data(new_data)
         _LOGGER.info(
-            f"Current humidity level: {payload.values['level']}%, RSSI: {payload.values['rssi']} dBm"
+            f"Current humidity level: {payload.values['level']}%, Signal strength: {payload.values['signal_strength']} dBm"
         )
         if not self._req_humidity_unsub:
             poll_interval = 5
@@ -207,5 +194,5 @@ class OrconFan(FanEntity):
         }
         dev_reg.async_update_device(**dev_info)
         _LOGGER.info(
-            f"Updated device info: {dev_info}, RSSI: {payload.values['rssi']} dBm"
+            f"Updated device info: {dev_info}, Signal strength: {payload.values['signal_strength']} dBm"
         )

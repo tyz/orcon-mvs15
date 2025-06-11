@@ -43,9 +43,9 @@ class MQTT:
     @callback
     async def _handle_online_message(self, msg):
         """Message handler for online_topic"""
-        _LOGGER.debug(f"Received message in {self.online_topic}: {msg}")
+        _LOGGER.debug(f"Received MQTT message in {self.online_topic}: {msg}")
         if self.gateway_id:
-            _LOGGER.debug(f"Ignoring new message in {self.online_topic}")
+            _LOGGER.debug(f"Ignoring new MQTT message in {self.online_topic}")
             return
         self.gateway_id = msg.topic.split("/")[-1]
         self._online_event.set()
@@ -56,14 +56,14 @@ class MQTT:
             self._mqtt_unsubs.pop()()
 
     async def publish(self, ramses_packet):
-        """Transmit a Ramses packet"""
-        payload = ramses_packet.payload()
+        """Transmit a Ramses_ESP envelope"""
+        envelope = ramses_packet.ramses_esp_envelope()
         try:
             _LOGGER.debug(
-                f"Send payload to {self.pub_topic} [{ramses_packet.packet_id}]: {payload}"
+                f"Send envelope to {self.pub_topic} [{ramses_packet.packet_id}]: {envelope}"
             )
-            await mqtt.async_publish(self.hass, self.pub_topic, json.dumps(payload))
+            await mqtt.async_publish(self.hass, self.pub_topic, json.dumps(envelope))
         except Exception as e:
             raise MQTTException(
-                f"Failed to publish payload {payload} to {self.pub_topic}: {e}"
+                f"Failed to publish payload {envelope} to {self.pub_topic}: {e}"
             )
