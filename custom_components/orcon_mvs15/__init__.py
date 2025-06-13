@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -24,12 +26,14 @@ PLATFORMS = [Platform.FAN, Platform.SENSOR, Platform.BINARY_SENSOR]
 _LOGGER = logging.getLogger(__name__)
 
 
-async def _setup_coordinator(hass, entry, discover_key, config_key):
+async def _setup_coordinator(
+    hass: HomeAssistant, entry: str, discover_key: str, config_key: str
+) -> None:
     coordinator = OrconMVS15DataUpdateCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     unsub = None
 
-    def _device_discovered():
+    def _device_discovered() -> None:
         if entry.data.get(config_key):
             _LOGGER.debug(f"Discovered {config_key} already in config")
             unsub()
@@ -83,6 +87,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as e:
         raise PlatformNotReady(f"MQTT: {e}")
 
+    entry.runtime_data.cleanup.append(mqtt.cleanup)
+
     if not entry.data.get(CONF_GATEWAY_ID):
         _LOGGER.debug(f"Storing discovered gateway ({mqtt.gateway_id}) in config")
         new_data = {**entry.data, CONF_GATEWAY_ID: mqtt.gateway_id}
@@ -118,4 +124,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    _LOGGER.debug("Unloading")
+    while entry.runtime_data.cleanup:
+        entry.runtime_data.cleanup.pop()()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

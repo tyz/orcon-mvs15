@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 try:
     from .ramses_packet import RamsesPacket, RamsesPacketResponse, RamsesPacketDatetime
 except ImportError:
@@ -27,17 +30,17 @@ class CodeException(Exception):
 class Code:
     _code = "FFFF"
 
-    def __init__(self, **kwargs):
-        self.packet = kwargs.get("packet")
+    def __init__(self, packet: RamsesPacket) -> None:
+        self.packet = packet
         self.values = {}
         if self.packet:
             self._validate_packet()
             self._parse_packet()
 
-    def _expected_length(self, length):
+    def _expected_length(self, length: int) -> bool:
         return True
 
-    def _percent(self, value):
+    def _percent(self, value: str | int) -> int:
         if int(value, 16) > 200:  # FE or FF
             return None
         return int(value, 16) // 2
@@ -52,16 +55,16 @@ class Code:
         dev_type = (_tmp & 0xFC0000) >> 18
         return f"{dev_type:02d}:{_tmp & 0x03FFFF:06d}"
 
-    def _validate_packet(self):
+    def _validate_packet(self) -> bool:
         """Validate the RamsesPacket, raise CodeException if it fails"""
         if not self._expected_length(self.packet.length):
             raise CodeException(f"Unexpected length: {self.packet}")
 
-    def _parse_packet(self):
+    def _parse_packet(self) -> None:
         """Parse the RamsesPacket, put result in self.values"""
         self.values = {"_label": "Unsupported code", "packet": str(self.packet)}
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a human readable string of self.values"""
         if self.packet.length == 1:
             return f"{self.values['_label']} state request"
@@ -71,7 +74,7 @@ class Code:
         return f"{self.values['_label']}: {keyval}"
 
     @classmethod
-    def get(cls, src_id, dst_id):
+    def get(cls, src_id: str, dst_id: str) -> RamsesPacket:
         """Build a RamsesPacket object that requests the current status"""
         p = RamsesPacket(
             src_id=src_id,
@@ -79,22 +82,22 @@ class Code:
             type="RQ",
             code=cls._code,
             data="00",
-            expected_response=RamsesPacketResponse(
-                src_id=dst_id,
-                dst_id=src_id,
-                type="RP",
-                code=cls._code,
-            ),
+        )
+        p.expected_response = RamsesPacketResponse(
+            src_id=dst_id,
+            dst_id=src_id,
+            type="RP",
+            code=cls._code,
         )
         return p
 
     @classmethod
-    def set(cls, src_id, dst_id, value):
+    def set(cls, src_id: str, dst_id: str, value: str) -> None:
         """Build a RamsesPacket object that sets a value"""
         raise NotImplementedError
 
     @classmethod
-    def presets(cls):
+    def presets(cls) -> list:
         """Return a list of optional values for self.set"""
         raise NotImplementedError
 
@@ -104,10 +107,10 @@ class Code1298(Code):
 
     _code = "1298"
 
-    def _expected_length(self, length):
+    def _expected_length(self, length: int) -> bool:
         return length in [1, 3]
 
-    def _parse_packet(self):
+    def _parse_packet(self) -> None:
         self.values = {
             "_label": "CO2 level",
             "signal_strength": -self.packet.signal_strength,
@@ -133,10 +136,10 @@ class Code22f1(Code):
         "Away": "000004",
     }
 
-    def _expected_length(self, length):
+    def _expected_length(self, length: int) -> bool:
         return length in [1, 3]
 
-    def _parse_packet(self):
+    def _parse_packet(self) -> None:
         self.values = {
             "_label": "Fan mode",
             "signal_strength": -self.packet.signal_strength,
@@ -152,26 +155,26 @@ class Code22f1(Code):
             self.values.update({"fan_mode": preset})
 
     @classmethod
-    def set(cls, src_id, dst_id, preset):
-        if preset not in cls._fan_modes:
-            raise CodeException(f"Invalid preset '{preset}'")
+    def set(cls, src_id: str, dst_id: str, value: str) -> None:
+        if value not in cls._fan_modes:
+            raise CodeException(f"Invalid preset '{value}'")
         p = RamsesPacket(
             src_id=src_id,
             dst_id=dst_id,
             type="I",
-            data=cls._fan_modes[preset],
-            expected_response=RamsesPacketResponse(
-                src_id=dst_id,
-                dst_id="--:------",
-                type="I",
-                code="31D9",
-            ),
+            data=cls._fan_modes[value],
+        )
+        p.expected_respons = RamsesPacketResponse(
+            src_id=dst_id,
+            dst_id="--:------",
+            type="I",
+            code="31D9",
         )
         p.code = "22F1" if p.length == 3 else "22F3"
         return p
 
     @classmethod
-    def presets(cls):
+    def presets(cls) -> list:
         return list(cls._fan_modes.keys())
 
 
@@ -180,11 +183,11 @@ class Code22f3(Code22f1):
 
     _code = "22F3"
 
-    def _expected_length(self, length):
+    def _expected_length(self, length: int) -> bool:
         return length == 7
 
     @classmethod
-    def get(cls):
+    def get(cls, src_id: str, dst_id: str) -> RamsesPacket:
         raise NotImplementedError
 
 
@@ -201,10 +204,10 @@ class Code31d9(Code):
         "04": "Auto",
     }
 
-    def _expected_length(self, length):
+    def _expected_length(self, length: int) -> bool:
         return length in [1, 3]
 
-    def _parse_packet(self):
+    def _parse_packet(self) -> None:
         self.values = {
             "_label": "Fan state",
             "signal_strength": -self.packet.signal_strength,
@@ -222,7 +225,7 @@ class Code31d9(Code):
             )
 
     @classmethod
-    def presets(cls):
+    def presets(cls) -> list:
         return list(cls._presets.values())
 
 
@@ -231,10 +234,10 @@ class Code31e0(Code):
 
     _code = "31E0"
 
-    def _expected_length(self, length):
+    def _expected_length(self, length: int) -> bool:
         return length in [1, 8]
 
-    def _parse_packet(self):
+    def _parse_packet(self) -> None:
         self.values = {
             "_label": "Vent demand",
             "signal_strength": -self.packet.signal_strength,
@@ -255,10 +258,10 @@ class Code10e0(Code):
 
     _code = "10E0"
 
-    def _expected_length(self, length):
+    def _expected_length(self, length: int) -> bool:
         return length == 1 or length >= 29
 
-    def _parse_packet(self):
+    def _parse_packet(self) -> None:
         self.values = {
             "_label": "Device info",
             "signal_strength": -self.packet.signal_strength,
@@ -295,10 +298,10 @@ class Code10e1(Code):
 
     _code = "10E1"
 
-    def _expected_length(self, length):
+    def _expected_length(self, length: int) -> bool:
         return length in [1, 4]
 
-    def _parse_packet(self):
+    def _parse_packet(self) -> None:
         self.values = {
             "_label": "Device ID",
             "signal_strength": -self.packet.signal_strength,
@@ -313,10 +316,10 @@ class Code12a0(Code):
 
     _code = "12A0"
 
-    def _expected_length(self, length):
+    def _expected_length(self, length: int) -> bool:
         return length in [1, 2]
 
-    def _parse_packet(self):
+    def _parse_packet(self) -> None:
         self.values = {
             "_label": "Indoor humidity",
             "signal_strength": -self.packet.signal_strength,
@@ -333,10 +336,10 @@ class Code1060(Code):
 
     _code = "1060"
 
-    def _expected_length(self, length):
+    def _expected_length(self, length: int) -> bool:
         return length in [1, 6]
 
-    def _parse_packet(self):
+    def _parse_packet(self) -> None:
         self.values = {
             "_label": "Battery status",
             "signal_strength": -self.packet.signal_strength,
@@ -345,7 +348,7 @@ class Code1060(Code):
         }
 
     @classmethod
-    def get(cls):
+    def get(cls, src_id: str, dst_id: str) -> RamsesPacket:
         raise NotImplementedError
 
 
@@ -358,10 +361,10 @@ class Code1fc9(Code):
     """
     _code = "1FC9"
 
-    def _expected_length(self, length):
+    def _expected_length(self, length: int) -> bool:
         return length % 6 == 0
 
-    def _parse_packet(self):
+    def _parse_packet(self) -> None:
         self.values = {
             "_label": "RF Bind",
             "signal_strength": -self.packet.signal_strength,
@@ -371,7 +374,7 @@ class Code1fc9(Code):
         }
 
     @classmethod
-    def get(cls):
+    def get(cls, src_id: str, dst_id: str) -> RamsesPacket:
         raise NotImplementedError
 
 
@@ -381,10 +384,10 @@ class Code042f(Code):
 
     _code = "042F"
 
-    def _expected_length(self, length):
+    def _expected_length(self, length: int) -> bool:
         return length == 6
 
-    def _parse_packet(self):
+    def _parse_packet(self) -> None:
         self.values = {
             "_label": "Unknown (042F)",
             "signal_strength": -self.packet.signal_strength,
@@ -395,7 +398,7 @@ class Code042f(Code):
         }
 
     @classmethod
-    def get(cls):
+    def get(cls, src_id: str, dst_id: str) -> RamsesPacket:
         raise NotImplementedError
 
 

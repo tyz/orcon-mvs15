@@ -1,15 +1,19 @@
+from __future__ import annotations
+
 import logging
 
 from datetime import timedelta
 
 from homeassistant.components.fan import FanEntity, FanEntityFeature
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import CoreState, Event, HomeAssistant
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import CoreState
 
-from .codes import Code22f1
+from .codes import Code, Code22f1
 from .const import (
     DOMAIN,
     CONF_GATEWAY_ID,
@@ -38,7 +42,11 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> bool:
     async_add_entities([OrconFan(hass, entry)])
     return True
 
@@ -50,7 +58,7 @@ class OrconFan(FanEntity):
     _attr_name = "Orcon MVS-15 fan"
     _attr_preset_mode = "Auto"
 
-    def __init__(self, hass, entry):
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
         self._entry = entry
         self._fan_coordinator = entry.runtime_data.fan_coordinator
@@ -63,6 +71,7 @@ class OrconFan(FanEntity):
         self._co2 = None
         self._ramses_esp = entry.runtime_data.ramses_esp
         self._req_humidity_unsub = None
+        entry.runtime_data.cleanup.append(self.cleanup)
         self._attr_unique_id = f"orcon_mvs15_{self._fan_id}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._fan_id)},
@@ -73,7 +82,7 @@ class OrconFan(FanEntity):
         )
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> dict:
         fan_data = self._fan_coordinator.data
         co2_data = self._co2_coordinator.data
         return {
@@ -84,10 +93,10 @@ class OrconFan(FanEntity):
         }
 
     @property
-    def preset_mode(self):
+    def preset_mode(self) -> str | None:
         return self._fan_coordinator.data.get("fan_mode")
 
-    async def async_added_to_hass(self):
+    async def async_added_to_hass(self) -> None:
         if self.hass.state == CoreState.running:
             _LOGGER.info("Orcon MVS-15 integration has been setup")
             self.hass.async_create_task(self.setup())
@@ -95,15 +104,16 @@ class OrconFan(FanEntity):
             _LOGGER.info("Orcon MVS-15 integration has been loaded after restart")
             self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self.setup)
 
-    async def async_set_preset_mode(self, preset_mode: str):
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
         await self._ramses_esp.set_preset_mode(preset_mode)
 
-    async def async_will_remove_from_hass(self):
-        if self._req_humidity_unsub:
+    def cleanup(self) -> None:
+        if hasattr(self, "_req_humidity_unsub") and self._req_humidity_unsub:
             self._req_humidity_unsub()
-        await self._ramses_esp.remove()
+            self._req_humidity_unsub = None
+            _LOGGER.debug("Removing the interval call for the humidity sensor")
 
-    async def setup(self, event=None):
+    async def setup(self, event: Event | None = None) -> None:
         self._ramses_esp.add_handler("10E0", self._device_info_handler)
         self._ramses_esp.add_handler("1298", self._co2_handler)
         self._ramses_esp.add_handler("12A0", self._relative_humidity_handler)
@@ -111,7 +121,7 @@ class OrconFan(FanEntity):
         self._ramses_esp.add_handler("31E0", self._vent_demand_handler)
         await self._ramses_esp.setup(event)
 
-    def _fan_state_handler(self, payload):
+    def _fan_state_handler(self, payload: Code) -> None:
         """Update fan mode and fault state"""
         new_data = {
             **self._fan_coordinator.data,
@@ -126,7 +136,7 @@ class OrconFan(FanEntity):
             f"Signal strength: {payload.values['signal_strength']} dBm"
         )
 
-    def _co2_handler(self, payload):
+    def _co2_handler(self, payload: Code) -> None:
         """Update CO2 sensor + attribute"""
         new_data = {
             **self._co2_coordinator.data,
@@ -138,7 +148,7 @@ class OrconFan(FanEntity):
             f"Current CO2 level: {payload.values['level']} ppm, Signal strength: {payload.values['signal_strength']} dBm"
         )
 
-    def _vent_demand_handler(self, payload):
+    def _vent_demand_handler(self, payload: Code) -> None:
         """Update Vent demand attribute"""
         if not self._co2_id:  # discovered CO2 sensor
             self._co2_id = payload.packet.src_id
@@ -155,7 +165,7 @@ class OrconFan(FanEntity):
             f"Signal strength: {payload.values['signal_strength']} dBm"
         )
 
-    def _relative_humidity_handler(self, payload):
+    def _relative_humidity_handler(self, payload: Code) -> None:
         """Update relative humidity attribute"""
         new_data = {
             **self._fan_coordinator.data,
@@ -177,7 +187,7 @@ class OrconFan(FanEntity):
                 f"Humidity sensor detected, fetching value every {poll_interval} minutes"
             )
 
-    def _device_info_handler(self, payload):
+    def _device_info_handler(self, payload: Code) -> None:
         """Update device info"""
         if payload.values["manufacturer_sub_id"] != "C8":
             _LOGGER.warning("This doesn't look like an Orcon device: {payload.values}")

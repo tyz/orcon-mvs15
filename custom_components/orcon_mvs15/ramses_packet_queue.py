@@ -1,35 +1,41 @@
+from __future__ import annotations
+
 import logging
+
+from typing import Iterable
+
+from .ramses_packet import RamsesPacket
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class RamsesPacketQueue:
-    def __init__(self):
+    def __init__(self) -> None:
         self._queue = {}
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self._queue})"
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._queue)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterable:
         return iter(self._queue.values())
 
-    def __contains__(self, packet):
+    def __contains__(self, packet: RamsesPacket) -> bool:
         return packet.packet_id in self._queue
 
-    def __setitem__(self, packet_id, packet):
+    def __setitem__(self, packet_id: str, packet: RamsesPacket) -> None:
         self._queue[packet_id] = packet
 
-    def __delitem__(self, packet):
+    def __delitem__(self, packet: RamsesPacket) -> None:
         if packet.packet_id in self._queue:
             self._call_cancel_retry_handler(self._queue[packet.packet_id])
             del self._queue[packet.packet_id]
         else:
             raise KeyError(f"__delitem__: Packet ID {packet.packet_id} not found")
 
-    def _call_cancel_retry_handler(self, packet):
+    def _call_cancel_retry_handler(self, packet: RamsesPacket) -> None:
         if packet.expected_response is not None and callable(
             packet.expected_response.cancel_retry_handler
         ):
@@ -39,13 +45,13 @@ class RamsesPacketQueue:
                 f"_call_cancel_retry_handler: {packet.packet_id} has no cancel_retry_handler"
             )
 
-    def add(self, packet):
+    def add(self, packet: RamsesPacket) -> None:
         if packet not in self:
             self[packet.packet_id] = packet
         else:
             _LOGGER.debug(f"add: Already in queue: {packet.packet_id}")
 
-    def get(self, packet):
+    def get(self, packet: RamsesPacket) -> None:
         if not self:
             _LOGGER.debug("match: Queue is empty")
             return None
@@ -54,10 +60,10 @@ class RamsesPacketQueue:
             _LOGGER.debug(f"match: Not found in queue: {packet}")
         return match
 
-    def remove(self, packet):
+    def remove(self, packet: RamsesPacket) -> None:
         del self[packet]
 
-    def clear(self):
+    def clear(self) -> None:
         for packet_id in list(self._queue):
             del self._queue[packet_id]
 

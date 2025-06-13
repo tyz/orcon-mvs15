@@ -14,7 +14,9 @@ repos:
     rev: v0.11.12
     hooks:
       - id: ruff-check
-        args: [--fix, --select, ANN]
+        args:
+          - --fix
+          - --extend-select=ANN
       - id: ruff-format
         files: ".py$"
   - repo: https://github.com/codespell-project/codespell

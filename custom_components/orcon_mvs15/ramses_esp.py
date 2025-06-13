@@ -1,19 +1,33 @@
+from __future__ import annotations
+
 import os
 import logging
 import asyncio
 import json
 
+from collections.abc import Callable
+from datetime import datetime
+
 from homeassistant.components import mqtt as mqtt_client
+from homeassistant.components.mqtt import ReceiveMessage
+from homeassistant.core import HomeAssistant, Event
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
+from homeassistant.components.mqtt import MQTT
 
 from .ramses_packet import RamsesPacket
 from .ramses_packet_queue import RamsesPacketQueue
 from .const import DOMAIN
-from .codes import *  # noqa: F403
-
-# flake8: noqa: F405
+from .codes import (
+    Code,
+    Code10e0,
+    Code1298,
+    Code12a0,
+    Code22f1,
+    Code31d9,
+    Code31e0,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,7 +37,15 @@ class RamsesESPException(Exception):
 
 
 class RamsesESP:
-    def __init__(self, hass, mqtt, remote_id, fan_id, co2_id, gateway_id):
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        mqtt: MQTT,
+        remote_id: str | None,
+        fan_id: str | None,
+        co2_id: str | None,
+        gateway_id: str | None,
+    ) -> None:
         self.hass = hass
         self.mqtt = mqtt
         self.remote_id = remote_id
@@ -39,7 +61,7 @@ class RamsesESP:
                 "CO2 sensor has not yet been discovered, waiting for vent_demand announcement to the fan"
             )
 
-    async def setup(self, event=None):
+    async def setup(self, event: Event | None = None) -> None:
         if not await mqtt_client.async_wait_for_mqtt_client(self.hass):
             raise ConfigEntryNotReady("MQTT integration is not available")
         await self.mqtt.setup(
@@ -52,28 +74,24 @@ class RamsesESP:
         if self.co2_id:
             await self.init_co2()
 
-    async def remove(self):
-        self._send_queue.clear()
-        await self.mqtt.remove()
-
-    async def init_fan(self):
+    async def init_fan(self) -> None:
         """Fetch current fan state + device info on startup"""
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
 
-    async def init_co2(self):
+    async def init_co2(self) -> None:
         """Fetch current CO2 sensor state + device info on startup or discovery"""
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.publish(Code31e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
 
-    async def req_humidity(self, now=None):
+    async def req_humidity(self, now: datetime | None = None) -> None:
         """12A0 is not announced so we need to fetch it ourselves
         Will be called by async_track_time_interval, if the 12A0 call from self.setup responds"""
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
 
-    async def publish(self, packet):
+    async def publish(self, packet: RamsesPacket) -> None:
         await self.mqtt.publish(packet)
         if not packet.expected_response:
             return
@@ -85,7 +103,7 @@ class RamsesESP:
         )
         self._send_queue.add(packet)
 
-    async def handle_ramses_mqtt_message(self, msg):
+    async def handle_ramses_mqtt_message(self, msg: ReceiveMessage) -> None:
         """Decode JSON, parse the payload and log it to file"""
         try:
             envelope = json.loads(msg.payload)
@@ -97,7 +115,7 @@ class RamsesESP:
                 exc_info=True,
             )
 
-    async def handle_ramses_mqtt_version_message(self, msg):
+    async def handle_ramses_mqtt_version_message(self, msg: ReceiveMessage) -> None:
         """Update Ramses-ESP device"""
         dev_reg = get_dev_reg(self.hass)
         entry = dev_reg.async_get_device({(DOMAIN, self.gateway_id)})
@@ -108,7 +126,7 @@ class RamsesESP:
         dev_reg.async_update_device(**dev_info)
         _LOGGER.info(f"Updated device info: {dev_info}")
 
-    async def set_preset_mode(self, mode):
+    async def set_preset_mode(self, mode: str) -> None:
         try:
             packet = Code22f1.set(
                 preset=mode, src_id=self.remote_id, dst_id=self.fan_id
@@ -119,20 +137,20 @@ class RamsesESP:
         _LOGGER.info(f"Setting fan preset mode to {mode}")
         await self.publish(packet)
 
-    def add_handler(self, code, func):
+    def add_handler(self, code: str, func: Callable) -> None:
         _LOGGER.debug(f"Adding handler for code {code}")
         self._handlers[code] = func
 
-    def remove_handler(self, code):
+    def remove_handler(self, code: str) -> None:
         _LOGGER.debug(f"Remove handler for code {code}")
         del self._handlers[code]
 
-    def _schedule_retry(self, packet):
+    def _schedule_retry(self, packet: RamsesPacket) -> None:
         self.hass.loop.call_soon_threadsafe(
             lambda: self.hass.async_create_task(self._retry_pending_request(packet))
         )
 
-    async def _retry_pending_request(self, packet):
+    async def _retry_pending_request(self, packet: RamsesPacket) -> None:
         """Outgoing request timed out, retry it"""
         packet.expected_response.max_retries -= 1
         if packet.expected_response.max_retries < 0:
@@ -142,7 +160,7 @@ class RamsesESP:
         _LOGGER.debug(f"Retry {packet}")
         await self.publish(packet)
 
-    async def _handle_ramses_packet(self, packet):
+    async def _handle_ramses_packet(self, packet: RamsesPacket) -> None:
         try:
             packet = RamsesPacket(packet)
         except Exception:
@@ -181,11 +199,14 @@ class RamsesESP:
             self._handlers[packet.code](payload)
 
     async def packet_log(
-        self, envelope, path="/config/packet.log", max_size=10_000_000
-    ):
+        self,
+        envelope: dict,
+        path: str = "/config/packet.log",
+        max_size: int = 10_000_000,
+    ) -> None:
         """Log raw packets to disk, rolling over at 10 MB, offloaded to executor."""
 
-        def _sync_log():
+        def _sync_log() -> None:
             if not hasattr(self, "_log_f") or self._log_f is None:
                 try:
                     self._log_f = open(path, "a")
