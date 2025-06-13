@@ -4,6 +4,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class OrconSensor:
+    """Create a (binary) sensor if the Ramses id is known, otherwise create them on device discovery"""
+
     def __init__(
         self, hass, async_add_entities, config, coordinator, ramses_id, label, entities
     ):
@@ -15,16 +17,16 @@ class OrconSensor:
         self.entities = entities
         self.coordinator = coordinator
         self.discovery_key = f"discovered_{label.lower()}_id"
-        if ramses_id is None:
-            _LOGGER.debug(
-                f"Setting up discovery for {label} sensors on '{self.discovery_key}'"
-            )
-            self.unsub_listener[label] = self.coordinator.async_add_listener(
-                self._add_discovered_sensors
-            )
-            hass.async_create_task(self.coordinator.async_refresh())
-        else:
+        if ramses_id:
             self._add_sensors()
+            return
+        _LOGGER.debug(
+            f"Setting up discovery for {label} sensors on '{self.discovery_key}'"
+        )
+        self.unsub_listener[label] = self.coordinator.async_add_listener(
+            self._add_discovered_sensors
+        )
+        hass.async_create_task(self.coordinator.async_refresh())
 
     def _add_sensors(self):
         _LOGGER.debug(

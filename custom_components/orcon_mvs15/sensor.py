@@ -37,15 +37,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class Co2Sensor(CoordinatorEntity, SensorEntity):
+    _attr_name = "Orcon MVS-15 CO2"
+    _attr_native_unit_of_measurement = CONCENTRATION_PARTS_PER_MILLION
+    _attr_device_class = SensorDeviceClass.CO2
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
     def __init__(self, co2_id, config, coordinator, noop):
         super().__init__(coordinator)
         self.coordinator = coordinator
         gateway_id = config.get(CONF_GATEWAY_ID)
         self._state = None
-        self._attr_name = "Orcon MVS-15 CO2"
-        self._attr_native_unit_of_measurement = CONCENTRATION_PARTS_PER_MILLION
-        self._attr_device_class = SensorDeviceClass.CO2
-        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_unique_id = f"orcon_mvs15_co2_{co2_id}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, co2_id)},
@@ -63,6 +64,7 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
 
 
 class HumiditySensor(CoordinatorEntity, SensorEntity):
+    _attr_name = "Orcon MVS-15 Relative Humidity"
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_device_class = SensorDeviceClass.HUMIDITY
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -70,7 +72,6 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
     def __init__(self, fan_id, config, coordinator, noop):
         super().__init__(coordinator)
         self.coordinator = coordinator
-        self._attr_name = "Orcon MVS-15 Relative Humidity"
         self._attr_unique_id = f"orcon_mvs15_humidity_{fan_id}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, fan_id)})
 

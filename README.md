@@ -7,15 +7,15 @@ Home-Assistant integration for the [Orcon MVS-15 fan](https://orcon.nl/mechanisc
 Uses MQTT and a [Ramses ESP stick](https://indalo-tech.onlineweb.shop/product/ramses-esp)
 to communicate with the fan.
 
-Used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://github.com/zxdavb/ramses_protocol/wiki) for some code/inspiration/help.
+I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://github.com/zxdavb/ramses_protocol/wiki) for some code/inspiration/help.
 
 ## Features
 
-- Creates a fan entity with all supported presets (Away, Auto, Low, Medium, High + 15/30/60m timed modes)
-- The fan reported mode is used to update the fan's current preset, so it will notice when the mode was changed by an RF15 remote for example
-- Auto-detects a CO₂ remote and creates a sensor
-- Auto-detects a humidity sensor and creates a sensor
-- Sets an attribute if the fan reports a fault
+- Creates a fan entity with all supported presets (Away, Auto, Low, Medium, High + High 15/30/60m timed modes)
+- Auto-detects a CO₂ remote and creates a HA sensor
+- Auto-detects a humidity sensor and creates a HA sensor
+- Creates a binary sensor that triggers when the fan reports a fault
+- The fan reported mode is used to update the fan's current preset in HA, so it will notice when the mode was changed by an RF15 remote for example
 
 ## TODO
 

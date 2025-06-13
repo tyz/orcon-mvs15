@@ -19,8 +19,8 @@ class OrconConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_REMOTE_ID): str,
-                    vol.Required(CONF_FAN_ID): str,
+                    vol.Required(CONF_REMOTE_ID, default="29:163058"): str,
+                    vol.Required(CONF_FAN_ID, default="29:224547"): str,
                     vol.Required(CONF_MQTT_TOPIC, default="RAMSES/GATEWAY"): str,
                 }
             ),
