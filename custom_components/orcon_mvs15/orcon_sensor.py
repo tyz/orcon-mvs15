@@ -24,7 +24,6 @@ class OrconSensor:
         label: str,
         entities: list,
     ) -> None:
-        self.unsub_listener = {}
         self.async_add_entities = async_add_entities
         self.config = config
         self.ramses_id = ramses_id

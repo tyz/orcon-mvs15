@@ -2,18 +2,29 @@ from __future__ import annotations
 
 import logging
 
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Callable, List
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DOMAIN
+from .ramses_esp import RamsesESP
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class OrconMVS15DataUpdateCoordinator(DataUpdateCoordinator[Any]):
+@dataclass
+class OrconMVS15RuntimeData:
+    fan_coordinator: OrconMVS15DataUpdateCoordinator | None = None
+    co2_coordinator: OrconMVS15DataUpdateCoordinator | None = None
+    rem_coordinator: OrconMVS15DataUpdateCoordinator | None = None
+    ramses_esp: RamsesESP | None = None
+    cleanup: List[Callable[[], None]] = field(default_factory=list)
+
+
+class OrconMVS15DataUpdateCoordinator(DataUpdateCoordinator[OrconMVS15RuntimeData]):
     config_entry: ConfigEntry
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:

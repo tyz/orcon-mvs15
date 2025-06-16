@@ -18,12 +18,12 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, CONF_FAN_ID, CONF_GATEWAY_ID, CONF_CO2_ID
+from .coordinator import OrconMVS15DataUpdateCoordinator
 from .orcon_sensor import OrconSensor
-from .typing import OrconMVS15RuntimeData
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: str, async_add_entities: Callable
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: Callable
 ) -> None:
     fan_sensor = OrconSensor(
         hass=hass,
@@ -58,7 +58,7 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         self,
         co2_id: str,
         config: ConfigEntry,
-        coordinator: OrconMVS15RuntimeData,
+        coordinator: OrconMVS15DataUpdateCoordinator,
         label: str,
     ) -> None:
         super().__init__(coordinator)
@@ -75,7 +75,7 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         )
 
     @property
-    def native_value(self) -> dict | None:
+    def native_value(self) -> int | None:
         if not self.coordinator.data:
             return None
         return self.coordinator.data.get("co2")
@@ -91,7 +91,7 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
         self,
         fan_id: str,
         config: ConfigEntry,
-        coordinator: OrconMVS15RuntimeData,
+        coordinator: OrconMVS15DataUpdateCoordinator,
         label: str,
     ) -> None:
         super().__init__(coordinator)
@@ -115,7 +115,7 @@ class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
         self,
         ramses_id: str,
         config: ConfigEntry,
-        coordinator: OrconMVS15RuntimeData,
+        coordinator: OrconMVS15DataUpdateCoordinator,
         label: str,
     ) -> None:
         super().__init__(coordinator)

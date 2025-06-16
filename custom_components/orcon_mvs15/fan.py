@@ -199,7 +199,7 @@ class OrconFan(FanEntity):
         entry = dev_reg.async_get_device({(DOMAIN, payload.packet.src_id)})
         dev_info = {
             "device_id": entry.id,
-            "sw_version": int(payload.values["software_ver_id"], 16),
+            "sw_version": int(str(payload.values["software_ver_id"]), 16),
             "model_id": payload.values["description"],
         }
         dev_reg.async_update_device(**dev_info)

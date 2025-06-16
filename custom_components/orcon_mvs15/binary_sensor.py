@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, CONF_FAN_ID
 from .orcon_sensor import OrconSensor
-from .typing import OrconMVS15RuntimeData
+from .coordinator import OrconMVS15DataUpdateCoordinator
 
 
 async def async_setup_entry(
@@ -39,7 +39,7 @@ class FaultBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self,
         ramses_id: str,
         config: ConfigEntry,
-        coordinator: OrconMVS15RuntimeData,
+        coordinator: OrconMVS15DataUpdateCoordinator,
         label: str,
     ) -> None:
         super().__init__(coordinator)
@@ -51,4 +51,4 @@ class FaultBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        return self.coordinator.data.get(f"{self.label.lower()}_fault")
+        return bool(self.coordinator.data.get(f"{self.label.lower()}_fault"))

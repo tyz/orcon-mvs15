@@ -26,13 +26,14 @@ class MQTT:
         self.base_topic = base_topic
         self.gateway_id = gateway_id
         self.online_topic = f"{base_topic}/+"
-        self._mqtt_unsubs = []
+        self._mqtt_unsubs: list = []
         self._online_event = asyncio.Event()
 
     async def init(self) -> None:
         if not self.gateway_id:
             await self._subscribe(self.online_topic, self._handle_online_message)
             await self._online_event.wait()  # wait on _handle_online_message
+            self._mqtt_unsubs.pop()()
             _LOGGER.info(f"Discovered gateway is {self.gateway_id}")
         else:
             _LOGGER.info(f"Using previously discovered gateway {self.gateway_id}")

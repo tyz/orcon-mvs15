@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import json
 import uuid
 import inspect
 
@@ -23,7 +22,9 @@ class RamsesPacketData(str):
 
 
 class RamsesPacketDatetime:
-    def __init__(self, dt: datetime) -> None:
+    def __init__(self, dt: datetime | str) -> None:
+        self.t_datetime: datetime | None
+        self.t_str: str
         if isinstance(dt, datetime):
             self.t_datetime = dt
             self.t_str = datetime.isoformat(self.t_datetime)
@@ -31,7 +32,7 @@ class RamsesPacketDatetime:
             if len(dt) == 8:
                 """YYYY-MM-DD hex date"""
                 self.t_datetime = self._hex_to_date(dt)
-                self.t_str = ""
+                self.t_str = dt
                 if self.t_datetime:
                     self.t_str = self.t_datetime.strftime("%Y-%m-%d")
             else:
@@ -47,7 +48,7 @@ class RamsesPacketDatetime:
     def __repr__(self) -> str:
         return self.t_str
 
-    def _hex_to_date(self, value: str) -> datetime:
+    def _hex_to_date(self, value: str) -> datetime | None:
         if value == "FFFFFFFF":
             return None
         return datetime(
@@ -57,16 +58,23 @@ class RamsesPacketDatetime:
         )
 
 
+class RamsesID(str):
+    """str with a default"""
+
+    def __new__(cls, value: str = "--:------") -> RamsesID:
+        return super().__new__(cls, value)
+
+
 class RamsesPacket:
     def __init__(
         self,
-        raw_packet: str | None = None,
-        src_id: str = "--:------",
-        dst_id: str = "--:------",
-        ann_id: str = "--:------",
-        type: str | None = None,
-        code: str | None = None,
-        data: str | None = None,
+        envelope: dict = {},
+        src_id: RamsesID = RamsesID(),
+        dst_id: RamsesID = RamsesID(),
+        ann_id: RamsesID = RamsesID(),
+        type: str = "",
+        code: str = "",
+        data: str = "",
     ) -> None:
         self._timestamp = RamsesPacketDatetime(datetime.now())
         self.signal_strength = -1
@@ -75,12 +83,12 @@ class RamsesPacket:
         self.dst_id = dst_id
         self.ann_id = ann_id
         self.code = code
-        self.expected_response = None
-        self.length = 0
+        self.expected_response: RamsesPacketResponse | None = None
+        self.length: int = 0
         self.packet_id = uuid.uuid4().hex
         self.data = data
-        self._raw_packet = raw_packet
-        if self._raw_packet:
+        self._envelope = envelope
+        if self._envelope:
             self.parse()
 
     def __repr__(self) -> str:
@@ -94,55 +102,56 @@ class RamsesPacket:
         return str({**all_attr, **all_prop})
 
     @property
-    def data(self) -> str | None:
+    def data(self) -> str | RamsesPacketData | None:
         return self._data
 
     @data.setter
     def data(self, value: str) -> None:
-        if value:
-            self._data = RamsesPacketData(value)
-            self.length = len(self._data)
-        else:
-            self._data = None
+        if not value:
             self.length = 0
+            self._data = RamsesPacketData()
+            return
+        self._data = RamsesPacketData(value)
+        self.length = len(self._data)
 
     def ramses_esp_envelope(self) -> dict:
         return {
-            "msg": f" {self.type} --- {self.src_id} {self.dst_id} {self.ann_id} {self.code} {self.length:03d} {self.data}"
+            "msg": f"{self.type:2s} --- {self.src_id} {self.dst_id} {self.ann_id} {self.code} {self.length:03d} {self.data}"
         }
 
-    def json(self) -> dict:
-        return json.dumps(self.payload())
-
     def parse(self) -> None:
-        fields = self._raw_packet["msg"].split()
-        assert len(fields) == 9, "Wrong number of fields"
+        fields = self._envelope["msg"].split()
         assert fields[2] == "---", "Missing dashes"
-        self.timestamp = RamsesPacketDatetime(self._raw_packet["ts"])
+        self.timestamp = RamsesPacketDatetime(self._envelope["ts"])
         try:
             self.signal_strength = int(fields[0])
         except ValueError:
             _LOGGER.warning(f"Signal strength == {fields[0]}")
             self.signal_strength = -1
         self.type = fields[1]
-        self.src_id = fields[3]
-        self.dst_id = fields[4]
-        self.ann_id = fields[5]
+        self.src_id = RamsesID(fields[3])
+        self.dst_id = RamsesID(fields[4])
+        self.ann_id = RamsesID(fields[5])
         self.code = fields[6]
-        self.data = fields[8]
-        assert int(fields[7]) == self.length, (
-            f"Wrong length ({fields[7]} vs {self.length})"
-        )
+        if int(fields[7]) > 0:
+            assert len(fields) == 9, "Wrong number of fields"
+            self.data = fields[8]
+            assert int(fields[7]) == self.length, (
+                f"Wrong length ({fields[7]} vs {self.length})"
+            )
+        else:
+            assert len(fields) == 8, "No data expected!"
+            self.data = ""
 
 
 class RamsesPacketResponse(RamsesPacket):
     def __init__(
         self,
-        src_id: str = "--:------",
-        dst_id: str = "--:------",
-        ann_id: str = "--:------",
-        type: str | None = None,
-        code: str | None = None,
+        src_id: RamsesID = RamsesID(),
+        dst_id: RamsesID = RamsesID(),
+        ann_id: RamsesID = RamsesID(),
+        type: str = "",
+        code: str = "",
         max_retries: int = 2,
         timeout: int = 2,
     ) -> None:
@@ -153,8 +162,10 @@ class RamsesPacketResponse(RamsesPacket):
         self.timeout = timeout
         self.cancel_retry_handler = None
 
-    def __eq__(self, b: RamsesPacket) -> bool:
+    def __eq__(self, b: object) -> bool:
         """Compare expected response to response"""
+        if not isinstance(b, RamsesPacket):
+            return NotImplemented
         return (
             ((not self.type) or self.type == b.type)
             and ((not self.code) or self.code == b.code)

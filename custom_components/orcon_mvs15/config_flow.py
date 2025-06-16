@@ -14,7 +14,7 @@ from .const import (
 )
 
 
-class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
+class OrconConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
     VERSION = 1
 
     async def async_step_user(

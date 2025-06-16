@@ -8,8 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady, PlatformNotReady
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
-from .typing import OrconMVS15RuntimeData
-from .coordinator import OrconMVS15DataUpdateCoordinator
+from .coordinator import OrconMVS15RuntimeData, OrconMVS15DataUpdateCoordinator
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
 from .const import (
@@ -27,8 +26,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def _setup_coordinator(
-    hass: HomeAssistant, entry: str, discover_key: str, config_key: str
-) -> None:
+    hass: HomeAssistant, entry: ConfigEntry, discover_key: str, config_key: str
+) -> OrconMVS15DataUpdateCoordinator:
     coordinator = OrconMVS15DataUpdateCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     unsub = None
@@ -36,7 +35,8 @@ async def _setup_coordinator(
     def _device_discovered() -> None:
         if entry.data.get(config_key):
             _LOGGER.debug(f"Discovered {config_key} already in config")
-            unsub()
+            if unsub:
+                unsub()
             return
         if (ramses_id := coordinator.data.get(discover_key)) is None:
             _LOGGER.debug(
@@ -55,7 +55,8 @@ async def _setup_coordinator(
         #    model="TODO",
         #    name=f"TODO ({ramses_id})",
         # )
-        unsub()
+        if unsub:
+            unsub()
 
     unsub = coordinator.async_add_listener(_device_discovered)
     return coordinator

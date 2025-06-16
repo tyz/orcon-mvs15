@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import logging
 
-from typing import Iterable
+from typing import Iterator
 
-from .ramses_packet import RamsesPacket
+try:
+    from .ramses_packet import RamsesPacket
+except ImportError:
+    pass  # for __main__
 
 _LOGGER = logging.getLogger(__name__)
 
 
+class RamsesPacketQueueException(Exception):
+    pass
+
+
 class RamsesPacketQueue:
     def __init__(self) -> None:
-        self._queue = {}
+        self._queue: dict = {}
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self._queue})"
@@ -19,7 +26,7 @@ class RamsesPacketQueue:
     def __len__(self) -> int:
         return len(self._queue)
 
-    def __iter__(self) -> Iterable:
+    def __iter__(self) -> Iterator:
         return iter(self._queue.values())
 
     def __contains__(self, packet: RamsesPacket) -> bool:
@@ -46,19 +53,25 @@ class RamsesPacketQueue:
             )
 
     def add(self, packet: RamsesPacket) -> None:
+        assert packet.expected_response, (
+            f"Adding packet w/o expected_response: {packet}"
+        )
         if packet not in self:
             self[packet.packet_id] = packet
         else:
             _LOGGER.debug(f"add: Already in queue: {packet.packet_id}")
 
-    def get(self, packet: RamsesPacket) -> None:
+    def get(self, packet: RamsesPacket) -> RamsesPacket | None:
         if not self:
-            _LOGGER.debug("match: Queue is empty")
+            _LOGGER.debug("get: Queue is empty")
             return None
-        match = next((q for q in self if q.expected_response == packet), None)
-        if not match:
-            _LOGGER.debug(f"match: Not found in queue: {packet}")
-        return match
+        for q in self:
+            if q.expected_response == packet:
+                return q
+        _LOGGER.debug(
+            f"get: Not found in queue: {packet.type} {packet.code} {packet.src_id}->{packet.dst_id}"
+        )
+        return None
 
     def remove(self, packet: RamsesPacket) -> None:
         del self[packet]
@@ -70,7 +83,7 @@ class RamsesPacketQueue:
 
 if __name__ == "__main__":
     import sys
-    from ramses_packet import RamsesPacket, RamsesPacketResponse
+    from ramses_packet import RamsesPacket, RamsesPacketResponse, RamsesID  # type: ignore[no-redef]
 
     _LOGGER = logging.getLogger()
     _LOGGER.setLevel(logging.DEBUG)
@@ -88,21 +101,21 @@ if __name__ == "__main__":
         "ts": "2025-06-01T17:10:50.271376+02:00",
         "msg": "044 RP --- 29:224547 18:149960 --:------ 1298 003 0001CD",
     }
-    rx = RamsesPacket(raw_packet=raw_response)
-    rx_other = RamsesPacket(raw_packet=raw_response_other)
+    rx = RamsesPacket(envelope=raw_response)
+    rx_other = RamsesPacket(envelope=raw_response_other)
 
     tx = RamsesPacket(
-        src_id="18:149960",
-        dst_id="29:224547",
+        src_id=RamsesID("18:149960"),
+        dst_id=RamsesID("29:224547"),
         type="RQ",
         code="12A0",
         data="00",
-        expected_response=RamsesPacketResponse(
-            src_id="29:224547",
-            dst_id="18:149960",
-            type="RP",
-            code="12A0",
-        ),
+    )
+    tx.expected_response = RamsesPacketResponse(
+        src_id=RamsesID("29:224547"),
+        dst_id=RamsesID("18:149960"),
+        type="RP",
+        code="12A0",
     )
 
     print("=== add (__contains__, __setitem__)")
@@ -112,9 +125,13 @@ if __name__ == "__main__":
 
     print("=== get/del (__iter__, __getitem__, __delitem__)")
     p = q.get(rx_other)
-    assert p is None, "matched"
+    assert p is None, (
+        "matched where it should not for {rx_other_other.type} {rx_other.code} {rx_other.src_id} {rx_other.dst_id} in {q._queue}"
+    )
     p = q.get(rx)
-    assert p is not None, "no match"
+    assert p is not None, (
+        f"no match where it should for {rx.type} {rx.code} {rx.src_id} {rx.dst_id} in {q._queue}"
+    )
     q.remove(p)
     assert len(q) == 0, f"len after del is {len(q)}"
 

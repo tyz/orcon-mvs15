@@ -6,6 +6,7 @@ import asyncio
 import json
 
 from collections.abc import Callable
+from typing import TextIO
 from datetime import datetime
 
 from homeassistant.components import mqtt as mqtt_client
@@ -16,18 +17,12 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 from homeassistant.components.mqtt import MQTT
 
-from .ramses_packet import RamsesPacket
+from .ramses_packet import RamsesPacket, RamsesID
 from .ramses_packet_queue import RamsesPacketQueue
 from .const import DOMAIN
-from .codes import (
-    Code,
-    Code10e0,
-    Code1298,
-    Code12a0,
-    Code22f1,
-    Code31d9,
-    Code31e0,
-)
+from .codes import *  # noqa: F403
+
+# flake8: noqa: F405
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,10 +36,10 @@ class RamsesESP:
         self,
         hass: HomeAssistant,
         mqtt: MQTT,
-        remote_id: str | None,
-        fan_id: str | None,
-        co2_id: str | None,
-        gateway_id: str | None,
+        remote_id: RamsesID,
+        fan_id: RamsesID,
+        co2_id: RamsesID,
+        gateway_id: RamsesID,
     ) -> None:
         self.hass = hass
         self.mqtt = mqtt
@@ -52,8 +47,9 @@ class RamsesESP:
         self.fan_id = fan_id
         self.co2_id = co2_id
         self.gateway_id = gateway_id
-        self._handlers = {}
+        self._handlers: dict = {}
         self._send_queue = RamsesPacketQueue()
+        self._log_f: TextIO | None = None
         if self.co2_id:
             _LOGGER.info(f"Using previously discovered CO2 sensor ({self.co2_id})")
         else:
@@ -104,7 +100,7 @@ class RamsesESP:
         self._send_queue.add(packet)
 
     async def handle_ramses_mqtt_message(self, msg: ReceiveMessage) -> None:
-        """Decode JSON, parse the payload and log it to file"""
+        """Decode JSON, parse the MQTT payload and log it to file"""
         try:
             envelope = json.loads(msg.payload)
             await self._handle_ramses_packet(envelope)
@@ -128,9 +124,7 @@ class RamsesESP:
 
     async def set_preset_mode(self, mode: str) -> None:
         try:
-            packet = Code22f1.set(
-                preset=mode, src_id=self.remote_id, dst_id=self.fan_id
-            )
+            packet = Code22f1.set(value=mode, src_id=self.remote_id, dst_id=self.fan_id)
         except Exception as e:
             _LOGGER.error(f"Error setting fan preset mode '{mode}': {e}")
             return
@@ -152,6 +146,7 @@ class RamsesESP:
 
     async def _retry_pending_request(self, packet: RamsesPacket) -> None:
         """Outgoing request timed out, retry it"""
+        assert packet.expected_response is not None
         packet.expected_response.max_retries -= 1
         if packet.expected_response.max_retries < 0:
             _LOGGER.warning(f"Request timed out: {packet}")
@@ -160,9 +155,9 @@ class RamsesESP:
         _LOGGER.debug(f"Retry {packet}")
         await self.publish(packet)
 
-    async def _handle_ramses_packet(self, packet: RamsesPacket) -> None:
+    async def _handle_ramses_packet(self, envelope: dict) -> None:
         try:
-            packet = RamsesPacket(packet)
+            packet = RamsesPacket(envelope=envelope)
         except Exception:
             _LOGGER.error(f"Error parsing MQTT message {packet}", exc_info=True)
             return
@@ -207,7 +202,7 @@ class RamsesESP:
         """Log raw packets to disk, rolling over at 10 MB, offloaded to executor."""
 
         def _sync_log() -> None:
-            if not hasattr(self, "_log_f") or self._log_f is None:
+            if self._log_f is None:
                 try:
                     self._log_f = open(path, "a")
                 except Exception as e:
