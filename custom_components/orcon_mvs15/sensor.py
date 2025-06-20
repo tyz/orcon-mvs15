@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from types import MappingProxyType
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -14,7 +16,7 @@ from homeassistant.const import (
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, CONF_FAN_ID, CONF_GATEWAY_ID, CONF_CO2_ID
@@ -30,7 +32,7 @@ async def async_setup_entry(
         async_add_entities=async_add_entities,
         config=entry.data,
         coordinator=entry.runtime_data.fan_coordinator,
-        ramses_id=entry.data.get(CONF_FAN_ID),
+        ramses_id=entry.data[CONF_FAN_ID],
         label="fan",
         entities=[HumiditySensor, SignalStrengthSensor],
     )
@@ -41,7 +43,7 @@ async def async_setup_entry(
         async_add_entities=async_add_entities,
         config=entry.data,
         coordinator=entry.runtime_data.co2_coordinator,
-        ramses_id=entry.data.get(CONF_CO2_ID),
+        ramses_id=entry.data[CONF_CO2_ID],
         label="CO2",
         entities=[Co2Sensor, SignalStrengthSensor],
     )
@@ -57,13 +59,13 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
     def __init__(
         self,
         co2_id: str,
-        config: ConfigEntry,
+        config: MappingProxyType[str, Any],
         coordinator: OrconMVS15DataUpdateCoordinator,
         label: str,
     ) -> None:
         super().__init__(coordinator)
         self.coordinator = coordinator
-        gateway_id = config.get(CONF_GATEWAY_ID)
+        gateway_id = config[CONF_GATEWAY_ID]
         self._state = None
         self._attr_unique_id = f"orcon_mvs15_co2_{co2_id}"
         self._attr_device_info = DeviceInfo(
@@ -76,9 +78,9 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | None:
-        if not self.coordinator.data:
+        if not self.coordinator.data or "co2" not in self.coordinator.data:
             return None
-        return self.coordinator.data.get("co2")
+        return int(self.coordinator.data["co2"])
 
 
 class HumiditySensor(CoordinatorEntity, SensorEntity):
@@ -90,7 +92,7 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
     def __init__(
         self,
         fan_id: str,
-        config: ConfigEntry,
+        config: MappingProxyType[str, Any],
         coordinator: OrconMVS15DataUpdateCoordinator,
         label: str,
     ) -> None:
@@ -101,9 +103,12 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | None:
-        if not self.coordinator.data:
+        if (
+            not self.coordinator.data
+            or "relative_humidity" not in self.coordinator.data
+        ):
             return None
-        return self.coordinator.data.get("relative_humidity")
+        return int(self.coordinator.data["relative_humidity"])
 
 
 class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
@@ -127,6 +132,7 @@ class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | None:
-        if not self.coordinator.data:
+        key = f"{self.label.lower()}_signal_strength"
+        if not self.coordinator.data or key not in self.coordinator.data:
             return None
-        return self.coordinator.data.get(f"{self.label.lower()}_signal_strength")
+        return int(self.coordinator.data[key])

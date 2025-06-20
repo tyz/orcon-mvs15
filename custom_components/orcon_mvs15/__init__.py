@@ -81,8 +81,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         mqtt = MQTT(
             hass,
-            base_topic=entry.data.get(CONF_MQTT_TOPIC),
-            gateway_id=entry.data.get(CONF_GATEWAY_ID),
+            base_topic=entry.data[CONF_MQTT_TOPIC],
+            gateway_id=entry.data[CONF_GATEWAY_ID],
         )
         await mqtt.init()
     except Exception as e:
@@ -90,7 +90,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     entry.runtime_data.cleanup.append(mqtt.cleanup)
 
-    if not entry.data.get(CONF_GATEWAY_ID):
+    if CONF_GATEWAY_ID not in entry.data:
         _LOGGER.debug(f"Storing discovered gateway ({mqtt.gateway_id}) in config")
         new_data = {**entry.data, CONF_GATEWAY_ID: mqtt.gateway_id}
         hass.config_entries.async_update_entry(entry, data=new_data)
@@ -98,20 +98,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     dev_reg = get_dev_reg(hass)
     dev_reg.async_get_or_create(
         config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, entry.data.get(CONF_GATEWAY_ID))},
+        identifiers={(DOMAIN, entry.data[CONF_GATEWAY_ID])},
         manufacturer="Indalo-Tech",
         model="RAMSES_ESP",
-        name=f"Indalo-Tech RAMSES_ESP ({entry.data.get(CONF_GATEWAY_ID)})",
+        name=f"Indalo-Tech RAMSES_ESP ({entry.data[CONF_GATEWAY_ID]})",
     )
 
     try:
         ramses_esp = RamsesESP(
             hass=hass,
             mqtt=mqtt,
-            gateway_id=entry.data.get(CONF_GATEWAY_ID),
-            remote_id=entry.data.get(CONF_REMOTE_ID),
-            fan_id=entry.data.get(CONF_FAN_ID),
-            co2_id=entry.data.get(CONF_CO2_ID),
+            gateway_id=entry.data[CONF_GATEWAY_ID],
+            remote_id=entry.data[CONF_REMOTE_ID],
+            fan_id=entry.data[CONF_FAN_ID],
+            co2_id=entry.data[CONF_CO2_ID],
         )
     except ConfigEntryNotReady:
         raise

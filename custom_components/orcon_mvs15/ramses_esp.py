@@ -15,10 +15,10 @@ from homeassistant.core import HomeAssistant, Event
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
-from homeassistant.components.mqtt import MQTT
 
 from .ramses_packet import RamsesPacket, RamsesID
 from .ramses_packet_queue import RamsesPacketQueue
+from .mqtt import MQTT
 from .const import DOMAIN
 from .codes import *  # noqa: F403
 
@@ -114,7 +114,8 @@ class RamsesESP:
     async def handle_ramses_mqtt_version_message(self, msg: ReceiveMessage) -> None:
         """Update Ramses-ESP device"""
         dev_reg = get_dev_reg(self.hass)
-        entry = dev_reg.async_get_device({(DOMAIN, self.gateway_id)})
+        if (entry := dev_reg.async_get_device({(DOMAIN, self.gateway_id)})) is None:
+            return
         dev_info = {
             "device_id": entry.id,
             "sw_version": msg.payload,
@@ -159,7 +160,7 @@ class RamsesESP:
         try:
             packet = RamsesPacket(envelope=envelope)
         except Exception:
-            _LOGGER.error(f"Error parsing MQTT message {packet}", exc_info=True)
+            _LOGGER.error(f"Error parsing MQTT message {envelope}", exc_info=True)
             return
         if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
             _LOGGER.warning(

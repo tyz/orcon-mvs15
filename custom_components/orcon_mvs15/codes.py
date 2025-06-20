@@ -157,7 +157,7 @@ class Code22f1(Code):
                 if v == self.packet.data:
                     self.values.update({"fan_mode": k})
                     return
-            raise CodeException(f"Invalid preset for data {self.packet.data}")
+            _LOGGER.warning(f"Unknown preset for 22F1/22F3: {self.packet.data}")
 
     @classmethod
     def set(cls, src_id: RamsesID, dst_id: RamsesID, value: str) -> RamsesPacket:
@@ -412,3 +412,51 @@ class Code042f(Code):
     @classmethod
     def get(cls, src_id: RamsesID, dst_id: RamsesID) -> RamsesPacket:
         raise NotImplementedError
+
+
+if __name__ == "__main__":
+    import sys
+
+    """Parse Ramses logfile, from stdin or 1st cli arg"""
+
+    path = sys.argv[1] if len(sys.argv) == 2 else "/dev/stdin"
+    last_msg = ""
+
+    with open(path) as f:
+        while True:
+            if (line := f.readline()) == "":
+                break
+
+            try:
+                if line[26] == " ":  # ramses_rf packet.log
+                    ts = line[:26]
+                    msg = line[27:].strip()
+                else:
+                    ts = line[:32]
+                    msg = line[33:].strip()
+            except IndexError:
+                print(line, end="")
+                continue
+
+            if msg[4:] == last_msg:
+                continue
+            last_msg = msg[4:]
+
+            try:
+                packet = RamsesPacket(envelope={"ts": ts, "msg": msg})
+            except Exception as e:
+                print(f"!!! {e}: {ts} {msg}")
+                continue
+
+            try:
+                if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
+                    print(
+                        f"WARNING: Class Code{packet.code.lower()} not imported, or does not exist"
+                    )
+                    code_class = Code
+                print(
+                    f"{ts} {packet.signal_strength:03d} {packet.type:>2} {packet.src_id} {packet.dst_id} "
+                    f"{packet.ann_id} {packet.code} {packet.length:03d} {code_class(packet=packet)}"
+                )
+            except Exception as e:
+                print(f"!!! {e}: {line}")

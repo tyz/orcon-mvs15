@@ -10,7 +10,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, Event, HomeAssistant
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.event import async_track_time_interval
 
 from .codes import Code, Code22f1
@@ -63,11 +63,11 @@ class OrconFan(FanEntity):
         self._entry = entry
         self._fan_coordinator = entry.runtime_data.fan_coordinator
         self._co2_coordinator = entry.runtime_data.co2_coordinator
-        self._mqtt_topic = entry.data.get(CONF_MQTT_TOPIC)
-        self._gateway_id = entry.data.get(CONF_GATEWAY_ID)
-        self._remote_id = entry.data.get(CONF_REMOTE_ID)
-        self._fan_id = entry.data.get(CONF_FAN_ID)
-        self._co2_id = entry.data.get(CONF_CO2_ID)
+        self._mqtt_topic = entry.data[CONF_MQTT_TOPIC]
+        self._gateway_id = entry.data[CONF_GATEWAY_ID]
+        self._remote_id = entry.data[CONF_REMOTE_ID]
+        self._fan_id = entry.data[CONF_FAN_ID]
+        self._co2_id = entry.data[CONF_CO2_ID]
         self._co2 = None
         self._ramses_esp = entry.runtime_data.ramses_esp
         self._req_humidity_unsub = None
@@ -196,7 +196,10 @@ class OrconFan(FanEntity):
             _LOGGER.warning(f"Unknown product_id {payload.values['product_id']}")
             return
         dev_reg = get_dev_reg(self.hass)
-        entry = dev_reg.async_get_device({(DOMAIN, payload.packet.src_id)})
+        if (
+            entry := dev_reg.async_get_device({(DOMAIN, payload.packet.src_id)})
+        ) is None:
+            return
         dev_info = {
             "device_id": entry.id,
             "sw_version": int(str(payload.values["software_ver_id"]), 16),

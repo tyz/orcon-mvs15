@@ -24,7 +24,7 @@ class OrconMVS15RuntimeData:
     cleanup: List[Callable[[], None]] = field(default_factory=list)
 
 
-class OrconMVS15DataUpdateCoordinator(DataUpdateCoordinator[OrconMVS15RuntimeData]):
+class OrconMVS15DataUpdateCoordinator(DataUpdateCoordinator[dict[str, str | int]]):
     config_entry: ConfigEntry
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:

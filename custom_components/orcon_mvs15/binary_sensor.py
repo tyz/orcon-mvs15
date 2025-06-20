@@ -6,7 +6,7 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -25,7 +25,7 @@ async def async_setup_entry(
         async_add_entities=async_add_entities,
         config=entry.data,
         coordinator=entry.runtime_data.fan_coordinator,
-        ramses_id=entry.data.get(CONF_FAN_ID),
+        ramses_id=entry.data[CONF_FAN_ID],
         label="fan",
         entities=[FaultBinarySensor],
     )

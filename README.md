@@ -36,7 +36,7 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
 
 ```yaml
 type: tile
-entity: fan.orcon_mvs_ventilation
+entity: fan.orcon_mvs_15_fan
 show_entity_picture: false
 hide_state: true
 vertical: false
@@ -55,11 +55,20 @@ alert:
     name: The fan reported a fault
     done_message: The fan fault was cleared
     entity_id: binary_sensor.orcon_mvs_15_fault
+    state: "on"
     repeat: 1440
     notifiers:
       - persistent_notification  # create an alert in the web ui
       - mobile_app_your_phone  # send a notification through the companion app
 ```
+
+Check the LED on the fan unit if it reports a fault:
+
+| Flashing red | Error                         |
+| -------------|-------------------------------|
+| 1x           | Motor not running             |
+| 2x           | No value from humidity sensor |
+| 3x           | RF communication failure      |
 
 ## Supported Ramses II codes
 

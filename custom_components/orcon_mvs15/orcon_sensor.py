@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.config_entries import ConfigEntry
+from types import MappingProxyType
+from typing import Any
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -18,7 +20,7 @@ class OrconSensor:
         self,
         hass: HomeAssistant,
         async_add_entities: AddConfigEntryEntitiesCallback,
-        config: ConfigEntry,
+        config: MappingProxyType[str, Any],
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_id: str,
         label: str,

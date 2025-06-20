@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Callable
+
 import logging
 import uuid
 import inspect
@@ -158,9 +160,9 @@ class RamsesPacketResponse(RamsesPacket):
         super().__init__(
             src_id=src_id, dst_id=dst_id, ann_id=ann_id, type=type, code=code
         )
-        self.max_retries = max_retries
-        self.timeout = timeout
-        self.cancel_retry_handler = None
+        self.max_retries: int = max_retries
+        self.timeout: int = timeout
+        self.cancel_retry_handler: Callable[[], None] | None = None
 
     def __eq__(self, b: object) -> bool:
         """Compare expected response to response"""
