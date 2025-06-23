@@ -54,8 +54,7 @@ alert:
     title: Orcon MVS-15 fault
     name: The fan reported a fault
     done_message: The fan fault was cleared
-    entity_id: binary_sensor.orcon_mvs_15_fault
-    state: "on"
+    entity_id: binary_sensor.orcon_mvs_15_fan_fault
     repeat: 1440
     notifiers:
       - persistent_notification  # create an alert in the web ui
