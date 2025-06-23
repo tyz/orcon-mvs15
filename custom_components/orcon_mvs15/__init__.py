@@ -82,7 +82,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         mqtt = MQTT(
             hass,
             base_topic=entry.data[CONF_MQTT_TOPIC],
-            gateway_id=entry.data[CONF_GATEWAY_ID],
+            gateway_id=entry.data.get(CONF_GATEWAY_ID),
         )
         await mqtt.init()
     except Exception as e:
@@ -111,7 +111,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             gateway_id=entry.data[CONF_GATEWAY_ID],
             remote_id=entry.data[CONF_REMOTE_ID],
             fan_id=entry.data[CONF_FAN_ID],
-            co2_id=entry.data[CONF_CO2_ID],
+            co2_id=entry.data.get(CONF_CO2_ID),
         )
     except ConfigEntryNotReady:
         raise

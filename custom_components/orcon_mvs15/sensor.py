@@ -15,7 +15,7 @@ from homeassistant.const import (
     PERCENTAGE,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -43,7 +43,7 @@ async def async_setup_entry(
         async_add_entities=async_add_entities,
         config=entry.data,
         coordinator=entry.runtime_data.co2_coordinator,
-        ramses_id=entry.data[CONF_CO2_ID],
+        ramses_id=entry.data.get(CONF_CO2_ID),
         label="CO2",
         entities=[Co2Sensor, SignalStrengthSensor],
     )
@@ -76,11 +76,13 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
             via_device=(DOMAIN, gateway_id),
         )
 
-    @property
-    def native_value(self) -> int | None:
-        if not self.coordinator.data or "co2" not in self.coordinator.data:
-            return None
-        return int(self.coordinator.data["co2"])
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """handle updated data from the coordinator."""
+        key = "co2"
+        if self.coordinator.data and key in self.coordinator.data:
+            self._attr_native_value = int(self.coordinator.data[key])
+            self.async_write_ha_state()
 
 
 class HumiditySensor(CoordinatorEntity, SensorEntity):
@@ -101,14 +103,13 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"orcon_mvs15_humidity_{fan_id}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, fan_id)})
 
-    @property
-    def native_value(self) -> int | None:
-        if (
-            not self.coordinator.data
-            or "relative_humidity" not in self.coordinator.data
-        ):
-            return None
-        return int(self.coordinator.data["relative_humidity"])
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """handle updated data from the coordinator."""
+        key = "relative_humidity"
+        if self.coordinator.data and key in self.coordinator.data:
+            self._attr_native_value = int(self.coordinator.data[key])
+            self.async_write_ha_state()
 
 
 class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
@@ -130,9 +131,10 @@ class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"orcon_mvs15_dbm_{ramses_id}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, ramses_id)})
 
-    @property
-    def native_value(self) -> int | None:
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
         key = f"{self.label.lower()}_signal_strength"
-        if not self.coordinator.data or key not in self.coordinator.data:
-            return None
-        return int(self.coordinator.data[key])
+        if self.coordinator.data and key in self.coordinator.data:
+            self._attr_native_value = int(self.coordinator.data[key])
+            self.async_write_ha_state()

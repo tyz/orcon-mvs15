@@ -13,6 +13,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.event import async_track_time_interval
 
+from .ramses_packet import RamsesPacketDatetime
 from .codes import Code, Code22f1
 from .const import (
     DOMAIN,
@@ -67,7 +68,7 @@ class OrconFan(FanEntity):
         self._gateway_id = entry.data[CONF_GATEWAY_ID]
         self._remote_id = entry.data[CONF_REMOTE_ID]
         self._fan_id = entry.data[CONF_FAN_ID]
-        self._co2_id = entry.data[CONF_CO2_ID]
+        self._co2_id = entry.data.get(CONF_CO2_ID)
         self._co2 = None
         self._ramses_esp = entry.runtime_data.ramses_esp
         self._req_humidity_unsub = None
@@ -80,21 +81,14 @@ class OrconFan(FanEntity):
             name=f"{self.name} ({self._fan_id})",
             via_device=(DOMAIN, self._gateway_id),
         )
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        fan_data = self._fan_coordinator.data
-        co2_data = self._co2_coordinator.data
-        return {
-            "co2": co2_data.get("co2"),
-            "vent_demand": co2_data.get("vent_demand"),
-            "relative_humidity": fan_data.get("relative_humidity"),
-            "fan_fault": fan_data.get("fan_fault"),
+        self._attr_extra_state_attributes: dict[
+            str, str | int | bool | RamsesPacketDatetime | None
+        ] = {
+            "co2": None,
+            "vent_demand": None,
+            "relative_humidity": None,
+            "fan_fault": None,
         }
-
-    @property
-    def preset_mode(self) -> str | None:
-        return self._fan_coordinator.data.get("fan_mode")
 
     async def async_added_to_hass(self) -> None:
         if self.hass.state == CoreState.running:
@@ -123,6 +117,12 @@ class OrconFan(FanEntity):
 
     def _fan_state_handler(self, payload: Code) -> None:
         """Update fan mode and fault state"""
+        self._attr_preset_mode = str(payload.values["fan_mode"])
+        self.async_write_ha_state()
+        self._attr_extra_state_attributes["fan_fault"] = bool(
+            payload.values["has_fault"]
+        )
+        self.async_write_ha_state()
         new_data = {
             **self._fan_coordinator.data,
             "fan_mode": payload.values["fan_mode"],
@@ -138,6 +138,8 @@ class OrconFan(FanEntity):
 
     def _co2_handler(self, payload: Code) -> None:
         """Update CO2 sensor + attribute"""
+        self._attr_extra_state_attributes["co2"] = payload.values["level"]
+        self.async_write_ha_state()
         new_data = {
             **self._co2_coordinator.data,
             "co2": payload.values["level"],
@@ -152,6 +154,8 @@ class OrconFan(FanEntity):
         """Update Vent demand attribute"""
         if not self._co2_id:  # discovered CO2 sensor
             self._co2_id = payload.packet.src_id
+        self._attr_extra_state_attributes["vent_demand"] = payload.values["percentage"]
+        self.async_write_ha_state()
         new_data = {
             **self._co2_coordinator.data,
             "vent_demand": payload.values["percentage"],
@@ -167,6 +171,8 @@ class OrconFan(FanEntity):
 
     def _relative_humidity_handler(self, payload: Code) -> None:
         """Update relative humidity attribute"""
+        self._attr_extra_state_attributes["relative_humidity"] = payload.values["level"]
+        self.async_write_ha_state()
         new_data = {
             **self._fan_coordinator.data,
             "relative_humidity": payload.values["level"],

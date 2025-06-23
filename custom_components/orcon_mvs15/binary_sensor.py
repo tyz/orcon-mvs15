@@ -5,7 +5,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -49,6 +49,10 @@ class FaultBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_unique_id = f"orcon_mvs15_{label}_fault_{ramses_id}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, ramses_id)})
 
-    @property
-    def is_on(self) -> bool | None:
-        return bool(self.coordinator.data.get(f"{self.label.lower()}_fault"))
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self._attr_is_on = bool(
+            self.coordinator.data.get(f"{self.label.lower()}_fault")
+        )
+        self.async_write_ha_state()
