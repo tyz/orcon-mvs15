@@ -47,7 +47,12 @@ class OrconSensor:
             f"Creating {len(self.entities)} {self.label} sensors ({self.ramses_id})"
         )
         new_entities = [
-            x(self.ramses_id, self.config, self.coordinator, self.label)
+            x(
+                self.ramses_id,
+                self.config,
+                self.coordinator,
+                self.label,
+            )
             for x in self.entities
         ]
         self.async_add_entities(new_entities, True)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Callable
 from types import MappingProxyType
 from typing import Any
@@ -22,6 +24,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN, CONF_FAN_ID, CONF_GATEWAY_ID, CONF_CO2_ID
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .orcon_sensor import OrconSensor
+from .ramses_packet import RamsesPacketDatetime
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -66,6 +71,7 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.coordinator = coordinator
         gateway_id = config[CONF_GATEWAY_ID]
+        self.co2_id = co2_id
         self._state = None
         self._attr_unique_id = f"orcon_mvs15_co2_{co2_id}"
         self._attr_device_info = DeviceInfo(
@@ -75,13 +81,24 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
             name=f"Orcon CO2 remote 15RF ({co2_id})",
             via_device=(DOMAIN, gateway_id),
         )
+        self._attr_extra_state_attributes: dict[
+            str, str | int | bool | RamsesPacketDatetime | None
+        ] = {
+            "vent_demand": None,
+        }
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """handle updated data from the coordinator."""
-        key = "co2"
-        if self.coordinator.data and key in self.coordinator.data:
-            self._attr_native_value = int(self.coordinator.data[key])
+        if not self.coordinator.data:
+            return
+        if "co2" in self.coordinator.data:
+            self._attr_native_value = int(self.coordinator.data["co2"])
+            self.async_write_ha_state()
+        if "vent_demand" in self.coordinator.data:
+            self._attr_extra_state_attributes["vent_demand"] = int(
+                self.coordinator.data["vent_demand"]
+            )
             self.async_write_ha_state()
 
 

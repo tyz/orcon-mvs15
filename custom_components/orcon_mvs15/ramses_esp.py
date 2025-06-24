@@ -27,10 +27,6 @@ from .codes import *  # noqa: F403
 _LOGGER = logging.getLogger(__name__)
 
 
-class RamsesESPException(Exception):
-    pass
-
-
 class RamsesESP:
     def __init__(
         self,

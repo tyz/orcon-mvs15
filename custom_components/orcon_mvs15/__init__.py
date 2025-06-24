@@ -11,6 +11,7 @@ from homeassistant.helpers.device_registry import async_get as get_dev_reg
 from .coordinator import OrconMVS15RuntimeData, OrconMVS15DataUpdateCoordinator
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
+from .handlers import DataHandlers
 from .const import (
     DOMAIN,
     CONF_GATEWAY_ID,
@@ -119,6 +120,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise PlatformNotReady(f"RamsesESP: {e}")
 
     entry.runtime_data.ramses_esp = ramses_esp
+
+    dh = DataHandlers(hass, entry)
+    for code, func in dh.pointers.items():
+        ramses_esp.add_handler(code, func)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
