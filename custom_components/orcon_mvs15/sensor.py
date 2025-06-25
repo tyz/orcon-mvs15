@@ -17,7 +17,7 @@ from homeassistant.const import (
     PERCENTAGE,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
 )
-from homeassistant.core import callback, HomeAssistant
+from homeassistant.core import callback, CoreState, HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -87,9 +87,14 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
             "vent_demand": None,
         }
 
+    async def async_added_to_hass(self) -> None:
+        if self.hass.state == CoreState.running:
+            _LOGGER.debug("Co2Sensor discovered in async_added_to_hass")
+            # TODO: call ramses_esp.init_co2() when discovered
+
     @callback
     def _handle_coordinator_update(self) -> None:
-        """handle updated data from the coordinator."""
+        """Handle updated data from the coordinator."""
         if not self.coordinator.data:
             return
         if "co2" in self.coordinator.data:
@@ -122,7 +127,7 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """handle updated data from the coordinator."""
+        """Handle updated data from the coordinator."""
         key = "relative_humidity"
         if self.coordinator.data and key in self.coordinator.data:
             self._attr_native_value = int(self.coordinator.data[key])
