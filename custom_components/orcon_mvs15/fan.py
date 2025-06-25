@@ -57,8 +57,8 @@ class OrconFan(CoordinatorEntity, FanEntity):
     _attr_preset_mode = "Auto"
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        super().__init__(entry.runtime_data.fan_coordinator)
         self.hass = hass
-        self.coordinator = entry.runtime_data.fan_coordinator
         self._entry = entry
         self._mqtt_topic = entry.data[CONF_MQTT_TOPIC]
         self._gateway_id = entry.data[CONF_GATEWAY_ID]
@@ -81,6 +81,7 @@ class OrconFan(CoordinatorEntity, FanEntity):
 
     async def async_added_to_hass(self) -> None:
         """Called when an entity has their entity_id and hass object assigned"""
+        await super().async_added_to_hass()
         if self.hass.state == CoreState.running:
             _LOGGER.info("Orcon MVS-15 integration has been setup")
             self.hass.async_create_task(self.setup())

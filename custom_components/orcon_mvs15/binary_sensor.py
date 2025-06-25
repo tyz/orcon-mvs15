@@ -43,7 +43,6 @@ class FaultBinarySensor(CoordinatorEntity, BinarySensorEntity):
         label: str,
     ) -> None:
         super().__init__(coordinator)
-        self.coordinator = coordinator
         self.label = label
         self._attr_name = f"Orcon MVS-15 {label} fault"
         self._attr_unique_id = f"orcon_mvs15_{label}_fault_{ramses_id}"

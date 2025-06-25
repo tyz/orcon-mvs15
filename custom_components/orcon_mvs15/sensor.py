@@ -69,7 +69,6 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         label: str,
     ) -> None:
         super().__init__(coordinator)
-        self.coordinator = coordinator
         gateway_id = config[CONF_GATEWAY_ID]
         self.co2_id = co2_id
         self._state = None
@@ -88,6 +87,7 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         }
 
     async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
         if self.hass.state == CoreState.running:
             _LOGGER.debug("Co2Sensor discovered in async_added_to_hass")
             # TODO: call ramses_esp.init_co2() when discovered
@@ -99,11 +99,11 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
             return
         if "co2" in self.coordinator.data:
             self._attr_native_value = int(self.coordinator.data["co2"])
-            self.async_write_ha_state()
         if "vent_demand" in self.coordinator.data:
             self._attr_extra_state_attributes["vent_demand"] = int(
                 self.coordinator.data["vent_demand"]
             )
+        if "co2" in self.coordinator.data or "vent_demand" in self.coordinator.data:
             self.async_write_ha_state()
 
 
@@ -121,7 +121,6 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
         label: str,
     ) -> None:
         super().__init__(coordinator)
-        self.coordinator = coordinator
         self._attr_unique_id = f"orcon_mvs15_humidity_{fan_id}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, fan_id)})
 
@@ -147,7 +146,6 @@ class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
         label: str,
     ) -> None:
         super().__init__(coordinator)
-        self.coordinator = coordinator
         self.label = label
         self._attr_name = f"Orcon MVS-15 {label} signal strength"
         self._attr_unique_id = f"orcon_mvs15_dbm_{ramses_id}"
