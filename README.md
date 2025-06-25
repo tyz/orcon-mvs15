@@ -73,15 +73,15 @@ Check the LED on the fan unit if it reports a fault:
 
 The following codes are supported by the Orcon MVS-15 fan. Not all codes are used (yet) by the integration.
 
-| Code | Description         | Used | FAN | CO₂ | RF  | Broadcast interval | Requestable | Notes                  |
-| ---- | ------------------- | ---- | --- | --- | --- | ------------------ | ----------- | ---------------------- |
-| 042F | ?                   | No   | Yes | No  | No  | -                  | No          | Broadcasted on powerup |
-| 10E0 | Device info         | Yes  | Yes | Yes | No  | 24h                | Yes         |                        |
-| 10E1 | Device ID           | No   | Yes | Yes | No  | -                  | Yes         |                        |
-| 1298 | CO₂ sensor          | Yes  | No  | Yes | No  | 10m                | Yes         |                        |
-| 12A0 | Indoor humidty      | Yes  | Yes | No  | No  | -                  | Yes         |                        |
-| 1FC9 | RF Bind             | No   | ?   | ?   |     | -                  | No          |                        |
-| 22F1 | Fan mode            | Yes  | Yes | No  | No  | -                  | Yes         |                        |
-| 22F3 | Fan mode with timer | Yes  | Yes | No  | No  | -                  | No          |                        |
-| 31D9 | Fan state           | Yes  | Yes | No  | No  | 5m                 | Yes         | Fan mode + fault flag  |
-| 31E0 | Vent demand         | Yes  | No  | Yes | No  | 5m                 | Yes         |                        |
+| Code | Description         | Used | FAN | CO₂ | RF  | Broadcast interval | Requestable | Notes                 |
+| ---- | ------------------- | ---- | --- | --- | --- | ------------------ | ----------- | --------------------- |
+| 042F | ?                   | Yes  | Yes | No  | No  | -                  | No          | Send on powerup       |
+| 10E0 | Device info         | Yes  | Yes | Yes | No  | 24h                | Yes         |                       |
+| 10E1 | Device ID           | No   | Yes | Yes | No  | -                  | Yes         |                       |
+| 1298 | CO₂ sensor          | Yes  | No  | Yes | No  | 10m                | Yes         |                       |
+| 12A0 | Indoor humidty      | Yes  | Yes | No  | No  | -                  | Yes         |                       |
+| 1FC9 | RF Bind             | No   | ?   | ?   |     | -                  | No          |                       |
+| 22F1 | Fan mode            | Yes  | Yes | No  | No  | -                  | Yes         |                       |
+| 22F3 | Fan mode with timer | Yes  | Yes | No  | No  | -                  | No          |                       |
+| 31D9 | Fan state           | Yes  | Yes | No  | No  | 5m                 | Yes         | Fan mode + fault flag |
+| 31E0 | Vent demand         | Yes  | No  | Yes | No  | 5m                 | Yes         |                       |

@@ -8,7 +8,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady, PlatformNotReady
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
-from .coordinator import OrconMVS15RuntimeData, OrconMVS15DataUpdateCoordinator
+from .models import OrconMVS15RuntimeData
+from .coordinator import OrconMVS15DataUpdateCoordinator
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
 from .handlers import DataHandlers

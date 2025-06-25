@@ -72,8 +72,13 @@ class RamsesESP:
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
 
-    async def init_co2(self) -> None:
+    async def init_co2(self, discovered_co2_id: RamsesID | None = None) -> None:
         """Fetch current CO2 sensor state + device info on startup or discovery"""
+        if discovered_co2_id:
+            _LOGGER.debug(
+                f"Fetching device info for discovered CO2 sensor ({self.co2_id})"
+            )
+            self.co2_id = discovered_co2_id
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.publish(Code31e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
@@ -108,7 +113,7 @@ class RamsesESP:
             )
 
     async def handle_ramses_mqtt_version_message(self, msg: ReceiveMessage) -> None:
-        """Update Ramses-ESP device"""
+        """Update Ramses-ESP device info"""
         dev_reg = get_dev_reg(self.hass)
         if (entry := dev_reg.async_get_device({(DOMAIN, self.gateway_id)})) is None:
             return
@@ -120,6 +125,7 @@ class RamsesESP:
         _LOGGER.info(f"Updated device info: {dev_info}")
 
     async def set_preset_mode(self, mode: str) -> None:
+        """Set fan preset mode"""
         try:
             packet = Code22f1.set(value=mode, src_id=self.remote_id, dst_id=self.fan_id)
         except Exception as e:
@@ -164,12 +170,16 @@ class RamsesESP:
             )
             code_class = Code
         payload = code_class(packet=packet)
-        if packet.src_id not in {
-            self.fan_id,
-            self.co2_id,
-            self.gateway_id,
-            self.remote_id,
-        }:
+        if (  # only our own devices or startup message
+            packet.src_id
+            not in {
+                self.fan_id,
+                self.co2_id,
+                self.gateway_id,
+                self.remote_id,
+            }
+            and packet.code != "042F"
+        ):
             if (
                 not self.co2_id
                 and packet.type == "I"

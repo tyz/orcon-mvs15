@@ -26,7 +26,8 @@ class DataHandlers:
         self.ramses_esp = entry.runtime_data.ramses_esp
         self._req_humidity_unsub: Callable | None = None
         self._cleanup = entry.runtime_data.cleanup
-        self.pointers: dict[str, Callable] = {
+        self.pointers: dict[str, Callable[[Code], None]] = {
+            "042F": self._powerup_handler,
             "10E0": self._device_info_handler,
             "1298": self._co2_handler,
             "12A0": self._relative_humidity_handler,
@@ -39,6 +40,19 @@ class DataHandlers:
             self._req_humidity_unsub()
             self._req_humidity_unsub = None
             _LOGGER.debug("Removed the interval call for the humidity sensor")
+
+    def _powerup_handler(self, payload: Code) -> None:
+        """Fan powerup payload, we use it for fan discovery"""
+        new_data = {
+            **self.fan_coordinator.data,
+            "fan_signal_strength": payload.values["signal_strength"],
+            "discovered_fan_id": payload.packet.src_id,
+        }
+        self.fan_coordinator.async_set_updated_data(new_data)
+        _LOGGER.info(
+            "Fan startup payload received, "
+            f"signal strength: {payload.values['signal_strength']} dBm"
+        )
 
     def _co2_handler(self, payload: Code) -> None:
         """Update CO2 sensor + attribute"""

@@ -23,8 +23,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, CONF_FAN_ID, CONF_GATEWAY_ID, CONF_CO2_ID
 from .coordinator import OrconMVS15DataUpdateCoordinator
-from .orcon_sensor import OrconSensor
-from .ramses_packet import RamsesPacketDatetime
+from .discover_entity import DiscoverEntity
+from .ramses_packet import RamsesPacketDatetime, RamsesID
+from .ramses_esp import RamsesESP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,22 +33,24 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: Callable
 ) -> None:
-    fan_sensor = OrconSensor(
+    fan_sensor = DiscoverEntity(
         hass=hass,
         async_add_entities=async_add_entities,
         config=entry.data,
         coordinator=entry.runtime_data.fan_coordinator,
+        ramses_esp=entry.runtime_data.ramses_esp,
         ramses_id=entry.data[CONF_FAN_ID],
         label="fan",
         entities=[HumiditySensor, SignalStrengthSensor],
     )
     entry.runtime_data.cleanup.append(fan_sensor.cleanup)
 
-    co2_sensor = OrconSensor(
+    co2_sensor = DiscoverEntity(
         hass=hass,
         async_add_entities=async_add_entities,
         config=entry.data,
         coordinator=entry.runtime_data.co2_coordinator,
+        ramses_esp=entry.runtime_data.ramses_esp,
         ramses_id=entry.data.get(CONF_CO2_ID),
         label="CO2",
         entities=[Co2Sensor, SignalStrengthSensor],
@@ -63,22 +66,24 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
 
     def __init__(
         self,
-        co2_id: str,
+        hass: HomeAssistant,
+        ramses_id: RamsesID,
         config: MappingProxyType[str, Any],
         coordinator: OrconMVS15DataUpdateCoordinator,
+        ramses_esp: RamsesESP,
         label: str,
     ) -> None:
         super().__init__(coordinator)
-        gateway_id = config[CONF_GATEWAY_ID]
-        self.co2_id = co2_id
+        self.co2_id = ramses_id
+        self.ramses_esp = ramses_esp
         self._state = None
-        self._attr_unique_id = f"orcon_mvs15_co2_{co2_id}"
+        self._attr_unique_id = f"orcon_mvs15_co2_{self.co2_id}"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, co2_id)},
+            identifiers={(DOMAIN, self.co2_id)},
             manufacturer="Orcon",
             model="MVS-15RH CO2B",
-            name=f"Orcon CO2 remote 15RF ({co2_id})",
-            via_device=(DOMAIN, gateway_id),
+            name=f"Orcon CO2 remote 15RF ({self.co2_id})",
+            via_device=(DOMAIN, config[CONF_GATEWAY_ID]),
         )
         self._attr_extra_state_attributes: dict[
             str, str | int | bool | RamsesPacketDatetime | None
@@ -89,8 +94,7 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         if self.hass.state == CoreState.running:
-            _LOGGER.debug("Co2Sensor discovered in async_added_to_hass")
-            # TODO: call ramses_esp.init_co2() when discovered
+            await self.ramses_esp.init_co2(discovered_co2_id=self.co2_id)
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -115,14 +119,16 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
 
     def __init__(
         self,
-        fan_id: str,
-        config: MappingProxyType[str, Any],
+        hass: HomeAssistant,
+        ramses_id: RamsesID,
+        config: ConfigEntry,
         coordinator: OrconMVS15DataUpdateCoordinator,
+        ramses_esp: RamsesESP,
         label: str,
     ) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"orcon_mvs15_humidity_{fan_id}"
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, fan_id)})
+        self._attr_unique_id = f"orcon_mvs15_humidity_{ramses_id}"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, ramses_id)})
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -140,9 +146,11 @@ class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(
         self,
+        hass: HomeAssistant,
         ramses_id: str,
         config: ConfigEntry,
         coordinator: OrconMVS15DataUpdateCoordinator,
+        ramses_esp: RamsesESP,
         label: str,
     ) -> None:
         super().__init__(coordinator)
