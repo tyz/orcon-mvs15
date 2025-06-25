@@ -65,8 +65,6 @@ class OrconFan(CoordinatorEntity, FanEntity):
         self._remote_id = entry.data[CONF_REMOTE_ID]
         self._fan_id = entry.data[CONF_FAN_ID]
         self._ramses_esp = entry.runtime_data.ramses_esp
-        self._req_humidity_unsub = None
-        entry.runtime_data.cleanup.append(self.cleanup)
         self._attr_unique_id = f"orcon_mvs15_{self._fan_id}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._fan_id)},
@@ -106,12 +104,6 @@ class OrconFan(CoordinatorEntity, FanEntity):
             ]
         if "fan_mode" in self.coordinator.data or "fan_fault" in self.coordinator.data:
             self.async_write_ha_state()
-
-    def cleanup(self) -> None:
-        if hasattr(self, "_req_humidity_unsub") and self._req_humidity_unsub:
-            self._req_humidity_unsub()
-            self._req_humidity_unsub = None
-            _LOGGER.debug("Removed the interval call for the humidity sensor")
 
     async def setup(self, event: Event | None = None) -> None:
         await self._ramses_esp.setup(event)

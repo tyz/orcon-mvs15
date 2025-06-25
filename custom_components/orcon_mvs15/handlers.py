@@ -34,6 +34,12 @@ class DataHandlers:
             "31E0": self._vent_demand_handler,
         }
 
+    def cleanup(self) -> None:
+        if hasattr(self, "_req_humidity_unsub") and self._req_humidity_unsub:
+            self._req_humidity_unsub()
+            self._req_humidity_unsub = None
+            _LOGGER.debug("Removed the interval call for the humidity sensor")
+
     def _co2_handler(self, payload: Code) -> None:
         """Update CO2 sensor + attribute"""
         new_data = {
@@ -96,7 +102,7 @@ class DataHandlers:
                 self.ramses_esp.req_humidity,
                 timedelta(minutes=poll_interval),
             )
-            self._cleanup.append(self._req_humidity_unsub)
+            self._cleanup.append(self.cleanup)
             _LOGGER.info(
                 f"Humidity sensor detected, fetching value every {poll_interval} minutes"
             )
