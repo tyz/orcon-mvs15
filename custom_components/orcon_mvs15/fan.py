@@ -31,14 +31,10 @@ from .const import (
 # * MQTT via_device for RAMSES_ESP
 # * Use a custom Python type for the config data
 # * Create devices in __init__._setup_coordinator, sensors and such only set identifiers
-# * Auto discovery
-#   - Discover fan_id: turn off/on the fan unit, fan_id == src_id of 1st 042F packet
+# * Auto discovery todo
 #   - Bind as remote with random remote_id (1FC9)
 #   - or: Discover existing remote by 22F1/22F3 packets to use that remote_id
-#   - [DONE] Discover CO2: remote_id is a type I, code 31E0 to fan_id
-#   - [DONE] Discover humidity: create sensor only after first successful pull
 # * Add logo to https://brands.home-assistant.io/
-# * Req 10e0, 31e0 and 1298 after CO2 sensors have been created/discovered
 
 _LOGGER = logging.getLogger(__name__)
 

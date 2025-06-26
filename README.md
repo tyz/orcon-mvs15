@@ -13,24 +13,29 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
 ## Features
 
 - Creates a fan entity with all supported presets (Away, Auto, Low, Medium, High + High 15/30/60m timed modes)
-- [TODO] Auto-detects the fan
+- Auto-detects the fan
 - Auto-detects a CO₂ remote and creates an HA sensor
 - Auto-detects the fan's humidity sensor and creates an HA sensor
 - Creates a binary sensor that triggers when the fan reports a fault
-- The fan reported mode is used to update the fan's current preset in HA, so it will notice when the mode was changed by an RF15 remote for example
+- The fan reported mode is used to update the fan's current preset in HA, so it
+  will immediately notice when the mode was changed by an RF15 remote for example
+
+## TODO
+
+- Setup a fake remote and pair it with the fan
+- Ramses ESP stick via USB (currently only supports MQTT)
+
+## Install
+
+You can install this integration by adding its Github repository to the HACS configuration under `Custom repositories`.
 
 ## Auto-discovery
 
+1. Install and configure the integration
 1. Turn the fan off and on again
 1. The fan will be discovered by a startup message (042F) it sends out
 1. The state of the humidity sensor (part of the fan) will be requested (12A0), and will be setup in HA if it responds
 1. The CO₂ sensor/remote will be discovered as soon as it sends a vent demand message (31E0) to the above fan (might take a while)
-
-## TODO
-
-- Auto-discovery for the fan
-- Create a random remote id and use that to bind to the fan
-- Ramses ESP stick via USB
 
 ## Lovelace
 
@@ -75,7 +80,7 @@ The following codes are supported by the Orcon MVS-15 fan. Not all codes are use
 
 | Code | Description         | Used | FAN | CO₂ | RF  | Broadcast interval | Requestable | Notes                 |
 | ---- | ------------------- | ---- | --- | --- | --- | ------------------ | ----------- | --------------------- |
-| 042F | ?                   | Yes  | Yes | No  | No  | -                  | No          | Send on powerup       |
+| 042F | Power cycle counter | Yes  | Yes | No  | No  | -                  | No          | Send on powerup       |
 | 10E0 | Device info         | Yes  | Yes | Yes | No  | 24h                | Yes         |                       |
 | 10E1 | Device ID           | No   | Yes | Yes | No  | -                  | Yes         |                       |
 | 1298 | CO₂ sensor          | Yes  | No  | Yes | No  | 10m                | Yes         |                       |
