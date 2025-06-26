@@ -20,7 +20,8 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(title="Orcon MVS-15", data=user_input)
+            self._user_input = user_input
+            return await self.async_step_discovery_info()
 
         return self.async_show_form(
             step_id="user",
@@ -30,4 +31,18 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
                     vol.Required(CONF_MQTT_TOPIC, default="RAMSES/GATEWAY"): str,
                 }
             ),
+        )
+
+    async def async_step_discovery_info(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(
+                title="Orcon MVS-15",
+                data=self._user_input,
+            )
+
+        return self.async_show_form(
+            step_id="discovery_info",
+            description_placeholders={},
         )

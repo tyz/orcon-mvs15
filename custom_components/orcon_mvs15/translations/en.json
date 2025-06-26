@@ -8,6 +8,10 @@
           "remote_id": "Remote ID (e.g., 29:123456)",
           "mqtt_topic": "MQTT Topic Prefix (e.g., RAMSES/GATEWAY)"
         }
+      },
+      "discovery_info": {
+        "title": "Device Discovery",
+        "description": "To auto-discover your Orcon MVS-15 fan, please power cycle it after completing this setup. It will be added automatically once its startup message is received."
       }
     }
   }

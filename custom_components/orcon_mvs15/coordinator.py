@@ -20,9 +20,7 @@ class OrconMVS15DataUpdateCoordinator(DataUpdateCoordinator[dict[str, str | int]
         )
 
     async def _async_update_data(self) -> dict:
-        """Will be called once, polling will be disabled as soon as the first
-        Ramses II informational or response payload has been received and
-        async_set_updated_data gets called. So we just return the current data for now"""
+        """We use it for push only"""
         if not self.data:
             return {}
         return {**self.data}

@@ -8,6 +8,10 @@
           "remote_id": "Afstandbediening ID (bijv. 29:123456)",
           "mqtt_topic": "MQTT topic prefix (bijv. RAMSES/GATEWAY)"
         }
+      },
+      "discovery_info": {
+        "title": "Apparaatdetectie",
+        "description": "Om de Orcon MVS-15 automatisch te detecteren, haal je de stekker even uit het stopcontact en steek je die daarna weer in. De ventilator wordt automatisch toegevoegd zodra het opstartbericht is ontvangen."
       }
     }
   }
