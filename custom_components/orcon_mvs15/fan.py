@@ -7,7 +7,6 @@ from types import MappingProxyType
 
 from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import callback, CoreState, HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -55,8 +54,9 @@ async def async_setup_entry(
         config=entry.data,
         coordinator=entry.runtime_data.fan_coordinator,
         ramses_esp=entry.runtime_data.ramses_esp,
-        ramses_id=entry.data[CONF_FAN_ID],
-        label="fan",
+        ramses_id=entry.data.get(CONF_FAN_ID),
+        name="Orcon MVS-15 fan",
+        discovery_key="fan",
         entities=[OrconFan],
     )
     entry.runtime_data.cleanup.append(fan.cleanup)
@@ -68,7 +68,6 @@ class OrconFan(CoordinatorEntity, FanEntity):
     _attr_preset_modes = Code22f1.presets()
     _attr_supported_features = FanEntityFeature.PRESET_MODE
     _attr_translation_key = "fan_states"  # see icons.json
-    _attr_name = "Orcon MVS-15 fan"
     _attr_preset_mode = "Auto"
 
     def __init__(
@@ -78,20 +77,23 @@ class OrconFan(CoordinatorEntity, FanEntity):
         config: MappingProxyType[str, Any],
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
-        label: str,
+        name: str,
+        discovery_key: str,
     ) -> None:
         super().__init__(coordinator)
         self.hass = hass
-        self._gateway_id = config[CONF_GATEWAY_ID]
-        self._fan_id = config[CONF_FAN_ID]
-        self._ramses_esp = ramses_esp
-        self._attr_unique_id = f"orcon_mvs15_{self._fan_id}"
+        self.fan_id = ramses_id
+        self.ramses_esp = ramses_esp
+        self.discovery_key = discovery_key
+        self.gateway_id = config[CONF_GATEWAY_ID]
+        self._attr_name = name
+        self._attr_unique_id = f"orcon_mvs15_{self.fan_id}"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, self._fan_id)},
+            identifiers={(DOMAIN, self.fan_id)},
             manufacturer="Orcon",
             model="MVS-15",
-            name=f"{self.name} ({self._fan_id})",
-            via_device=(DOMAIN, self._gateway_id),
+            name=f"{self.name} ({self.fan_id})",
+            via_device=(DOMAIN, self.gateway_id),
         )
         self._attr_extra_state_attributes: dict[
             str, str | int | bool | RamsesPacketDatetime | None
@@ -99,26 +101,17 @@ class OrconFan(CoordinatorEntity, FanEntity):
             "fan_fault": None,
         }
 
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
+        await self.ramses_esp.set_preset_mode(preset_mode)
+
     async def async_added_to_hass(self) -> None:
-        """Called when an entity has their entity_id and hass object assigned"""
         await super().async_added_to_hass()
         if self.hass.state == CoreState.running:
-            _LOGGER.info("Orcon MVS-15 integration has been setup")
-            self.hass.async_create_task(self._ramses_esp.setup())
-        else:
-            _LOGGER.info("Orcon MVS-15 integration has been loaded after restart")
-            self.hass.bus.async_listen_once(
-                EVENT_HOMEASSISTANT_STARTED, self._ramses_esp.setup
-            )
-
-    async def async_set_preset_mode(self, preset_mode: str) -> None:
-        await self._ramses_esp.set_preset_mode(preset_mode)
+            await self.ramses_esp.init_fan(discovered_fan_id=self.fan_id)
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """handle updated data from the coordinator."""
-        if not self.coordinator.data:
-            return
         if "fan_mode" in self.coordinator.data:
             self._attr_preset_mode = self.coordinator.data["fan_mode"]
         if "fan_fault" in self.coordinator.data:

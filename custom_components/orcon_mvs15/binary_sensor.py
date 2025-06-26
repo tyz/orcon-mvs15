@@ -30,8 +30,9 @@ async def async_setup_entry(
         config=entry.data,
         coordinator=entry.runtime_data.fan_coordinator,
         ramses_esp=entry.runtime_data.ramses_esp,
-        ramses_id=entry.data[CONF_FAN_ID],
-        label="fan",
+        ramses_id=entry.data.get(CONF_FAN_ID),
+        name="Orcon MVS-15 fan",
+        discovery_key="fan",
         entities=[FaultBinarySensor],
     )
     entry.runtime_data.cleanup.append(fan_sensor.cleanup)
@@ -47,18 +48,18 @@ class FaultBinarySensor(CoordinatorEntity, BinarySensorEntity):
         config: MappingProxyType[str, Any],
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
-        label: str,
+        name: str,
+        discovery_key: str,
     ) -> None:
         super().__init__(coordinator)
-        self.label = label
-        self._attr_name = f"Orcon MVS-15 {label} fault"
-        self._attr_unique_id = f"orcon_mvs15_{label}_fault_{ramses_id}"
+        self.discovery_key = discovery_key
+        self._attr_name = f"{name} fault"
+        self._attr_unique_id = f"orcon_mvs15_{self.discovery_key}_fault_{ramses_id}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, ramses_id)})
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self._attr_is_on = bool(
-            self.coordinator.data.get(f"{self.label.lower()}_fault")
-        )
+        key = f"{self.discovery_key}_fault"
+        self._attr_is_on = bool(self.coordinator.data.get(key))
         self.async_write_ha_state()

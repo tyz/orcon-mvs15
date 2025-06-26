@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.exceptions import ConfigEntryNotReady, PlatformNotReady
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
@@ -112,7 +112,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             mqtt=mqtt,
             gateway_id=entry.data[CONF_GATEWAY_ID],
             remote_id=entry.data[CONF_REMOTE_ID],
-            fan_id=entry.data[CONF_FAN_ID],
+            fan_id=entry.data.get(CONF_FAN_ID),
             co2_id=entry.data.get(CONF_CO2_ID),
         )
     except ConfigEntryNotReady:
@@ -125,6 +125,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     dh = DataHandlers(hass, entry)
     for code, func in dh.pointers.items():
         ramses_esp.add_handler(code, func)
+
+    if hass.state == CoreState.running:
+        _LOGGER.info("Orcon MVS-15 integration has been setup")
+        hass.async_create_task(ramses_esp.setup())
+    else:
+        _LOGGER.info("Orcon MVS-15 integration has been loaded after restart")
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, ramses_esp.setup)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

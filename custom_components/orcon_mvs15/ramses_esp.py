@@ -62,12 +62,16 @@ class RamsesESP:
         if event:  # only on Home-Assistant restart
             """sleep for a bit, mqtt (or the stick) is not ready yet for some reason"""
             await asyncio.sleep(2)
-        await self.init_fan()
+        if self.fan_id:
+            await self.init_fan()
         if self.co2_id:
             await self.init_co2()
 
-    async def init_fan(self) -> None:
+    async def init_fan(self, discovered_fan_id: RamsesID | None = None) -> None:
         """Fetch current fan state + device info on startup"""
+        if discovered_fan_id:
+            self.fan_id = discovered_fan_id
+            _LOGGER.debug(f"Fetching device info for discovered fan ({self.fan_id})")
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
@@ -75,10 +79,10 @@ class RamsesESP:
     async def init_co2(self, discovered_co2_id: RamsesID | None = None) -> None:
         """Fetch current CO2 sensor state + device info on startup or discovery"""
         if discovered_co2_id:
+            self.co2_id = discovered_co2_id
             _LOGGER.debug(
                 f"Fetching device info for discovered CO2 sensor ({self.co2_id})"
             )
-            self.co2_id = discovered_co2_id
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.publish(Code1298.get(src_id=self.gateway_id, dst_id=self.co2_id))
         await self.publish(Code31e0.get(src_id=self.gateway_id, dst_id=self.co2_id))
@@ -170,7 +174,7 @@ class RamsesESP:
             )
             code_class = Code
         payload = code_class(packet=packet)
-        if (  # only our own devices or startup message
+        if (  # only continue with our own devices or on a startup message
             packet.src_id
             not in {
                 self.fan_id,
@@ -188,12 +192,15 @@ class RamsesESP:
                 and packet.dst_id == self.fan_id
             ):
                 """Fan received a vent demand payload, that's our CO2 sensor, handler func will handle it"""
+                """FIXME: Should not be handled this way"""
                 self.co2_id = packet.src_id
                 _LOGGER.debug(f"Discovered CO2 sensor ({self.co2_id})")
             else:
                 return
-        if packet.type == "RQ":
-            """Don't call handler function on something we send ourselves (TODO: needed w/ timed fan with 22f3)"""
+        if (
+            packet.signal_strength == 0 and packet.code != "042F"
+        ):  # 042F is for testing only, where I publish it myself
+            """Don't call handler function on something we send ourselves (TODO: needed w/ timed fan with 22F3)"""
             return
         if (q_packet := self._send_queue.get(packet)) is not None:
             self._send_queue.remove(q_packet)

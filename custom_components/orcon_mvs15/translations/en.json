@@ -2,11 +2,10 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configure Orcon MVS",
-        "description": "Enter the settings for your Orcon ventilation unit.",
+        "title": "Configure Orcon MVS-15",
+        "description": "Enter the settings for your Orcon MVS-15 ventilation unit.",
         "data": {
-          "fan_id": "Fan ID (e.g., 32:096887)",
-          "remote_id": "Remote ID (e.g., 29:183031)",
+          "remote_id": "Remote ID (e.g., 29:123456)",
           "mqtt_topic": "MQTT Topic Prefix (e.g., RAMSES/GATEWAY)"
         }
       }

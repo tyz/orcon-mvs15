@@ -33,17 +33,31 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: Callable
 ) -> None:
-    fan_sensor = DiscoverEntity(
+    fanss_sensor = DiscoverEntity(
         hass=hass,
         async_add_entities=async_add_entities,
         config=entry.data,
         coordinator=entry.runtime_data.fan_coordinator,
         ramses_esp=entry.runtime_data.ramses_esp,
-        ramses_id=entry.data[CONF_FAN_ID],
-        label="fan",
-        entities=[HumiditySensor, SignalStrengthSensor],
+        ramses_id=entry.data.get(CONF_FAN_ID),
+        name="Orcon MVS-15 fan",
+        discovery_key="fan",
+        entities=[SignalStrengthSensor],
     )
-    entry.runtime_data.cleanup.append(fan_sensor.cleanup)
+    entry.runtime_data.cleanup.append(fanss_sensor.cleanup)
+
+    hum_sensor = DiscoverEntity(
+        hass=hass,
+        async_add_entities=async_add_entities,
+        config=entry.data,
+        coordinator=entry.runtime_data.fan_coordinator,
+        ramses_esp=entry.runtime_data.ramses_esp,
+        ramses_id=entry.data.get(CONF_FAN_ID),
+        name="Orcon MVS-15 fan",
+        discovery_key="humidity",
+        entities=[HumiditySensor],
+    )
+    entry.runtime_data.cleanup.append(hum_sensor.cleanup)
 
     co2_sensor = DiscoverEntity(
         hass=hass,
@@ -52,14 +66,14 @@ async def async_setup_entry(
         coordinator=entry.runtime_data.co2_coordinator,
         ramses_esp=entry.runtime_data.ramses_esp,
         ramses_id=entry.data.get(CONF_CO2_ID),
-        label="CO2",
+        name="Orcon MVS-15 CO2",
+        discovery_key="co2",
         entities=[Co2Sensor, SignalStrengthSensor],
     )
     entry.runtime_data.cleanup.append(co2_sensor.cleanup)
 
 
 class Co2Sensor(CoordinatorEntity, SensorEntity):
-    _attr_name = "Orcon MVS-15 CO2"
     _attr_native_unit_of_measurement = CONCENTRATION_PARTS_PER_MILLION
     _attr_device_class = SensorDeviceClass.CO2
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -71,12 +85,15 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         config: MappingProxyType[str, Any],
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
-        label: str,
+        name: str,
+        discovery_key: str,
     ) -> None:
         super().__init__(coordinator)
         self.co2_id = ramses_id
         self.ramses_esp = ramses_esp
+        self.discovery_key = discovery_key
         self._state = None
+        self._attr_name = name
         self._attr_unique_id = f"orcon_mvs15_co2_{self.co2_id}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self.co2_id)},
@@ -99,8 +116,6 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        if not self.coordinator.data:
-            return
         if "co2" in self.coordinator.data:
             self._attr_native_value = int(self.coordinator.data["co2"])
         if "vent_demand" in self.coordinator.data:
@@ -112,7 +127,6 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
 
 
 class HumiditySensor(CoordinatorEntity, SensorEntity):
-    _attr_name = "Orcon MVS-15 Relative Humidity"
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_device_class = SensorDeviceClass.HUMIDITY
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -124,9 +138,12 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
         config: ConfigEntry,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
-        label: str,
+        name: str,
+        discovery_key: str,
     ) -> None:
         super().__init__(coordinator)
+        self.discovery_key = discovery_key
+        self._attr_name = f"{name} relative humidity"
         self._attr_unique_id = f"orcon_mvs15_humidity_{ramses_id}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, ramses_id)})
 
@@ -134,7 +151,7 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         key = "relative_humidity"
-        if self.coordinator.data and key in self.coordinator.data:
+        if key in self.coordinator.data:
             self._attr_native_value = int(self.coordinator.data[key])
             self.async_write_ha_state()
 
@@ -151,18 +168,19 @@ class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
         config: ConfigEntry,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
-        label: str,
+        name: str,
+        discovery_key: str,
     ) -> None:
         super().__init__(coordinator)
-        self.label = label
-        self._attr_name = f"Orcon MVS-15 {label} signal strength"
-        self._attr_unique_id = f"orcon_mvs15_dbm_{ramses_id}"
+        self.discovery_key = discovery_key
+        self._attr_name = f"{name} signal strength"
+        self._attr_unique_id = f"orcon_mvs15_{discovery_key}_dbm_{ramses_id}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, ramses_id)})
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        key = f"{self.label.lower()}_signal_strength"
-        if self.coordinator.data and key in self.coordinator.data:
+        key = f"{self.discovery_key}_signal_strength"
+        if key in self.coordinator.data:
             self._attr_native_value = int(self.coordinator.data[key])
             self.async_write_ha_state()

@@ -390,9 +390,7 @@ class Code1fc9(Code):
 
 
 class Code042f(Code):
-    """Unknown, broadcasted on startup
-    23-5-2025: 042F 006 000042004200
-    23-6-2025: 042F 006 000043004300"""
+    """Counter that seem to increase on every power cycle. Broadcasted on startup"""
 
     _code = "042F"
 
@@ -404,8 +402,8 @@ class Code042f(Code):
         self.values = {
             "_label": "Unknown (042F)",
             "signal_strength": -self.packet.signal_strength,
-            "counter_1": f"0x{self.packet.data[2:6]}",
-            "counter_2": f"0x{self.packet.data[6:10]}",
+            "power_cycles": f"0x{self.packet.data[2:6]}",
+            "power_cycles_2": f"0x{self.packet.data[6:10]}",
         }
 
     @classmethod

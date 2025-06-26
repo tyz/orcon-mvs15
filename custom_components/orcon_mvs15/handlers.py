@@ -43,72 +43,47 @@ class DataHandlers:
 
     def _powerup_handler(self, payload: Code) -> None:
         """Fan powerup payload, we use it for fan discovery"""
-        new_data = {
-            **self.fan_coordinator.data,
-            "fan_signal_strength": payload.values["signal_strength"],
-            "discovered_fan_id": payload.packet.src_id,
-        }
-        self.fan_coordinator.async_set_updated_data(new_data)
         _LOGGER.info(
             "Fan startup payload received, "
             f"signal strength: {payload.values['signal_strength']} dBm"
         )
-
-    def _co2_handler(self, payload: Code) -> None:
-        """Update CO2 sensor + attribute"""
-        new_data = {
-            **self.co2_coordinator.data,
-            "co2": payload.values["level"],
-            "co2_signal_strength": payload.values["signal_strength"],
-        }
-        self.co2_coordinator.async_set_updated_data(new_data)
-        _LOGGER.info(
-            f"Current CO2 level: {payload.values['level']} ppm, "
-            f"Signal strength: {payload.values['signal_strength']} dBm"
-        )
-
-    def _vent_demand_handler(self, payload: Code) -> None:
-        """Update Vent demand attribute"""
-        new_data = {
-            **self.co2_coordinator.data,
-            "vent_demand": payload.values["percentage"],
-            "co2_signal_strength": payload.values["signal_strength"],
-            "discovered_co2_id": payload.packet.src_id,
-        }
-        self.co2_coordinator.async_set_updated_data(new_data)
-        _LOGGER.info(
-            f"Vent demand: {payload.values['percentage']}%, "
-            f"unknown: {payload.values['unknown']}, "
-            f"signal strength: {payload.values['signal_strength']} dBm"
-        )
-
-    def _fan_state_handler(self, payload: Code) -> None:
-        """Update fan mode and fault state"""
         new_data = {
             **self.fan_coordinator.data,
-            "fan_mode": payload.values["fan_mode"],
-            "fan_fault": payload.values["has_fault"],
+            "discovered_fan_id": payload.packet.ann_id,
             "fan_signal_strength": payload.values["signal_strength"],
         }
         self.fan_coordinator.async_set_updated_data(new_data)
+
+    def _fan_state_handler(self, payload: Code) -> None:
+        """Update fan mode and fault state"""
         _LOGGER.info(
             f"Current fan mode: {payload.values['fan_mode']}, "
             f"has_fault: {payload.values['has_fault']}, "
             f"signal strength: {payload.values['signal_strength']} dBm"
         )
+        new_data = {
+            **self.fan_coordinator.data,
+            "fan_mode": payload.values["fan_mode"],
+            "fan_fault": payload.values["has_fault"],
+            "fan_signal_strength": payload.values["signal_strength"],
+            "discovered_fan_id": payload.packet.src_id,
+        }
+        self.fan_coordinator.async_set_updated_data(new_data)
 
     def _relative_humidity_handler(self, payload: Code) -> None:
         """Update relative humidity attribute"""
+        _LOGGER.info(
+            f"Current humidity level: {payload.values['level']}%, "
+            f"signal strength: {payload.values['signal_strength']} dBm"
+        )
         new_data = {
             **self.fan_coordinator.data,
             "relative_humidity": payload.values["level"],
             "fan_signal_strength": payload.values["signal_strength"],
+            "discovered_humidity_id": payload.packet.src_id,
+            "discovered_fan_id": payload.packet.src_id,
         }
         self.fan_coordinator.async_set_updated_data(new_data)
-        _LOGGER.info(
-            f"Current humidity level: {payload.values['level']}%, "
-            f"Signal strength: {payload.values['signal_strength']} dBm"
-        )
         if not self._req_humidity_unsub:
             poll_interval = 5
             self._req_humidity_unsub = async_track_time_interval(
@@ -120,6 +95,34 @@ class DataHandlers:
             _LOGGER.info(
                 f"Humidity sensor detected, fetching value every {poll_interval} minutes"
             )
+
+    def _co2_handler(self, payload: Code) -> None:
+        """Update CO2 sensor + attribute"""
+        _LOGGER.info(
+            f"Current CO2 level: {payload.values['level']} ppm, "
+            f"signal strength: {payload.values['signal_strength']} dBm"
+        )
+        new_data = {
+            **self.co2_coordinator.data,
+            "co2": payload.values["level"],
+            "co2_signal_strength": payload.values["signal_strength"],
+        }
+        self.co2_coordinator.async_set_updated_data(new_data)
+
+    def _vent_demand_handler(self, payload: Code) -> None:
+        """Update Vent demand attribute"""
+        _LOGGER.info(
+            f"Vent demand: {payload.values['percentage']}%, "
+            f"unknown: {payload.values['unknown']}, "
+            f"signal strength: {payload.values['signal_strength']} dBm"
+        )
+        new_data = {
+            **self.co2_coordinator.data,
+            "vent_demand": payload.values["percentage"],
+            "co2_signal_strength": payload.values["signal_strength"],
+            "discovered_co2_id": payload.packet.src_id,
+        }
+        self.co2_coordinator.async_set_updated_data(new_data)
 
     def _device_info_handler(self, payload: Code) -> None:
         """Update device info"""
@@ -139,8 +142,8 @@ class DataHandlers:
             "sw_version": int(str(payload.values["software_ver_id"]), 16),
             "model_id": payload.values["description"],
         }
-        dev_reg.async_update_device(**dev_info)
         _LOGGER.info(
-            f"Updated device info: {dev_info}, "
-            f"Signal strength: {payload.values['signal_strength']} dBm"
+            f"Updating device info: {dev_info}, "
+            f"signal strength: {payload.values['signal_strength']} dBm"
         )
+        dev_reg.async_update_device(**dev_info)
