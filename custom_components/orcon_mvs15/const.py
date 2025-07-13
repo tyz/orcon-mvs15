@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 DOMAIN: str = "orcon_mvs15"
 CONF_GATEWAY_ID: str = "gateway_id"
 CONF_REMOTE_ID: str = "remote_id"

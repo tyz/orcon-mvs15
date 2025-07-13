@@ -157,7 +157,7 @@ class Code22f1(Code):
                 if v == self.packet.data:
                     self.values.update({"fan_mode": k})
                     return
-            _LOGGER.warning(f"Unknown preset for 22F1/22F3: {self.packet.data}")
+            _LOGGER.debug(f"Unknown preset for 22F1/22F3: {self.packet.data}")
 
     @classmethod
     def set(cls, src_id: RamsesID, dst_id: RamsesID, value: str) -> RamsesPacket:

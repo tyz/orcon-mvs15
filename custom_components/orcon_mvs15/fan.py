@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import logging
 
-from typing import Any
-from types import MappingProxyType
 
 from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.config_entries import ConfigEntry
@@ -12,29 +10,13 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .models import OrconMVS15Config
 from .ramses_packet import RamsesPacketDatetime, RamsesID
 from .ramses_esp import RamsesESP
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .discover_entity import DiscoverEntity
 from .codes import Code22f1
-from .const import (
-    DOMAIN,
-    CONF_GATEWAY_ID,
-    CONF_FAN_ID,
-)
-
-# TODO:
-# * pytest
-# * LICENSE
-# * Add USB support for Ramses ESP (https://developers.home-assistant.io/docs/creating_integration_manifest?_highlight=mqtt#usb)
-# * Start home-assistant timer on timed fan modes (22F3)
-# * MQTT via_device for RAMSES_ESP
-# * Use a custom Python type for the config data
-# * Create devices in __init__._setup_coordinator, sensors and such only set identifiers
-# * Auto discovery todo
-#   - Bind as remote with random remote_id (1FC9)
-#   - or: Discover existing remote by 22F1/22F3 packets to use that remote_id
-# * Add logo to https://brands.home-assistant.io/
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,10 +29,10 @@ async def async_setup_entry(
     fan = DiscoverEntity(
         hass=hass,
         async_add_entities=async_add_entities,
-        config=entry.data,
+        config=entry.runtime_data.config,
         coordinator=entry.runtime_data.fan_coordinator,
         ramses_esp=entry.runtime_data.ramses_esp,
-        ramses_id=entry.data.get(CONF_FAN_ID),
+        ramses_id=entry.runtime_data.config.fan_id,
         name="Orcon MVS-15 fan",
         discovery_key="fan",
         entities=[OrconFan],
@@ -70,7 +52,7 @@ class OrconFan(CoordinatorEntity, FanEntity):
         self,
         hass: HomeAssistant,
         ramses_id: RamsesID,
-        config: MappingProxyType[str, Any],
+        config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
         name: str,
@@ -81,7 +63,7 @@ class OrconFan(CoordinatorEntity, FanEntity):
         self.fan_id = ramses_id
         self.ramses_esp = ramses_esp
         self.discovery_key = discovery_key
-        self.gateway_id = config[CONF_GATEWAY_ID]
+        self.gateway_id = config.gateway_id
         self._attr_name = name
         self._attr_unique_id = f"orcon_mvs15_{self.fan_id}"
         self._attr_device_info = DeviceInfo(

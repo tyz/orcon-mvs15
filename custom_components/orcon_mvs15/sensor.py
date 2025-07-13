@@ -3,8 +3,6 @@ from __future__ import annotations
 import logging
 
 from collections.abc import Callable
-from types import MappingProxyType
-from typing import Any
 
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -21,7 +19,8 @@ from homeassistant.core import callback, CoreState, HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, CONF_FAN_ID, CONF_GATEWAY_ID, CONF_CO2_ID
+from .const import DOMAIN
+from .models import OrconMVS15Config
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .discover_entity import DiscoverEntity
 from .ramses_packet import RamsesPacketDatetime, RamsesID
@@ -36,10 +35,10 @@ async def async_setup_entry(
     fanss_sensor = DiscoverEntity(
         hass=hass,
         async_add_entities=async_add_entities,
-        config=entry.data,
+        config=entry.runtime_data.config,
         coordinator=entry.runtime_data.fan_coordinator,
         ramses_esp=entry.runtime_data.ramses_esp,
-        ramses_id=entry.data.get(CONF_FAN_ID),
+        ramses_id=entry.runtime_data.config.fan_id,
         name="Orcon MVS-15 fan",
         discovery_key="fan",
         entities=[SignalStrengthSensor],
@@ -49,10 +48,10 @@ async def async_setup_entry(
     hum_sensor = DiscoverEntity(
         hass=hass,
         async_add_entities=async_add_entities,
-        config=entry.data,
+        config=entry.runtime_data.config,
         coordinator=entry.runtime_data.fan_coordinator,
         ramses_esp=entry.runtime_data.ramses_esp,
-        ramses_id=entry.data.get(CONF_FAN_ID),
+        ramses_id=entry.runtime_data.config.fan_id,
         name="Orcon MVS-15 fan",
         discovery_key="humidity",
         entities=[HumiditySensor],
@@ -62,10 +61,10 @@ async def async_setup_entry(
     co2_sensor = DiscoverEntity(
         hass=hass,
         async_add_entities=async_add_entities,
-        config=entry.data,
+        config=entry.runtime_data.config,
         coordinator=entry.runtime_data.co2_coordinator,
         ramses_esp=entry.runtime_data.ramses_esp,
-        ramses_id=entry.data.get(CONF_CO2_ID),
+        ramses_id=entry.runtime_data.config.co2_id,
         name="Orcon MVS-15 CO2",
         discovery_key="co2",
         entities=[Co2Sensor, SignalStrengthSensor],
@@ -82,7 +81,7 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         self,
         hass: HomeAssistant,
         ramses_id: RamsesID,
-        config: MappingProxyType[str, Any],
+        config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
         name: str,
@@ -100,7 +99,7 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
             manufacturer="Orcon",
             model="MVS-15RH CO2B",
             name=f"Orcon CO2 remote 15RF ({self.co2_id})",
-            via_device=(DOMAIN, config[CONF_GATEWAY_ID]),
+            via_device=(DOMAIN, config.gateway_id),
         )
         self._attr_extra_state_attributes: dict[
             str, str | int | bool | RamsesPacketDatetime | None
@@ -110,7 +109,9 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        if self.hass.state == CoreState.running:
+        if (
+            self.hass.state == CoreState.running
+        ):  # only when HA is already running (ie after discovery)
             await self.ramses_esp.init_co2(discovered_co2_id=self.co2_id)
 
     @callback

@@ -9,7 +9,7 @@ from homeassistant.components import mqtt
 from homeassistant.components.mqtt import ReceiveMessage
 from homeassistant.core import callback, HomeAssistant
 
-from .ramses_packet import RamsesPacket
+from .ramses_packet import RamsesPacket, RamsesID
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class MQTTException(Exception):
 
 class MQTT:
     def __init__(
-        self, hass: HomeAssistant, base_topic: str, gateway_id: str | None = None
+        self, hass: HomeAssistant, base_topic: str, gateway_id: RamsesID = RamsesID()
     ) -> None:
         self.hass = hass
         self.base_topic = base_topic
@@ -59,7 +59,7 @@ class MQTT:
         if self.gateway_id:
             _LOGGER.debug(f"Ignoring new MQTT message in {self.online_topic}")
             return
-        self.gateway_id = msg.topic.split("/")[-1]
+        self.gateway_id = RamsesID(msg.topic.split("/")[-1])
         self._online_event.set()
 
     def cleanup(self) -> None:
