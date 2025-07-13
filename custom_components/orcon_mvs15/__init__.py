@@ -8,18 +8,17 @@ from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.exceptions import ConfigEntryNotReady, PlatformNotReady
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
-from .models import OrconMVS15RuntimeData
+from .models import OrconMVS15RuntimeData, OrconMVS15Config
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
 from .handlers import DataHandlers
 from .const import (
-    DOMAIN,
+    CONF_CO2_ID,
+    CONF_FAN_ID,
     CONF_GATEWAY_ID,
     CONF_REMOTE_ID,
-    CONF_FAN_ID,
-    CONF_CO2_ID,
-    CONF_MQTT_TOPIC,
+    DOMAIN,
 )
 
 PLATFORMS = [Platform.FAN, Platform.SENSOR, Platform.BINARY_SENSOR]
@@ -70,6 +69,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     entry.runtime_data = OrconMVS15RuntimeData()
 
+    entry.runtime_data.config = OrconMVS15Config.from_data(entry.data)
+
     entry.runtime_data.fan_coordinator = await _setup_coordinator(
         hass, entry, "discovered_fan_id", CONF_FAN_ID
     )
@@ -83,8 +84,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         mqtt = MQTT(
             hass,
-            base_topic=entry.data[CONF_MQTT_TOPIC],
-            gateway_id=entry.data.get(CONF_GATEWAY_ID),
+            base_topic=entry.runtime_data.config.mqtt_topic,
+            gateway_id=entry.runtime_data.config.gateway_id,
         )
         await mqtt.init()
     except Exception as e:
@@ -92,28 +93,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     entry.runtime_data.cleanup.append(mqtt.cleanup)
 
-    if CONF_GATEWAY_ID not in entry.data:
+    if not entry.runtime_data.config.gateway_id:
         _LOGGER.debug(f"Storing discovered gateway ({mqtt.gateway_id}) in config")
         new_data = {**entry.data, CONF_GATEWAY_ID: mqtt.gateway_id}
         hass.config_entries.async_update_entry(entry, data=new_data)
+        entry.runtime_data.config.gateway_id = mqtt.gateway_id
 
     dev_reg = get_dev_reg(hass)
     dev_reg.async_get_or_create(
         config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, entry.data[CONF_GATEWAY_ID])},
+        identifiers={(DOMAIN, entry.runtime_data.config.gateway_id)},
         manufacturer="Indalo-Tech",
         model="RAMSES_ESP",
-        name=f"Indalo-Tech RAMSES_ESP ({entry.data[CONF_GATEWAY_ID]})",
+        name=f"Indalo-Tech RAMSES_ESP ({entry.runtime_data.config.gateway_id})",
     )
 
     try:
         ramses_esp = RamsesESP(
             hass=hass,
             mqtt=mqtt,
-            gateway_id=entry.data[CONF_GATEWAY_ID],
-            remote_id=entry.data[CONF_REMOTE_ID],
-            fan_id=entry.data.get(CONF_FAN_ID),
-            co2_id=entry.data.get(CONF_CO2_ID),
+            gateway_id=entry.runtime_data.config.gateway_id,
+            remote_id=entry.runtime_data.config.remote_id,
+            fan_id=entry.runtime_data.config.fan_id,
+            co2_id=entry.runtime_data.config.co2_id,
         )
     except ConfigEntryNotReady:
         raise

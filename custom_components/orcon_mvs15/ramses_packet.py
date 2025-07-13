@@ -63,8 +63,15 @@ class RamsesPacketDatetime:
 class RamsesID(str):
     """str with a default"""
 
-    def __new__(cls, value: str = "--:------") -> RamsesID:
+    empty_address = "--:------"
+
+    def __new__(cls, value: str | None = empty_address) -> RamsesID:
+        if not value:
+            value = cls.empty_address
         return super().__new__(cls, value)
+
+    def __bool__(self) -> bool:
+        return self != self.empty_address
 
 
 class RamsesPacket:

@@ -42,10 +42,13 @@ class DiscoverEntity:
         self.full_discovery_key = f"discovered_{discovery_key}_id"
         self.entity_names_csv = ",".join([x.__name__ for x in entities])
         if ramses_id:
+            _LOGGER.debug(
+                f"Setting up previously discovered '{name}' entities {self.entity_names_csv}"
+            )
             self._add_entities()
             return
         _LOGGER.debug(
-            f"Setting up discovery on key '{self.full_discovery_key}' for '{name}' entities: {self.entity_names_csv}"
+            f"Setting up '{name}' entity discovery for {self.entity_names_csv} on key '{self.full_discovery_key}'"
         )
         self._unsub = self.coordinator.async_add_listener(self._add_discovered_entities)
 

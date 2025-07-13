@@ -13,7 +13,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, CONF_FAN_ID
+from .const import DOMAIN
 from .discover_entity import DiscoverEntity
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .ramses_esp import RamsesESP
@@ -27,10 +27,10 @@ async def async_setup_entry(
     fan_sensor = DiscoverEntity(
         hass=hass,
         async_add_entities=async_add_entities,
-        config=entry.data,
+        config=entry.runtime_data.config,
         coordinator=entry.runtime_data.fan_coordinator,
         ramses_esp=entry.runtime_data.ramses_esp,
-        ramses_id=entry.data.get(CONF_FAN_ID),
+        ramses_id=entry.runtime_data.config.fan_id,
         name="Orcon MVS-15 fan",
         discovery_key="fan",
         entities=[FaultBinarySensor],

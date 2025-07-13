@@ -46,6 +46,12 @@ class RamsesESP:
         self._handlers: dict = {}
         self._send_queue = RamsesPacketQueue()
         self._log_f: TextIO | None = None
+        if self.fan_id:
+            _LOGGER.info(f"Using previously discovered fan id ({self.fan_id})")
+        else:
+            _LOGGER.info(
+                "The fan has not yet been discovered, waiting on startup message"
+            )
         if self.co2_id:
             _LOGGER.info(f"Using previously discovered CO2 sensor ({self.co2_id})")
         else:
