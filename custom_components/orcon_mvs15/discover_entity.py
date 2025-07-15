@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import logging
 
-from types import MappingProxyType
-from typing import Any
-
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import OrconMVS15DataUpdateCoordinator
+from .models import OrconMVS15Config
 from .ramses_packet import RamsesID
 from .ramses_esp import RamsesESP
 
@@ -22,7 +20,7 @@ class DiscoverEntity:
         self,
         hass: HomeAssistant,
         async_add_entities: AddConfigEntryEntitiesCallback,
-        config: MappingProxyType[str, Any],
+        config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
         ramses_id: RamsesID,

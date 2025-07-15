@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from types import MappingProxyType
-from typing import Any
-
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorDeviceClass,
@@ -16,6 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .discover_entity import DiscoverEntity
 from .coordinator import OrconMVS15DataUpdateCoordinator
+from .models import OrconMVS15Config
 from .ramses_esp import RamsesESP
 
 
@@ -45,7 +43,7 @@ class FaultBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self,
         hass: HomeAssistant,
         ramses_id: str,
-        config: MappingProxyType[str, Any],
+        config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
         name: str,
