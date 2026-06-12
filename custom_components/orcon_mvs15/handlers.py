@@ -141,7 +141,7 @@ class DataHandlers:
             return
         dev_info = {
             "device_id": entry.id,
-            "sw_version": int(str(payload.values["software_ver_id"]), 16),
+            "sw_version": f"{int(str(payload.values['software_ver_id']), 16)}",
             "model_id": payload.values["description"],
         }
         _LOGGER.info(

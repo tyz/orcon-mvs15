@@ -205,7 +205,7 @@ class RamsesESP:
                 return
         if (
             packet.signal_strength == 0 and packet.code != "042F"
-        ):  # 042F is for testing only, where I publish it myself
+        ):  # 042F is for testing only, when I publish it myself (ss == 0)
             """Don't call handler function on something we send ourselves (TODO: needed w/ timed fan with 22F3)"""
             return
         if (q_packet := self._send_queue.get(packet)) is not None:
