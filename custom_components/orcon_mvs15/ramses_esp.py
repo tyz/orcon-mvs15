@@ -125,7 +125,10 @@ class RamsesESP:
     async def handle_ramses_mqtt_version_message(self, msg: ReceiveMessage) -> None:
         """Update Ramses-ESP device info"""
         dev_reg = get_dev_reg(self.hass)
-        if (entry := dev_reg.async_get_device({(DOMAIN, self.gateway_id)})) is None:
+        identifier = (DOMAIN, self.gateway_id)
+        if (
+            entry := dev_reg.async_get_device_by_identifier(identifier, self.gateway_id)
+        ) is None:
             return
         dev_info = {
             "device_id": entry.id,

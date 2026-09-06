@@ -16,7 +16,10 @@ from homeassistant.const import (
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
 )
 from homeassistant.core import callback, CoreState, HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import (
+    DeviceInfo,
+    async_get_device_id_by_identifier,
+)
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -99,7 +102,11 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
             manufacturer="Orcon",
             model="MVS-15RH CO2B",
             name=f"Orcon CO2 remote 15RF ({self.co2_id})",
-            via_device=(DOMAIN, config.gateway_id),
+            via_device_id=async_get_device_id_by_identifier(
+                hass,
+                (DOMAIN, config.gateway_id),
+                config_entry_id=coordinator.config_entry.entry_id,
+            ),
         )
         self._attr_extra_state_attributes: dict[
             str, str | int | bool | RamsesPacketDatetime | None

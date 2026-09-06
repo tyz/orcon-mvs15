@@ -23,6 +23,7 @@ class HandlerException(Exception):
 class DataHandlers:
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
+        self.config_entry = entry
         self.co2_coordinator = entry.runtime_data.co2_coordinator
         self.fan_coordinator = entry.runtime_data.fan_coordinator
         self.ramses_esp = entry.runtime_data.ramses_esp
@@ -135,8 +136,11 @@ class DataHandlers:
             _LOGGER.warning(f"Unknown product_id {payload.values['product_id']}")
             return
         dev_reg = get_dev_reg(self.hass)
+        identifier = (DOMAIN, payload.packet.src_id)
         if (
-            entry := dev_reg.async_get_device({(DOMAIN, payload.packet.src_id)})
+            entry := dev_reg.async_get_device_by_identifier(
+                identifier, self.config_entry.entry_id
+            )
         ) is None:
             return
         dev_info = {
