@@ -130,6 +130,10 @@ async def test_retry_callback_accepts_the_scheduled_time(
     await hass.async_block_till_done()
 
     assert mqtt.published == [packet, packet]
+    assert len(scheduled) == 2
+    assert packet in session._send_queue
+    assert packet.expected_response is not None
+    assert packet.expected_response.max_retries == 1
 
 
 async def test_handled_codes_reports_the_registered_handlers(
