@@ -2,29 +2,23 @@ from __future__ import annotations
 
 import logging
 
-from collections.abc import Callable
-
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorDeviceClass,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     UnitOfRatio,
     PERCENTAGE,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
 )
 from homeassistant.core import callback, CoreState, HomeAssistant
-from homeassistant.helpers.device_registry import (
-    DeviceInfo,
-    async_get_device_id_by_identifier,
-)
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
-from .models import OrconMVS15Config
 from .coordinator import OrconMVS15DataUpdateCoordinator
+from .device import attached_device_info, co2_device_info
+from .models import OrconMVS15Config, OrconMVS15ConfigEntry
 from .discover_entity import DiscoverEntity
 from .ramses_packet import RamsesPacketDatetime, RamsesID
 from .ramses_esp import RamsesESP
@@ -33,7 +27,9 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: Callable
+    hass: HomeAssistant,
+    entry: OrconMVS15ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     fanss_sensor = DiscoverEntity(
         hass=hass,
@@ -97,16 +93,11 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         self._state = None
         self._attr_name = name
         self._attr_unique_id = f"orcon_mvs15_co2_{self.co2_id}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, self.co2_id)},
-            manufacturer="Orcon",
-            model="MVS-15RH CO2B",
-            name=f"Orcon CO2 remote 15RF ({self.co2_id})",
-            via_device_id=async_get_device_id_by_identifier(
-                hass,
-                (DOMAIN, config.gateway_id),
-                config_entry_id=coordinator.config_entry.entry_id,
-            ),
+        self._attr_device_info = co2_device_info(
+            hass,
+            coordinator.config_entry.entry_id,
+            config.gateway_id,
+            self.co2_id,
         )
         self._attr_extra_state_attributes: dict[
             str, str | int | bool | RamsesPacketDatetime | None
@@ -143,7 +134,7 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
         self,
         hass: HomeAssistant,
         ramses_id: RamsesID,
-        config: ConfigEntry,
+        config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
         name: str,
@@ -153,7 +144,7 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
         self.discovery_key = discovery_key
         self._attr_name = f"{name} relative humidity"
         self._attr_unique_id = f"orcon_mvs15_humidity_{ramses_id}"
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, ramses_id)})
+        self._attr_device_info = attached_device_info(ramses_id)
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -172,8 +163,8 @@ class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
     def __init__(
         self,
         hass: HomeAssistant,
-        ramses_id: str,
-        config: ConfigEntry,
+        ramses_id: RamsesID,
+        config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
         name: str,
@@ -183,7 +174,7 @@ class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
         self.discovery_key = discovery_key
         self._attr_name = f"{name} signal strength"
         self._attr_unique_id = f"orcon_mvs15_{discovery_key}_dbm_{ramses_id}"
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, ramses_id)})
+        self._attr_device_info = attached_device_info(ramses_id)
 
     @callback
     def _handle_coordinator_update(self) -> None:

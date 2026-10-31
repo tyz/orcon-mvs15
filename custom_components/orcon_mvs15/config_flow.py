@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import voluptuous as vol
+from probatio import Required, Schema
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 
@@ -13,7 +13,7 @@ from .const import (
 )
 
 
-class OrconConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
+class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(
@@ -25,10 +25,10 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema(
+            data_schema=Schema(
                 {
-                    vol.Required(CONF_REMOTE_ID, default="29:163058"): str,
-                    vol.Required(CONF_MQTT_TOPIC, default="RAMSES/GATEWAY"): str,
+                    Required(CONF_REMOTE_ID, default="29:163058"): str,
+                    Required(CONF_MQTT_TOPIC, default="RAMSES/GATEWAY"): str,
                 }
             ),
         )

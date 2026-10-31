@@ -4,22 +4,21 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorDeviceClass,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback, HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .device import attached_device_info
 from .discover_entity import DiscoverEntity
 from .coordinator import OrconMVS15DataUpdateCoordinator
-from .models import OrconMVS15Config
+from .models import OrconMVS15Config, OrconMVS15ConfigEntry
 from .ramses_esp import RamsesESP
+from .ramses_packet import RamsesID
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: OrconMVS15ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     fan_sensor = DiscoverEntity(
@@ -42,7 +41,7 @@ class FaultBinarySensor(CoordinatorEntity, BinarySensorEntity):
     def __init__(
         self,
         hass: HomeAssistant,
-        ramses_id: str,
+        ramses_id: RamsesID,
         config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
@@ -53,7 +52,7 @@ class FaultBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self.discovery_key = discovery_key
         self._attr_name = f"{name} fault"
         self._attr_unique_id = f"orcon_mvs15_{self.discovery_key}_fault_{ramses_id}"
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, ramses_id)})
+        self._attr_device_info = attached_device_info(ramses_id)
 
     @callback
     def _handle_coordinator_update(self) -> None:

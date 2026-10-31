@@ -6,6 +6,7 @@ import asyncio
 import json
 
 from collections.abc import Callable
+from functools import partial
 from typing import TextIO
 from datetime import datetime, timedelta
 
@@ -14,12 +15,11 @@ from homeassistant.components.mqtt import ReceiveMessage
 from homeassistant.core import HomeAssistant, Event
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
-from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
+from .device import update_gateway_version
 from .ramses_packet import RamsesPacket, RamsesID
 from .ramses_packet_queue import RamsesPacketQueue
 from .mqtt import MQTT, MQTTException
-from .const import DOMAIN
 from .codes import *  # noqa: F403
 
 # flake8: noqa: F405
@@ -126,7 +126,7 @@ class RamsesESP:
                 # Try again if expected_response wasn't received within packet.expected_response.timeout seconds
                 self.hass,
                 packet.expected_response.timeout,
-                lambda now, pkt=packet: self._schedule_retry(pkt),
+                partial(self._schedule_retry, packet),
             )
             # Queue before publishing: a fast response can otherwise arrive
             # before the packet is known and would trigger a retry.
@@ -148,29 +148,18 @@ class RamsesESP:
             await self.packet_log(envelope)
         except Exception:
             _LOGGER.error(
-                f"Failed to process Ramses-ESP MQTT message {msg.payload}",
+                f"Failed to process Ramses-ESP MQTT message {msg.payload!r}",
                 exc_info=True,
             )
 
     async def handle_ramses_mqtt_version_message(self, msg: ReceiveMessage) -> None:
         """Update Ramses-ESP device info"""
-        dev_reg = get_dev_reg(self.hass)
-        identifier = (DOMAIN, self.gateway_id)
-        if (
-            entry := dev_reg.async_get_device_by_identifier(
-                identifier, self.config_entry_id
-            )
-        ) is None:
-            return
         sw_version = msg.payload
         if isinstance(sw_version, (bytes, bytearray)):
             sw_version = sw_version.decode()
-        dev_info = {
-            "device_id": entry.id,
-            "sw_version": sw_version,
-        }
-        dev_reg.async_update_device(**dev_info)
-        _LOGGER.info(f"Updated device info: {dev_info}")
+        update_gateway_version(
+            self.hass, self.config_entry_id, self.gateway_id, sw_version
+        )
 
     async def set_preset_mode(self, mode: str) -> None:
         """Set fan preset mode"""

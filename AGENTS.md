@@ -108,21 +108,24 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 
 ## Current Architecture
 
-* `mqtt.py` — subscribes to gateway topics and publishes envelopes. It currently
-  also performs gateway discovery and waits for the first wildcard message.
+* `mqtt.py` — subscribes to gateway topics and publishes envelopes, including
+  gateway discovery on the wildcard topic.
 * `ramses_esp.py` — protocol session: packet parsing/dispatch, expected-response
-  retries, device discovery and packet logging. It currently touches the device
-  registry and the event loop directly; split transport/registry concerns out in
-  M3.
+  retries, device discovery and packet logging. Registry writes go through
+  `device.py`.
+* `device.py` — the single place that builds `DeviceInfo` for each device type
+  and writes to the device registry.
 * `handlers.py` — turns decoded `Code` payloads into coordinator updates and
-  device-registry updates.
+  device updates.
 * `coordinator.py` — push-only coordinators for the fan, CO₂ sensor and remote.
+* `models.py` — `OrconMVS15Config`, the required `OrconMVS15RuntimeData` fields
+  and the `OrconMVS15ConfigEntry` alias.
 * `discover_entity.py` — creates entities once a Ramses ID is known or discovered.
-* `fan.py`, `sensor.py`, `binary_sensor.py` — entities. They currently build
-  their own `DeviceInfo`; centralise this in M3/M4.
+* `fan.py`, `sensor.py`, `binary_sensor.py` — entities. They describe their
+  device through `device.py`.
 
-Planned direction (M1–M5): test harness first, then correctness fixes, typed
-runtime data, a central device-info helper, explicit code registry, entity
+M1–M3 are done: test harness, correctness fixes, typed runtime data and the
+central device-info helper. Remaining: explicit code registry, entity
 translation keys/availability, config-flow options/reconfigure, diagnostics,
 `quality_scale.yaml`, and CI.
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+from collections.abc import Callable
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -39,6 +41,7 @@ class DiscoverEntity:
         self.discovery_key = discovery_key
         self.full_discovery_key = f"discovered_{discovery_key}_id"
         self.entity_names_csv = ",".join([x.__name__ for x in entities])
+        self._unsub: Callable[[], None] | None = None
         if ramses_id:
             _LOGGER.debug(
                 f"Setting up previously discovered '{name}' entities {self.entity_names_csv}"
@@ -71,7 +74,10 @@ class DiscoverEntity:
     def _add_discovered_entities(self) -> None:
         if self.ramses_id:
             return
-        self.ramses_id = self.coordinator.data.get(self.full_discovery_key)
+        discovered_id = self.coordinator.data.get(self.full_discovery_key)
+        if not isinstance(discovered_id, str):
+            return
+        self.ramses_id = RamsesID(discovered_id)
         if not self.ramses_id:
             return
         self.cleanup()  # got the data, unsubscribe from DataCoordinator
@@ -81,7 +87,7 @@ class DiscoverEntity:
         self._add_entities()
 
     def cleanup(self) -> None:
-        if hasattr(self, "_unsub") and self._unsub:
+        if self._unsub is not None:
             self._unsub()
             self._unsub = None
             _LOGGER.debug(
