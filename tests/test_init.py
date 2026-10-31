@@ -6,7 +6,9 @@ from collections.abc import Callable
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceRegistry
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -66,7 +68,7 @@ class FakeRamses:
     async def init_fan(self, discovered_fan_id: RamsesID) -> None:
         self.discovered_fan_id = discovered_fan_id
 
-    async def setup(self) -> None:
+    async def setup(self, event: object | None = None) -> None:
         self.started = True
 
     def cleanup(self) -> None:
@@ -152,3 +154,143 @@ async def test_setup_builds_the_runtime_data_and_unloads(
 
     assert entry.state is ConfigEntryState.NOT_LOADED
     assert runtime.ramses_esp.cleaned
+
+
+async def test_setup_stores_a_discovered_fan_id(hass: HomeAssistant) -> None:
+    """The fan announced by 042F is remembered without reloading the entry."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", FakeMQTT),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    runtime = entry.runtime_data
+    assert runtime.fan_coordinator.data == {}
+
+    runtime.fan_coordinator.async_set_updated_data(
+        {"discovered_fan_id": RamsesID(FAN_ID)}
+    )
+
+    assert entry.data[CONF_FAN_ID] == FAN_ID
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_setup_stores_a_discovered_gateway_id(hass: HomeAssistant) -> None:
+    """A wildcard-discovered gateway is remembered in the entry data."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_REMOTE_ID: REMOTE_ID, CONF_MQTT_TOPIC: MQTT_TOPIC},
+    )
+    entry.add_to_hass(hass)
+
+    class DiscoveringFakeMQTT(FakeMQTT):
+        """Transport that discovers a gateway during init."""
+
+        async def init(self) -> None:
+            self.gateway_id = RamsesID(GATEWAY_ID)
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", DiscoveringFakeMQTT),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.data[CONF_GATEWAY_ID] == GATEWAY_ID
+    assert entry.runtime_data.config.gateway_id == GATEWAY_ID
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_setup_retries_when_the_session_cannot_be_built(
+    hass: HomeAssistant,
+) -> None:
+    """A session construction error is retryable, not a permanent failure."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", FakeMQTT),
+        patch(
+            "custom_components.orcon_mvs15.RamsesESP",
+            side_effect=RuntimeError("bad configuration"),
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
+
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_setup_keeps_a_retryable_session_error(hass: HomeAssistant) -> None:
+    """ConfigEntryNotReady from the session is not wrapped a second time."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", FakeMQTT),
+        patch(
+            "custom_components.orcon_mvs15.RamsesESP",
+            side_effect=ConfigEntryNotReady("MQTT is not ready"),
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
+
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_setup_waits_for_home_assistant_to_start(hass: HomeAssistant) -> None:
+    """During a restart the session starts with Home Assistant, not before."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_FAN_ID: FAN_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        },
+    )
+    entry.add_to_hass(hass)
+    hass.set_state(CoreState.not_running)
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", FakeMQTT),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    runtime = entry.runtime_data
+    assert runtime.ramses_esp.started is False
+
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done()
+
+    assert runtime.ramses_esp.started is True

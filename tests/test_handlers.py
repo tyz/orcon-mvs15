@@ -109,3 +109,138 @@ async def test_incomplete_device_info_is_ignored(
     assert updated is not None
     assert updated.sw_version is None
     assert updated.model_id is None
+
+
+async def test_unknown_product_id_is_ignored(
+    hass: HomeAssistant,
+    device_registry: DeviceRegistry,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A known manufacturer with an unknown product is not an MVS-15."""
+    entry, handlers = make_entry_handlers(hass)
+    device = device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, FAN_ID)},
+    )
+
+    with caplog.at_level(logging.WARNING):
+        handlers._device_info_handler(device_info_payload(product_id="99"))
+
+    assert "99" in caplog.text
+    updated = device_registry.async_get(device.id)
+    assert updated is not None
+    assert updated.model_id is None
+
+
+class RecordingCoordinator:
+    """Coordinator stand-in that keeps the data it is given."""
+
+    def __init__(self) -> None:
+        self.data: dict[str, object] = {}
+
+    def async_set_updated_data(self, data: dict[str, object]) -> None:
+        self.data = data
+
+
+def make_recording_handlers(hass: HomeAssistant) -> DataHandlers:
+    """Build handlers whose coordinators record pushed data."""
+    entry = SimpleNamespace(
+        runtime_data=SimpleNamespace(
+            co2_coordinator=RecordingCoordinator(),
+            fan_coordinator=RecordingCoordinator(),
+        )
+    )
+    return DataHandlers(hass, entry)
+
+
+def test_powerup_handler_stores_the_announced_fan(
+    hass: HomeAssistant,
+) -> None:
+    """042F announces the fan ID and the strength of the startup broadcast."""
+    handlers = make_recording_handlers(hass)
+    payload = SimpleNamespace(
+        values={"signal_strength": -61},
+        packet=SimpleNamespace(ann_id=FAN_ID),
+    )
+
+    handlers._powerup_handler(payload)
+
+    assert handlers.fan_coordinator.data == {
+        "discovered_fan_id": FAN_ID,
+        "fan_signal_strength": -61,
+    }
+
+
+def test_fan_state_handler_stores_mode_fault_and_signal(
+    hass: HomeAssistant,
+) -> None:
+    """31D9 updates the mode, the fault flag and the radio signal."""
+    handlers = make_recording_handlers(hass)
+    handlers.fan_coordinator.data = {"relative_humidity": 47}
+    payload = SimpleNamespace(
+        values={"fan_mode": "low", "has_fault": False, "signal_strength": -60},
+        packet=SimpleNamespace(src_id=FAN_ID),
+    )
+
+    handlers._fan_state_handler(payload)
+
+    assert handlers.fan_coordinator.data == {
+        "relative_humidity": 47,
+        "fan_mode": "low",
+        "fan_fault": False,
+        "fan_signal_strength": -60,
+        "discovered_fan_id": FAN_ID,
+    }
+
+
+def test_humidity_handler_stores_level_and_signal(hass: HomeAssistant) -> None:
+    """12A0 updates the humidity sensor and the fan's signal strength."""
+    handlers = make_recording_handlers(hass)
+    payload = SimpleNamespace(
+        values={"level": 47, "signal_strength": -44},
+        packet=SimpleNamespace(src_id=FAN_ID),
+    )
+
+    handlers._relative_humidity_handler(payload)
+
+    assert handlers.fan_coordinator.data == {
+        "relative_humidity": 47,
+        "fan_signal_strength": -44,
+        "discovered_humidity_id": FAN_ID,
+        "discovered_fan_id": FAN_ID,
+    }
+
+
+def test_co2_handler_stores_level_and_signal(hass: HomeAssistant) -> None:
+    """1298 updates the CO2 sensor and its signal strength."""
+    handlers = make_recording_handlers(hass)
+    payload = SimpleNamespace(
+        values={"level": 461, "signal_strength": -50},
+        packet=SimpleNamespace(src_id=FAN_ID),
+    )
+
+    handlers._co2_handler(payload)
+
+    assert handlers.co2_coordinator.data == {
+        "co2": 461,
+        "co2_signal_strength": -50,
+    }
+
+
+def test_vent_demand_handler_stores_percentage_and_signal(
+    hass: HomeAssistant,
+) -> None:
+    """31E0 updates the vent demand attribute of the CO2 sensor."""
+    handlers = make_recording_handlers(hass)
+    payload = SimpleNamespace(
+        values={"percentage": 50, "unknown": "1E", "signal_strength": -45},
+        packet=SimpleNamespace(src_id=FAN_ID),
+    )
+
+    handlers._vent_demand_handler(payload)
+
+    assert handlers.co2_coordinator.data == {
+        "vent_demand": 50,
+        "co2_signal_strength": -45,
+        "discovered_co2_id": FAN_ID,
+    }

@@ -153,3 +153,15 @@ def test_iteration_yields_queued_packets() -> None:
     queue.add(request)
 
     assert list(queue) == [request]
+
+
+def test_repr_shows_the_queued_packet_ids() -> None:
+    """The queue is inspectable while debugging retries."""
+    queue = RamsesPacketQueue()
+    request = humidity_request()
+    queue.add(request)
+
+    text = repr(queue)
+
+    assert text.startswith("RamsesPacketQueue({")
+    assert request.packet_id in text

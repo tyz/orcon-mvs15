@@ -20,6 +20,7 @@ from custom_components.orcon_mvs15.codes import (
     Code22f3,
     Code31d9,
     Code31e0,
+    CodeException,
 )
 from custom_components.orcon_mvs15.ramses_packet import RamsesID, RamsesPacket
 
@@ -378,3 +379,82 @@ def test_device_hex_to_id_ffffff_is_unverified() -> None:
     code = Code(made("FFFF", "00"))
 
     assert code._dev_hex_to_id("FFFFFF") == " " * 9
+
+
+def test_a_payload_with_the_wrong_length_is_rejected() -> None:
+    """A decoder refuses a payload whose length it does not understand."""
+    packet = received(f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 042F 003 000000")
+
+    with pytest.raises(CodeException, match="Unexpected length"):
+        Code042f(packet)
+
+
+def test_request_repr_says_state_request() -> None:
+    """A length-one frame asks for state and carries no values yet."""
+    request = Code31d9.get(RamsesID(GATEWAY_ID), RamsesID(FAN_ID))
+
+    assert repr(Code31d9(request)) == "Fan state state request"
+
+
+def test_status_repr_lists_the_decoded_values() -> None:
+    """A decoded frame is readable without touching the packet object."""
+    packet = received(f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 000004")
+
+    text = repr(Code31d9(packet))
+
+    assert text.startswith("Fan state: ")
+    assert "signal_strength: -44" in text
+    assert "fan_mode: auto" in text
+
+
+def test_base_code_cannot_build_commands_or_list_presets() -> None:
+    """The generic decoder is read-only and has no preset vocabulary."""
+    with pytest.raises(NotImplementedError):
+        Code.set(RamsesID(GATEWAY_ID), RamsesID(FAN_ID), "low")
+
+    with pytest.raises(NotImplementedError):
+        Code.presets()
+
+
+def test_generic_code_marks_an_unsupported_payload() -> None:
+    """An unknown code still yields diagnostic values instead of failing."""
+    packet = received(f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 9999 002 0000")
+
+    values = Code(packet).values
+
+    assert values["_label"] == "Unsupported code"
+    assert values["packet"] == str(packet)
+
+
+def test_co2_with_a_declared_length_but_no_data_has_no_level() -> None:
+    """A truncated 1298 frame must not invent a concentration."""
+    packet = RamsesPacket(
+        src_id=RamsesID(FAN_ID),
+        dst_id=RamsesID(GATEWAY_ID),
+        type="RP",
+        code="1298",
+    )
+    packet.length = 3
+
+    assert Code1298(packet).values["level"] is None
+
+
+def test_fan_state_presets_are_the_five_modes() -> None:
+    """31D9 maps its single status byte to five presets."""
+    assert Code31d9.presets() == ["away", "low", "medium", "high", "auto"]
+
+
+def test_device_id_decodes_the_bound_device() -> None:
+    """10E1 carries the device that the remote is bound to."""
+    packet = received(f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 10E1 004 0006368E")
+
+    assert Code10e1(packet).values["device_id"] == "01:145038"
+
+
+@pytest.mark.parametrize("code_class", [Code22f3, Code1060, Code1fc9, Code042f])
+def test_read_only_codes_cannot_be_requested(
+    code_class: type[Code],
+) -> None:
+    """Some packets are broadcast only and have no request form."""
+    with pytest.raises(NotImplementedError):
+        code_class.get(RamsesID(GATEWAY_ID), RamsesID(FAN_ID))
