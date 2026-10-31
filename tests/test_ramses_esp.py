@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -106,6 +108,32 @@ async def test_packet_is_queued_before_it_is_published(
     assert session.pending_packets == 1
     assert packet.expected_response is not None
     assert packet.expected_response.cancel_retry_handler is cancel_retry
+
+
+async def test_retry_callback_accepts_the_scheduled_time(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """async_call_later passes the scheduled time to the retry callback."""
+    scheduled: list[Callable[[datetime], None]] = []
+    monkeypatch.setattr(
+        ramses_esp_module,
+        "async_call_later",
+        lambda hass_, delay, action: scheduled.append(action),
+    )
+    session = make_session(hass)
+    mqtt = RecordingMQTT(session)
+    session.mqtt = mqtt  # pytest stub, duck typed on purpose
+    packet = Code12a0.get(RamsesID(GATEWAY_ID), RamsesID(FAN_ID))
+
+    await session.publish(packet)
+    scheduled[0](datetime.now(UTC))
+    await hass.async_block_till_done()
+
+    assert mqtt.published == [packet, packet]
+    assert len(scheduled) == 2
+    assert packet in session._send_queue
+    assert packet.expected_response is not None
+    assert packet.expected_response.max_retries == 1
 
 
 async def test_handled_codes_reports_the_registered_handlers(
