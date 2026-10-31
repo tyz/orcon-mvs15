@@ -38,11 +38,13 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
   reformat. The project Ruff rule set is pinned in `ruff.toml`.
 * Type checking: `mypy custom_components/` — only meaningful with Home Assistant
   installed; without it, HA imports are silently ignored.
-* Tests: `pytest -v tests/`. The suite is introduced in milestone M1. Until
-  `tests/` exists, `pytest` reports "no tests ran"; that is not a green suite.
+* Tests: `pytest -v tests/`. Pytest configuration lives in `pyproject.toml`;
+  `tests/conftest.py` loads `pytest-homeassistant-custom-component` and enables
+  custom integrations.
 * Compile check: `python -m compileall -q custom_components/orcon_mvs15`.
-* Approved test environment: `pytest-homeassistant-custom-component==0.13.375`,
-  which pins `homeassistant==2026.10.4` and requires Python `>=3.14`.
+* Approved test environment: `pip install -r requirements-test.txt`, which pins
+  `pytest-homeassistant-custom-component==0.13.375` and therefore
+  `homeassistant==2026.10.4`; it requires Python `>=3.14`.
 * CI: no workflow exists yet. It is planned in M5 and must run `pre-commit`,
   `mypy` against the installed Home Assistant version, `pytest` and hassfest.
 
