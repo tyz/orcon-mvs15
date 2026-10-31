@@ -1,0 +1,3 @@
+# Test environment. This pin also pins homeassistant==2026.10.4 and requires
+# Python >=3.14; bump both together and run the full suite afterwards.
+pytest-homeassistant-custom-component==0.13.375
