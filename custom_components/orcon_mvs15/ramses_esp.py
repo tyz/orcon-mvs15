@@ -7,24 +7,26 @@ import json
 
 from collections.abc import Callable
 from typing import TextIO
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from homeassistant.components import mqtt as mqtt_client
 from homeassistant.components.mqtt import ReceiveMessage
 from homeassistant.core import HomeAssistant, Event
-from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.event import async_call_later
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
 from .ramses_packet import RamsesPacket, RamsesID
 from .ramses_packet_queue import RamsesPacketQueue
-from .mqtt import MQTT
+from .mqtt import MQTT, MQTTException
 from .const import DOMAIN
 from .codes import *  # noqa: F403
 
 # flake8: noqa: F405
 
 _LOGGER = logging.getLogger(__name__)
+
+HUMIDITY_POLL_INTERVAL = timedelta(minutes=5)
 
 
 class RamsesESP:
@@ -36,6 +38,7 @@ class RamsesESP:
         fan_id: RamsesID,
         co2_id: RamsesID,
         gateway_id: RamsesID,
+        config_entry_id: str,
     ) -> None:
         self.hass = hass
         self.mqtt = mqtt
@@ -43,9 +46,11 @@ class RamsesESP:
         self.fan_id = fan_id
         self.co2_id = co2_id
         self.gateway_id = gateway_id
+        self.config_entry_id = config_entry_id
         self._handlers: dict = {}
         self._send_queue = RamsesPacketQueue()
         self._log_f: TextIO | None = None
+        self._humidity_poll_unsub: Callable[[], None] | None = None
         if self.fan_id:
             _LOGGER.info(f"Using previously discovered fan id ({self.fan_id})")
         else:
@@ -81,6 +86,23 @@ class RamsesESP:
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
+        self.start_humidity_polling()
+
+    def start_humidity_polling(self) -> None:
+        """12A0 is not broadcast, so poll it even if a response was lost."""
+        if self._humidity_poll_unsub is not None:
+            return
+        self._humidity_poll_unsub = async_track_time_interval(
+            self.hass, self.req_humidity, HUMIDITY_POLL_INTERVAL
+        )
+        _LOGGER.info(f"Polling humidity every {HUMIDITY_POLL_INTERVAL}")
+
+    def cleanup(self) -> None:
+        """Stop the humidity poll when the config entry unloads."""
+        if self._humidity_poll_unsub is not None:
+            self._humidity_poll_unsub()
+            self._humidity_poll_unsub = None
+            _LOGGER.debug("Removed the humidity poll interval")
 
     async def init_co2(self, discovered_co2_id: RamsesID | None = None) -> None:
         """Fetch current CO2 sensor state + device info on startup or discovery"""
@@ -99,16 +121,24 @@ class RamsesESP:
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
 
     async def publish(self, packet: RamsesPacket) -> None:
-        await self.mqtt.publish(packet)
-        if not packet.expected_response:
-            return
-        packet.expected_response.cancel_retry_handler = async_call_later(
-            # Try again if expected_response wasn't received within packet.expected_response.timeout seconds
-            self.hass,
-            packet.expected_response.timeout,
-            lambda now, pkt=packet: self._schedule_retry(pkt),
-        )
-        self._send_queue.add(packet)
+        if packet.expected_response:
+            packet.expected_response.cancel_retry_handler = async_call_later(
+                # Try again if expected_response wasn't received within packet.expected_response.timeout seconds
+                self.hass,
+                packet.expected_response.timeout,
+                lambda now, pkt=packet: self._schedule_retry(pkt),
+            )
+            # Queue before publishing: a fast response can otherwise arrive
+            # before the packet is known and would trigger a retry.
+            self._send_queue.add(packet)
+        try:
+            await self.mqtt.publish(packet)
+        except Exception:
+            if packet.expected_response:
+                # Publishing failed, so there is nothing to wait for. Drop the
+                # retry timer instead of retrying a command the caller saw fail.
+                self._send_queue.remove(packet)
+            raise
 
     async def handle_ramses_mqtt_message(self, msg: ReceiveMessage) -> None:
         """Decode JSON, parse the MQTT payload and log it to file"""
@@ -127,12 +157,17 @@ class RamsesESP:
         dev_reg = get_dev_reg(self.hass)
         identifier = (DOMAIN, self.gateway_id)
         if (
-            entry := dev_reg.async_get_device_by_identifier(identifier, self.gateway_id)
+            entry := dev_reg.async_get_device_by_identifier(
+                identifier, self.config_entry_id
+            )
         ) is None:
             return
+        sw_version = msg.payload
+        if isinstance(sw_version, (bytes, bytearray)):
+            sw_version = sw_version.decode()
         dev_info = {
             "device_id": entry.id,
-            "sw_version": msg.payload,
+            "sw_version": sw_version,
         }
         dev_reg.async_update_device(**dev_info)
         _LOGGER.info(f"Updated device info: {dev_info}")
@@ -141,11 +176,15 @@ class RamsesESP:
         """Set fan preset mode"""
         try:
             packet = Code22f1.set(value=mode, src_id=self.remote_id, dst_id=self.fan_id)
-        except Exception as e:
-            _LOGGER.error(f"Error setting fan preset mode '{mode}': {e}")
-            return
+        except KeyError as err:
+            raise HomeAssistantError(f"Unknown fan preset mode: {mode}") from err
         _LOGGER.info(f"Setting fan preset mode to {mode}")
-        await self.publish(packet)
+        try:
+            await self.publish(packet)
+        except MQTTException as err:
+            raise HomeAssistantError(
+                f"Failed to set fan preset mode {mode}: {err}"
+            ) from err
 
     def add_handler(self, code: str, func: Callable) -> None:
         _LOGGER.debug(f"Adding handler for code {code}")

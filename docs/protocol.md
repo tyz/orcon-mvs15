@@ -289,7 +289,8 @@ and are ignored, except for `042F`, which is used for local testing.
 2. The first message’s final topic segment becomes the gateway ID.
 3. Subscribe to `<base>/<gateway>/rx` and `<base>/<gateway>/info/version`.
 
-There is currently no timeout on step 2; a missing gateway leaves setup waiting.
+Step 2 times out after 10 seconds by default; the resulting `MQTTException`
+makes Home Assistant retry entry setup instead of leaving it pending.
 
 ### Fan
 
@@ -306,10 +307,8 @@ adopted. This is a known risk; ownership verification is an open design question
 1. The fan replies to `12A0` with its humidity.
 2. The session uses `src_id` as the humidity device ID and creates the sensor on
    the fan device.
-3. A 5-minute poll is started after the first response.
-
-Because polling is only started by a response, a lost first response means the
-sensor is never polled again.
+3. The session polls `12A0` every 5 minutes, starting when the fan ID is known,
+   so a lost first response does not stop later polls.
 
 ### CO₂ remote
 
@@ -336,6 +335,4 @@ This is a manual debugging path, not part of the integration’s normal transpor
   the source.
 * Timed fan modes (`22F3`) are not tracked to completion.
 * Packet logging is always enabled and writes to `/config/packet.log`.
-* `Code1060` crashes on a 1-byte status request.
 * The `FFFFFF` device ID conversion is unverified.
-* Gateway discovery has no timeout.

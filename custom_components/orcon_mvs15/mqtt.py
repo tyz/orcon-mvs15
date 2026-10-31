@@ -20,20 +20,35 @@ class MQTTException(Exception):
 
 class MQTT:
     def __init__(
-        self, hass: HomeAssistant, base_topic: str, gateway_id: RamsesID = RamsesID()
+        self,
+        hass: HomeAssistant,
+        base_topic: str,
+        gateway_id: RamsesID = RamsesID(),
+        discovery_timeout: float = 10.0,
     ) -> None:
         self.hass = hass
         self.base_topic = base_topic
         self.gateway_id = gateway_id
+        self.discovery_timeout = discovery_timeout
         self.online_topic = f"{base_topic}/+"
         self._mqtt_unsubs: list = []
         self._online_event = asyncio.Event()
 
     async def init(self) -> None:
         if not self.gateway_id:
-            await self._subscribe(self.online_topic, self._handle_online_message)
-            await self._online_event.wait()  # wait on _handle_online_message
-            self._mqtt_unsubs.pop()()
+            unsub = await self._subscribe(
+                self.online_topic, self._handle_online_message
+            )
+            try:
+                async with asyncio.timeout(self.discovery_timeout):
+                    await self._online_event.wait()
+            except TimeoutError as err:
+                raise MQTTException(
+                    f"No gateway message on {self.online_topic} within "
+                    f"{self.discovery_timeout} seconds"
+                ) from err
+            finally:
+                self._unsubscribe(unsub)
             _LOGGER.info(f"Discovered gateway is {self.gateway_id}")
         else:
             _LOGGER.info(f"Using previously discovered gateway {self.gateway_id}")
@@ -48,9 +63,16 @@ class MQTT:
         await self._subscribe(self.sub_topic, handle_message)
         await self._subscribe(self.version_topic, handle_version_message)
 
-    async def _subscribe(self, topic: str, handler: Callable) -> None:
+    async def _subscribe(self, topic: str, handler: Callable) -> Callable[[], None]:
         _LOGGER.debug(f"Subscribed to {topic}")
-        self._mqtt_unsubs.append(await mqtt.async_subscribe(self.hass, topic, handler))
+        unsub = await mqtt.async_subscribe(self.hass, topic, handler)
+        self._mqtt_unsubs.append(unsub)
+        return unsub
+
+    def _unsubscribe(self, unsub: Callable[[], None]) -> None:
+        if unsub in self._mqtt_unsubs:
+            self._mqtt_unsubs.remove(unsub)
+        unsub()
 
     @callback
     async def _handle_online_message(self, msg: ReceiveMessage) -> None:
