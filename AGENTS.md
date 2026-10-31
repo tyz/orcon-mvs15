@@ -152,8 +152,9 @@ translation keys/availability, config-flow options/reconfigure, diagnostics,
   `ann_id`.
 * `22F1` carries 3-byte fan modes. Timed modes use `22F3` with 7 bytes. The
   integration does not track when a timed mode ends.
-* `12A0` is not announced; it must be polled. Current code starts polling only
-  after the first response, so a lost first response means no further polls.
+* `12A0` is not announced; it must be polled. The session starts the 5-minute
+  poll as soon as the fan ID is known, so a lost first response does not stop
+  later polls.
 * Signal strength is received as a negative dBm value; handlers negate it into the
   value exposed by the sensors.
 * Expected-response matching is by type, code, source and destination. A packet
