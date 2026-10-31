@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.exceptions import ConfigEntryNotReady
 
 from .device import async_get_or_create_gateway
-from .models import OrconMVS15RuntimeData, OrconMVS15Config
+from .models import (
+    OrconMVS15ConfigEntry,
+    OrconMVS15Config,
+    OrconMVS15RuntimeData,
+)
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
@@ -18,7 +21,6 @@ from .const import (
     CONF_FAN_ID,
     CONF_GATEWAY_ID,
     CONF_REMOTE_ID,
-    DOMAIN,
 )
 
 PLATFORMS = [Platform.FAN, Platform.SENSOR, Platform.BINARY_SENSOR]
@@ -27,7 +29,10 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def _setup_coordinator(
-    hass: HomeAssistant, entry: ConfigEntry, discover_key: str, config_key: str
+    hass: HomeAssistant,
+    entry: OrconMVS15ConfigEntry,
+    discover_key: str,
+    config_key: str,
 ) -> OrconMVS15DataUpdateCoordinator:
     coordinator = OrconMVS15DataUpdateCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
@@ -54,55 +59,46 @@ async def _setup_coordinator(
     return coordinator
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = entry.data
+async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -> bool:
+    config = OrconMVS15Config.from_data(entry.data)
 
-    entry.runtime_data = OrconMVS15RuntimeData()
-
-    entry.runtime_data.config = OrconMVS15Config.from_data(entry.data)
-
-    entry.runtime_data.fan_coordinator = await _setup_coordinator(
+    fan_coordinator = await _setup_coordinator(
         hass, entry, "discovered_fan_id", CONF_FAN_ID
     )
-    entry.runtime_data.co2_coordinator = await _setup_coordinator(
+    co2_coordinator = await _setup_coordinator(
         hass, entry, "discovered_co2_id", CONF_CO2_ID
     )
-    entry.runtime_data.rem_coordinator = await _setup_coordinator(
+    rem_coordinator = await _setup_coordinator(
         hass, entry, "discovered_rem_id", CONF_REMOTE_ID
     )
 
     try:
         mqtt = MQTT(
             hass,
-            base_topic=entry.runtime_data.config.mqtt_topic,
-            gateway_id=entry.runtime_data.config.gateway_id,
+            base_topic=config.mqtt_topic,
+            gateway_id=config.gateway_id,
         )
         await mqtt.init()
     except Exception as e:
         raise ConfigEntryNotReady(f"MQTT: {e}") from e
 
-    entry.runtime_data.cleanup.append(mqtt.cleanup)
-
-    if not entry.runtime_data.config.gateway_id:
+    if not config.gateway_id:
         _LOGGER.debug(f"Storing discovered gateway ({mqtt.gateway_id}) in config")
         new_data = {**entry.data, CONF_GATEWAY_ID: mqtt.gateway_id}
         hass.config_entries.async_update_entry(entry, data=new_data)
-        entry.runtime_data.config.gateway_id = mqtt.gateway_id
+        config.gateway_id = mqtt.gateway_id
 
-    dev_reg = async_get_or_create_gateway(
-        hass, entry.entry_id, entry.runtime_data.config.gateway_id
-    )
+    dev_reg = async_get_or_create_gateway(hass, entry.entry_id, config.gateway_id)
     _LOGGER.debug("Gateway device is %s", dev_reg.id)
 
     try:
         ramses_esp = RamsesESP(
             hass=hass,
             mqtt=mqtt,
-            gateway_id=entry.runtime_data.config.gateway_id,
-            remote_id=entry.runtime_data.config.remote_id,
-            fan_id=entry.runtime_data.config.fan_id,
-            co2_id=entry.runtime_data.config.co2_id,
+            gateway_id=config.gateway_id,
+            remote_id=config.remote_id,
+            fan_id=config.fan_id,
+            co2_id=config.co2_id,
             config_entry_id=entry.entry_id,
         )
     except ConfigEntryNotReady:
@@ -110,8 +106,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as e:
         raise ConfigEntryNotReady(f"RamsesESP: {e}") from e
 
-    entry.runtime_data.ramses_esp = ramses_esp
-    entry.runtime_data.cleanup.append(ramses_esp.cleanup)
+    entry.runtime_data = OrconMVS15RuntimeData(
+        config=config,
+        fan_coordinator=fan_coordinator,
+        co2_coordinator=co2_coordinator,
+        rem_coordinator=rem_coordinator,
+        ramses_esp=ramses_esp,
+        cleanup=[mqtt.cleanup, ramses_esp.cleanup],
+    )
 
     dh = DataHandlers(hass, entry)
     for code, func in dh.pointers.items():
@@ -128,7 +130,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -> bool:
     _LOGGER.debug("Unloading")
     while entry.runtime_data.cleanup:
         entry.runtime_data.cleanup.pop()()

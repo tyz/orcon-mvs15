@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from typing import Callable
 
 from .codes import Code
 from .device import update_device_info
+from .models import OrconMVS15ConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class HandlerException(Exception):
 
 
 class DataHandlers:
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(self, hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -> None:
         self.hass = hass
         self.config_entry = entry
         self.co2_coordinator = entry.runtime_data.co2_coordinator

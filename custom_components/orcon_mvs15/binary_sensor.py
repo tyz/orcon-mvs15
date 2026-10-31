@@ -4,7 +4,6 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorDeviceClass,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -12,14 +11,14 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .device import attached_device_info
 from .discover_entity import DiscoverEntity
 from .coordinator import OrconMVS15DataUpdateCoordinator
-from .models import OrconMVS15Config
+from .models import OrconMVS15Config, OrconMVS15ConfigEntry
 from .ramses_esp import RamsesESP
 from .ramses_packet import RamsesID
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: OrconMVS15ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     fan_sensor = DiscoverEntity(

@@ -7,7 +7,6 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     UnitOfRatio,
     PERCENTAGE,
@@ -19,7 +18,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .device import attached_device_info, co2_device_info
-from .models import OrconMVS15Config
+from .models import OrconMVS15Config, OrconMVS15ConfigEntry
 from .discover_entity import DiscoverEntity
 from .ramses_packet import RamsesPacketDatetime, RamsesID
 from .ramses_esp import RamsesESP
@@ -29,7 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: OrconMVS15ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     fanss_sensor = DiscoverEntity(
