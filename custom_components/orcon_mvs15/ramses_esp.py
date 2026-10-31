@@ -36,6 +36,7 @@ class RamsesESP:
         fan_id: RamsesID,
         co2_id: RamsesID,
         gateway_id: RamsesID,
+        config_entry_id: str,
     ) -> None:
         self.hass = hass
         self.mqtt = mqtt
@@ -43,6 +44,7 @@ class RamsesESP:
         self.fan_id = fan_id
         self.co2_id = co2_id
         self.gateway_id = gateway_id
+        self.config_entry_id = config_entry_id
         self._handlers: dict = {}
         self._send_queue = RamsesPacketQueue()
         self._log_f: TextIO | None = None
@@ -127,12 +129,17 @@ class RamsesESP:
         dev_reg = get_dev_reg(self.hass)
         identifier = (DOMAIN, self.gateway_id)
         if (
-            entry := dev_reg.async_get_device_by_identifier(identifier, self.gateway_id)
+            entry := dev_reg.async_get_device_by_identifier(
+                identifier, self.config_entry_id
+            )
         ) is None:
             return
+        sw_version = msg.payload
+        if isinstance(sw_version, (bytes, bytearray)):
+            sw_version = sw_version.decode()
         dev_info = {
             "device_id": entry.id,
-            "sw_version": msg.payload,
+            "sw_version": sw_version,
         }
         dev_reg.async_update_device(**dev_info)
         _LOGGER.info(f"Updated device info: {dev_info}")

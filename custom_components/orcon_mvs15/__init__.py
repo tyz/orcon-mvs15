@@ -116,6 +116,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             remote_id=entry.runtime_data.config.remote_id,
             fan_id=entry.runtime_data.config.fan_id,
             co2_id=entry.runtime_data.config.co2_id,
+            config_entry_id=entry.entry_id,
         )
     except ConfigEntryNotReady:
         raise
