@@ -6,6 +6,7 @@ import asyncio
 import json
 
 from collections.abc import Callable
+from functools import partial
 from typing import TextIO
 from datetime import datetime, timedelta
 
@@ -125,7 +126,7 @@ class RamsesESP:
                 # Try again if expected_response wasn't received within packet.expected_response.timeout seconds
                 self.hass,
                 packet.expected_response.timeout,
-                lambda now, pkt=packet: self._schedule_retry(pkt),
+                partial(self._schedule_retry, packet),
             )
             # Queue before publishing: a fast response can otherwise arrive
             # before the packet is known and would trigger a retry.
@@ -147,7 +148,7 @@ class RamsesESP:
             await self.packet_log(envelope)
         except Exception:
             _LOGGER.error(
-                f"Failed to process Ramses-ESP MQTT message {msg.payload}",
+                f"Failed to process Ramses-ESP MQTT message {msg.payload!r}",
                 exc_info=True,
             )
 
