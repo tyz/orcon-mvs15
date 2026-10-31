@@ -10,6 +10,7 @@ from .ramses_packet import (
 import logging
 
 __all__ = [
+    "CODE_REGISTRY",
     "Code",
     "Code042f",
     "Code1060",
@@ -418,6 +419,21 @@ class Code042f(Code):
         raise NotImplementedError
 
 
+CODE_REGISTRY: dict[str, type[Code]] = {
+    "042F": Code042f,
+    "1060": Code1060,
+    "10E0": Code10e0,
+    "10E1": Code10e1,
+    "1298": Code1298,
+    "12A0": Code12a0,
+    "1FC9": Code1fc9,
+    "22F1": Code22f1,
+    "22F3": Code22f3,
+    "31D9": Code31d9,
+    "31E0": Code31e0,
+}
+
+
 if __name__ == "__main__":
     import sys
 
@@ -453,9 +469,9 @@ if __name__ == "__main__":
                 continue
 
             try:
-                if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
+                if (code_class := CODE_REGISTRY.get(packet.code.upper())) is None:
                     print(
-                        f"WARNING: Class Code{packet.code.lower()} not imported, or does not exist"
+                        f"WARNING: There is no class for code {packet.code}, using the generic Code"
                     )
                     code_class = Code
                 print(

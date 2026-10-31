@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from custom_components.orcon_mvs15.codes import (
+    CODE_REGISTRY,
     Code,
     Code042f,
     Code1060,
@@ -54,6 +55,27 @@ def made(
     )
     packet.signal_strength = signal_strength
     return packet
+
+
+def test_code_registry_maps_every_code_class() -> None:
+    """Every decoder is reachable by its wire code and nothing is missing."""
+    classes = [
+        Code042f,
+        Code1060,
+        Code10e0,
+        Code10e1,
+        Code1298,
+        Code12a0,
+        Code1fc9,
+        Code22f1,
+        Code22f3,
+        Code31d9,
+        Code31e0,
+    ]
+
+    for code_class in classes:
+        assert CODE_REGISTRY[code_class._code] is code_class
+    assert len(CODE_REGISTRY) == len(classes)
 
 
 def test_humidity_decodes_percent() -> None:
