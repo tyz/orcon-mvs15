@@ -108,7 +108,7 @@ class DataHandlers:
     def _device_info_handler(self, payload: Code) -> None:
         """Update device info"""
         if payload.values["manufacturer_sub_id"] != "C8":
-            _LOGGER.warning("This doesn't look like an Orcon device: {payload.values}")
+            _LOGGER.warning(f"This doesn't look like an Orcon device: {payload.values}")
             return
         if payload.values["product_id"] not in ["26", "51"]:
             _LOGGER.warning(f"Unknown product_id {payload.values['product_id']}")
