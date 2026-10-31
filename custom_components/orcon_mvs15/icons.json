@@ -6,14 +6,14 @@
           "preset_mode": {
             "default": "mdi:fan",
             "state": {
-              "Low": "mdi:fan-speed-1",
-              "Medium": "mdi:fan-speed-2",
-              "High": "mdi:fan-speed-3",
-              "High (15m)": "mdi:fan-clock",
-              "High (30m)": "mdi:fan-clock",
-              "High (60m)": "mdi:fan-clock",
-              "Auto": "mdi:fan-auto",
-              "Away": "mdi:fan-off"
+              "auto": "mdi:fan-auto",
+              "low": "mdi:fan-speed-1",
+              "medium": "mdi:fan-speed-2",
+              "high": "mdi:fan-speed-3",
+              "high_15m": "mdi:fan-clock",
+              "high_30m": "mdi:fan-clock",
+              "high_60m": "mdi:fan-clock",
+              "away": "mdi:fan-off"
             }
           }
         }

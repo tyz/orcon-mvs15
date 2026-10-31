@@ -89,13 +89,13 @@ async def test_diagnostics_report_entry_session_and_coordinators(
             hass,
             entry,
             {
-                "fan_mode": "Low",
+                "fan_mode": "low",
                 "fan_signal_strength": -68,
                 "fan_since": RamsesPacketDatetime(TIMESTAMP),
             },
         ),
         co2_coordinator=make_coordinator(hass, entry, {"co2": 812}),
-        rem_coordinator=make_coordinator(hass, entry, {"last_command": "Low"}),
+        rem_coordinator=make_coordinator(hass, entry, {"last_command": "low"}),
         ramses_esp=session,
     )
 
@@ -122,12 +122,12 @@ async def test_diagnostics_report_entry_session_and_coordinators(
     assert diagnostics["coordinators"]["fan"] == {
         "last_update_success": True,
         "data": {
-            "fan_mode": "Low",
+            "fan_mode": "low",
             "fan_signal_strength": -68,
             "fan_since": TIMESTAMP,
         },
     }
     assert diagnostics["coordinators"]["co2"]["data"] == {"co2": 812}
-    assert diagnostics["coordinators"]["remote"]["data"] == {"last_command": "Low"}
+    assert diagnostics["coordinators"]["remote"]["data"] == {"last_command": "low"}
 
     json.dumps(diagnostics)

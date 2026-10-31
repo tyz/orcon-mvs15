@@ -44,7 +44,7 @@ def make_coordinator(hass: HomeAssistant) -> OrconMVS15DataUpdateCoordinator:
 @pytest.mark.parametrize(
     ("entity_class", "discovery_key", "data_key", "value", "translation_key"),
     [
-        (OrconFan, "fan", "fan_mode", "Low", "fan_states"),
+        (OrconFan, "fan", "fan_mode", "low", "fan_states"),
         (Co2Sensor, "co2", "co2", 800, "co2"),
         (HumiditySensor, "humidity", "relative_humidity", 55, "humidity"),
         (SignalStrengthSensor, "fan", "fan_signal_strength", -68, "signal_strength"),
