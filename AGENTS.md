@@ -45,8 +45,8 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 * Approved test environment: `pip install -r requirements-test.txt`, which pins
   `pytest-homeassistant-custom-component==0.13.375` and therefore
   `homeassistant==2026.10.4`; it requires Python `>=3.14`.
-* CI: no workflow exists yet. It is planned in M5 and must run `pre-commit`,
-  `mypy` against the installed Home Assistant version, `pytest` and hassfest.
+* CI: `.github/workflows/ci.yml` runs `pre-commit`, `mypy` against the
+  installed Home Assistant version, `pytest`, the compile check and hassfest.
 
 ## How To Change Code
 
