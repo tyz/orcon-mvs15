@@ -353,9 +353,16 @@ class Code1060(Code):
         self.values = {
             "_label": "Battery status",
             "signal_strength": -self.packet.signal_strength,
-            "level": self._percent(self.packet.data[2:4]),
-            "low": self.packet.data[4:6] == "00",
+            "level": None,
+            "low": None,
         }
+        if self.packet.length == 6:
+            self.values.update(
+                {
+                    "level": self._percent(self.packet.data[2:4]),
+                    "low": self.packet.data[4:6] == "00",
+                }
+            )
 
     @classmethod
     def get(cls, src_id: RamsesID, dst_id: RamsesID) -> RamsesPacket:

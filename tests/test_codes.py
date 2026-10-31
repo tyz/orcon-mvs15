@@ -299,6 +299,15 @@ def test_battery_state_decodes_level_and_low_flag() -> None:
     assert values["low"] is False
 
 
+def test_battery_status_request_has_no_level() -> None:
+    """A 1060 status request carries no battery state yet."""
+    packet = made("1060", "00", packet_type="RQ", src_id=GATEWAY_ID, dst_id=FAN_ID)
+    values = Code1060(packet).values
+
+    assert values["level"] is None
+    assert values["low"] is None
+
+
 def test_rf_bind_decodes_zone_command_and_device() -> None:
     """1FC9 binds a device id in a zone."""
     packet = made("1FC9", "001FC906368E")
