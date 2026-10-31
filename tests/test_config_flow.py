@@ -55,6 +55,32 @@ async def test_user_flow_creates_an_entry(hass: HomeAssistant) -> None:
     }
 
 
+async def test_duplicate_mqtt_topic_is_rejected(hass: HomeAssistant) -> None:
+    """The same gateway cannot be configured twice under another remote ID."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: "29:163058",
+            CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
+        },
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_REMOTE_ID: "29:111111",
+            CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
+        },
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
 async def test_reconfigure_updates_the_connection_settings(
     hass: HomeAssistant,
 ) -> None:
@@ -92,3 +118,36 @@ async def test_reconfigure_updates_the_connection_settings(
     assert entry.data[CONF_REMOTE_ID] == "29:111111"
     assert entry.data[CONF_MQTT_TOPIC] == "RAMSES/NEW"
     schedule.assert_called_once_with(entry.entry_id)
+
+
+async def test_reconfigure_may_keep_the_current_topic(hass: HomeAssistant) -> None:
+    """The duplicate check ignores the entry that is being reconfigured."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: "29:163058",
+            CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
+        },
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": entry.entry_id,
+        },
+    )
+
+    with patch.object(hass.config_entries, "async_schedule_reload"):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_REMOTE_ID: "29:111111",
+                CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
+            },
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_REMOTE_ID] == "29:111111"
+    assert entry.data[CONF_MQTT_TOPIC] == "RAMSES/GATEWAY"

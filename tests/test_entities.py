@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from types import ModuleType
 from unittest.mock import Mock
 
 import pytest
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+import custom_components.orcon_mvs15.binary_sensor as binary_sensor_module
+import custom_components.orcon_mvs15.fan as fan_module
+import custom_components.orcon_mvs15.sensor as sensor_module
 from custom_components.orcon_mvs15.binary_sensor import FaultBinarySensor
 from custom_components.orcon_mvs15.const import CONF_MQTT_TOPIC, DOMAIN
 from custom_components.orcon_mvs15.coordinator import (
@@ -73,3 +78,23 @@ async def test_entity_is_unavailable_until_its_data_arrives(
     coordinator.data = {data_key: value}
 
     assert entity.available is True
+
+
+def test_signal_strength_is_a_diagnostic_entity(hass: HomeAssistant) -> None:
+    """Signal strength describes the radio link, not the fan's function."""
+    entity = SignalStrengthSensor(
+        hass=hass,
+        ramses_id=FAN_ID,
+        config=OrconMVS15Config(mqtt_topic=MQTT_TOPIC),
+        coordinator=make_coordinator(hass),
+        ramses_esp=Mock(),
+        discovery_key="fan",
+    )
+
+    assert entity.entity_category is EntityCategory.DIAGNOSTIC
+
+
+@pytest.mark.parametrize("module", [fan_module, sensor_module, binary_sensor_module])
+def test_platforms_declare_parallel_updates(module: ModuleType) -> None:
+    """Every platform states how many entity calls may run at once."""
+    assert module.PARALLEL_UPDATES == 0

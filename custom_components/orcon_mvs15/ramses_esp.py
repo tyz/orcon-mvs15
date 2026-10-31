@@ -184,6 +184,16 @@ class RamsesESP:
                 f"Failed to set fan preset mode {mode}: {err}"
             ) from err
 
+    @property
+    def pending_packets(self) -> int:
+        """Return the number of commands waiting for a response."""
+        return len(self._send_queue)
+
+    @property
+    def handled_codes(self) -> set[str]:
+        """Return the packet codes this session has a handler for."""
+        return set(self._handlers)
+
     def add_handler(self, code: str, func: Callable) -> None:
         _LOGGER.debug(f"Adding handler for code {code}")
         self._handlers[code] = func

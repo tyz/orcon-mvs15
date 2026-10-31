@@ -20,6 +20,12 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
 - The fan reported mode is used to update the fan's current preset in HA, so it
   will immediately notice when the mode was changed by a 15RF remote, for example
 
+## Supported devices
+
+- Orcon MVS-15 ventilation unit (fan, humidity sensor and fault state)
+- Orcon MVS-15RH CO2B CO₂/humidity remote (15RF)
+- Rameses ESP gateway running the Ramses II firmware over MQTT
+
 ## TODO
 
 - Set up a fake remote and pair it with the fan
@@ -30,6 +36,18 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
 You can install this integration by adding its GitHub repository to the HACS
 configuration under `Custom repositories`. Then install it in HACS, and add the
 `Orcon MVS-15` integration in `Settings > Devices & services`.
+
+## Installation parameters
+
+The setup form asks for two values:
+
+- **Remote ID** — the Ramses ID of the 15RF remote that sends commands to the
+  fan, for example `29:163058`. If you do not know it yet, use a fake ID and
+  follow [Fan ID](#fan-id).
+- **MQTT topic prefix** — the base topic of the Rameses ESP gateway, for
+  example `RAMSES/GATEWAY`. The integration discovers the gateway on
+  `<prefix>/+` and then exchanges packets on `<prefix>/<gateway>/rx` and
+  `<prefix>/<gateway>/tx`.
 
 ## Fan ID
 
@@ -94,6 +112,35 @@ Check the LED on the fan unit if it reports a fault:
 | 1x           | Motor not running             |
 | 2x           | No value from humidity sensor |
 | 3x           | RF communication failure      |
+
+## Data updates
+
+The integration is push-based: the gateway publishes Ramses packets and the
+integration reacts to them. The fan state (`31D9`) and vent demand (`31E0`) are
+broadcast every 5 minutes, and device info (`10E0`) every 24 hours. The fan's
+humidity sensor (`12A0`) is not broadcast, so it is polled every 5 minutes.
+Entities are unavailable until the packet they read has arrived.
+
+## Known limitations
+
+- A working 15RF remote is required to send commands. Pairing a fake remote is
+  not implemented yet.
+- Timed high modes (`22F3`) are sent, but the integration does not track when
+  the timer ends; the preset follows the next state the fan reports.
+- A `042F` power-up message is accepted from any source. A neighbouring Orcon
+  unit that powers up at the same time could be adopted as this fan.
+- Only MQTT transport is supported; USB is on the TODO list.
+- The integration writes `/config/packet.log` (rolled over at 10 MB) as a
+  debugging aid. It is not a stable interface.
+
+## Remove
+
+1. Open `Settings > Devices & services`, select **Orcon MVS-15** and choose
+   **Delete**.
+2. If you installed it through HACS, remove the custom repository there as
+   well.
+3. The integration does not create configuration files. You can delete
+   `/config/packet.log` if you no longer need the packet log.
 
 ## Protocol
 

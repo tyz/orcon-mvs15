@@ -20,6 +20,9 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
+            self._async_abort_entries_match(
+                {CONF_MQTT_TOPIC: user_input[CONF_MQTT_TOPIC]}
+            )
             self._user_input = user_input
             return await self.async_step_discovery_info()
 
@@ -52,6 +55,9 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         entry = self._get_reconfigure_entry()
         if user_input is not None:
+            self._async_abort_entries_match(
+                {CONF_MQTT_TOPIC: user_input[CONF_MQTT_TOPIC]}
+            )
             return self.async_update_reload_and_abort(entry, data_updates=user_input)
 
         return self.async_show_form(

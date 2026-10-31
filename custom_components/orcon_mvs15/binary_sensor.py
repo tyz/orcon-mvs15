@@ -15,6 +15,9 @@ from .models import OrconMVS15Config, OrconMVS15ConfigEntry
 from .ramses_esp import RamsesESP
 from .ramses_packet import RamsesID
 
+# Binary sensors only read pushed data, so there is nothing to serialise.
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

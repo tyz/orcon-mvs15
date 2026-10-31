@@ -17,7 +17,7 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 | Platforms | `fan`, `sensor`, `binary_sensor` in a single config entry |
 | Discovery | MQTT wildcard `<base_topic>/+` for the gateway; Ramses `042F`, `12A0` and `31E0` packets for devices |
 | Update model | `local_push` — the gateway pushes packets; humidity is polled because `12A0` is not broadcast |
-| Quality scale | Not yet present. Target tier is Bronze; add `quality_scale.yaml` only when the claims are true |
+| Quality scale | `quality_scale.yaml` targets Bronze; the remaining `todo` rules are listed there |
 
 ## Before You Change Anything
 
@@ -45,8 +45,8 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 * Approved test environment: `pip install -r requirements-test.txt`, which pins
   `pytest-homeassistant-custom-component==0.13.375` and therefore
   `homeassistant==2026.10.4`; it requires Python `>=3.14`.
-* CI: no workflow exists yet. It is planned in M5 and must run `pre-commit`,
-  `mypy` against the installed Home Assistant version, `pytest` and hassfest.
+* CI: `.github/workflows/ci.yml` runs `pre-commit`, `mypy` against the
+  installed Home Assistant version, `pytest`, the compile check and hassfest.
 
 ## How To Change Code
 
@@ -115,6 +115,8 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
   `device.py`.
 * `device.py` — the single place that builds `DeviceInfo` for each device type
   and writes to the device registry.
+* `diagnostics.py` — reports the entry, session and coordinator state for the
+  Home Assistant diagnostics download.
 * `handlers.py` — turns decoded `Code` payloads into coordinator updates and
   device updates.
 * `coordinator.py` — push-only coordinators for the fan, CO₂ sensor and remote.
@@ -127,8 +129,8 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 
 M1–M4 are done: test harness, correctness fixes, typed runtime data, the
 central device-info helper, the explicit code registry, translated entity names
-with honest availability, and a reconfigure flow. Remaining: diagnostics,
-`quality_scale.yaml`, and CI.
+with honest availability, and a reconfigure flow. M5 adds diagnostics, a
+truthful `quality_scale.yaml` and the CI workflow.
 
 ## Testing
 
