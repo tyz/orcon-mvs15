@@ -91,8 +91,10 @@ rules:
     status: exempt
     comment: The integration does not use authentication.
   test-coverage:
-    status: todo
-    comment: The tests run without a coverage measurement or gate.
+    status: done
+    comment: |
+      Pytest measures line coverage with pytest-cov, and CI fails when any
+      module of the integration is at or below 95%.
 
   # Gold
   devices: done

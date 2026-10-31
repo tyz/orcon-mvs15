@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 
 from collections.abc import Callable
@@ -14,9 +15,10 @@ from homeassistant.core import HomeAssistant
 
 from custom_components.orcon_mvs15 import mqtt as mqtt_module
 from custom_components.orcon_mvs15.mqtt import MQTT, MQTTException
-from custom_components.orcon_mvs15.ramses_packet import RamsesID
+from custom_components.orcon_mvs15.ramses_packet import RamsesID, RamsesPacket
 
 GATEWAY_ID = "18:149960"
+FAN_ID = "29:224547"
 MQTT_TOPIC = "RAMSES/GATEWAY"
 
 
@@ -160,3 +162,63 @@ async def test_configured_gateway_skips_discovery(
     subscribe.assert_not_called()
     assert transport.gateway_id == GATEWAY_ID
     assert transport.sub_topic == f"{MQTT_TOPIC}/{GATEWAY_ID}/rx"
+
+
+async def test_online_message_is_ignored_when_the_gateway_is_known(
+    hass: HomeAssistant,
+) -> None:
+    """A second gateway on the wildcard topic must not replace the stored one."""
+    transport = MQTT(hass, MQTT_TOPIC, gateway_id=RamsesID(GATEWAY_ID))
+
+    await transport._handle_online_message(online_message(f"{MQTT_TOPIC}/18:999999"))
+
+    assert transport.gateway_id == GATEWAY_ID
+    assert not transport._online_event.is_set()
+
+
+def make_packet() -> RamsesPacket:
+    """Build an outgoing request."""
+    return RamsesPacket(
+        src_id=RamsesID(GATEWAY_ID),
+        dst_id=RamsesID(FAN_ID),
+        type="RQ",
+        code="12A0",
+        data="00",
+    )
+
+
+async def test_publish_sends_the_packet_envelope(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Publishing puts the gateway envelope JSON on the tx topic."""
+    published: list[tuple[str, str]] = []
+
+    async def fake_publish(hass_: HomeAssistant, topic: str, payload: str) -> None:
+        published.append((topic, payload))
+
+    monkeypatch.setattr(mqtt_module.mqtt, "async_publish", fake_publish)
+    transport = MQTT(hass, MQTT_TOPIC, gateway_id=RamsesID(GATEWAY_ID))
+    await transport.init()
+    packet = make_packet()
+
+    await transport.publish(packet)
+
+    assert published == [
+        (f"{MQTT_TOPIC}/{GATEWAY_ID}/tx", json.dumps(packet.ramses_esp_envelope()))
+    ]
+
+
+async def test_publish_wraps_transport_errors(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A broker failure becomes an MQTTException for the caller."""
+
+    async def failing_publish(hass_: HomeAssistant, topic: str, payload: str) -> None:
+        raise RuntimeError("broker is offline")
+
+    monkeypatch.setattr(mqtt_module.mqtt, "async_publish", failing_publish)
+    transport = MQTT(hass, MQTT_TOPIC, gateway_id=RamsesID(GATEWAY_ID))
+    await transport.init()
+
+    with pytest.raises(MQTTException, match="broker is offline"):
+        await transport.publish(make_packet())
