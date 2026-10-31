@@ -52,7 +52,9 @@ jobs:
       - name: Install test dependencies
         run: pip install -r requirements-test.txt
       - name: Run pytest
-        run: pytest -q tests/
+        run: pytest -q tests/ --cov-report=json
+      - name: Check per-module coverage
+        run: python scripts/check_coverage.py
       - name: Compile check
         run: python -m compileall -q custom_components/orcon_mvs15
 
