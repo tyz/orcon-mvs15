@@ -206,16 +206,19 @@ Example:
 * Length: 1 byte (request) or 3 bytes.
 * The whole 3-byte payload is matched against this table:
 
-| Mode | Data |
+| Preset | Data |
 |---|---|
-| `Auto` | `000404` |
-| `Low` | `000104` |
-| `Medium` | `000204` |
-| `High` | `000304` |
-| `Away` | `000004` |
-| `High (15m)` | `00020F03040000` — sent as `22F3` |
-| `High (30m)` | `00021E03040000` — sent as `22F3` |
-| `High (60m)` | `00023C03040000` — sent as `22F3` |
+| `auto` | `000404` |
+| `low` | `000104` |
+| `medium` | `000204` |
+| `high` | `000304` |
+| `away` | `000004` |
+| `high_15m` | `00020F03040000` — sent as `22F3` |
+| `high_30m` | `00021E03040000` — sent as `22F3` |
+| `high_60m` | `00023C03040000` — sent as `22F3` |
+
+These identifiers are also the fan entity's `preset_mode` values; the frontend
+shows the translated display names from `strings.json`.
 
 The timed entries are 7 bytes, so `Code22f1.set()` changes the code to `22F3`
 when the payload length is 7.
@@ -234,13 +237,13 @@ when the payload length is 7.
 * `data[2:4]` — bitmap; bit `0x80` means fault.
 * `data[4:6]` — mode:
 
-| Value | Mode |
+| Value | Preset |
 |---|---|
-| `00` | Away |
-| `01` | Low |
-| `02` | Medium |
-| `03` | High |
-| `04` | Auto |
+| `00` | `away` |
+| `01` | `low` |
+| `02` | `medium` |
+| `03` | `high` |
+| `04` | `auto` |
 
 The session sets `discovered_fan_id` from `src_id` when this packet is received.
 

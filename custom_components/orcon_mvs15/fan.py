@@ -48,7 +48,7 @@ class OrconFan(CoordinatorEntity, FanEntity):
     _attr_preset_modes = Code22f1.presets()
     _attr_supported_features = FanEntityFeature.PRESET_MODE
     _attr_translation_key = "fan_states"  # see icons.json
-    _attr_preset_mode = "Auto"
+    _attr_preset_mode = "auto"
 
     def __init__(
         self,

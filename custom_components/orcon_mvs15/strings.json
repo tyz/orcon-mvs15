@@ -13,7 +13,7 @@
           "mqtt_topic": "The base topic of the Rameses ESP gateway, for example RAMSES/GATEWAY."
         }
       },
-      "discovery_info": {
+      "fan_discovery": {
         "title": "Device Discovery",
         "description": "To auto-discover your Orcon MVS-15 fan, please power cycle it after completing this setup. It will be added automatically once its startup message is received."
       },
@@ -37,7 +37,21 @@
   "entity": {
     "fan": {
       "fan_states": {
-        "name": "Fan"
+        "name": "Fan",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "auto": "Auto",
+              "low": "Low",
+              "medium": "Medium",
+              "high": "High",
+              "high_15m": "High (15m)",
+              "high_30m": "High (30m)",
+              "high_60m": "High (60m)",
+              "away": "Away"
+            }
+          }
+        }
       }
     },
     "sensor": {

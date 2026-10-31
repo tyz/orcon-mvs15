@@ -133,15 +133,16 @@ class Code22f1(Code):
 
     _code = "22F1"
 
+    # Preset identifiers are translation keys: lowercase slugs without spaces.
     _fan_modes = {
-        "Auto": "000404",
-        "Low": "000104",
-        "Medium": "000204",
-        "High": "000304",
-        "High (15m)": "00020F03040000",
-        "High (30m)": "00021E03040000",
-        "High (60m)": "00023C03040000",
-        "Away": "000004",
+        "auto": "000404",
+        "low": "000104",
+        "medium": "000204",
+        "high": "000304",
+        "high_15m": "00020F03040000",
+        "high_30m": "00021E03040000",
+        "high_60m": "00023C03040000",
+        "away": "000004",
     }
 
     def _expected_length(self, length: int) -> bool:
@@ -202,11 +203,11 @@ class Code31d9(Code):
     _code = "31D9"
 
     _presets = {
-        "00": "Away",
-        "01": "Low",
-        "02": "Medium",
-        "03": "High",
-        "04": "Auto",
+        "00": "away",
+        "01": "low",
+        "02": "medium",
+        "03": "high",
+        "04": "auto",
     }
 
     def _expected_length(self, length: int) -> bool:

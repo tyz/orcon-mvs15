@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from custom_components.orcon_mvs15.codes import (
@@ -114,11 +116,11 @@ def test_co2_request_has_no_level() -> None:
 @pytest.mark.parametrize(
     ("data", "preset"),
     [
-        ("000004", "Away"),
-        ("000104", "Low"),
-        ("000204", "Medium"),
-        ("000304", "High"),
-        ("000404", "Auto"),
+        ("000004", "away"),
+        ("000104", "low"),
+        ("000204", "medium"),
+        ("000304", "high"),
+        ("000404", "auto"),
     ],
 )
 def test_fan_mode_decodes_preset(data: str, preset: str) -> None:
@@ -145,14 +147,14 @@ def test_unknown_fan_mode_is_not_mapped() -> None:
 @pytest.mark.parametrize(
     ("preset", "code", "data"),
     [
-        ("Auto", "22F1", "000404"),
-        ("Low", "22F1", "000104"),
-        ("Medium", "22F1", "000204"),
-        ("High", "22F1", "000304"),
-        ("Away", "22F1", "000004"),
-        ("High (15m)", "22F3", "00020F03040000"),
-        ("High (30m)", "22F3", "00021E03040000"),
-        ("High (60m)", "22F3", "00023C03040000"),
+        ("auto", "22F1", "000404"),
+        ("low", "22F1", "000104"),
+        ("medium", "22F1", "000204"),
+        ("high", "22F1", "000304"),
+        ("away", "22F1", "000004"),
+        ("high_15m", "22F3", "00020F03040000"),
+        ("high_30m", "22F3", "00021E03040000"),
+        ("high_60m", "22F3", "00023C03040000"),
     ],
 )
 def test_fan_mode_command(preset: str, code: str, data: str) -> None:
@@ -170,6 +172,12 @@ def test_fan_mode_command(preset: str, code: str, data: str) -> None:
     assert packet.expected_response.src_id == FAN_ID
 
 
+def test_fan_presets_are_valid_translation_keys() -> None:
+    """Preset identifiers double as translation keys, so they must be slugs."""
+    for preset in Code22f1.presets():
+        assert re.fullmatch(r"[a-z0-9]+(?:[_-][a-z0-9]+)*", preset), preset
+
+
 def test_fan_mode_command_rejects_unknown_preset() -> None:
     """Asking for a preset that does not exist is an error, not a silent no-op."""
     with pytest.raises(KeyError):
@@ -182,7 +190,7 @@ def test_timed_fan_mode_decodes_preset() -> None:
         f"044  I --- {FAN_ID} {GATEWAY_ID} --:------ 22F3 007 00020F03040000"
     )
 
-    assert Code22f3(packet).values["fan_mode"] == "High (15m)"
+    assert Code22f3(packet).values["fan_mode"] == "high_15m"
 
 
 def test_timed_fan_mode_is_not_requestable() -> None:
@@ -194,11 +202,11 @@ def test_timed_fan_mode_is_not_requestable() -> None:
 @pytest.mark.parametrize(
     ("data", "preset"),
     [
-        ("000000", "Away"),
-        ("000001", "Low"),
-        ("000002", "Medium"),
-        ("000003", "High"),
-        ("000004", "Auto"),
+        ("000000", "away"),
+        ("000001", "low"),
+        ("000002", "medium"),
+        ("000003", "high"),
+        ("000004", "auto"),
     ],
 )
 def test_fan_state_decodes_mode(data: str, preset: str) -> None:
@@ -215,7 +223,7 @@ def test_fan_state_decodes_fault_bit() -> None:
     packet = received(f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 008003")
     values = Code31d9(packet).values
 
-    assert values["fan_mode"] == "High"
+    assert values["fan_mode"] == "high"
     assert values["has_fault"] is True
 
 

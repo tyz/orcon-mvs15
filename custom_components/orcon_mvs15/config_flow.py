@@ -24,7 +24,7 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
                 {CONF_MQTT_TOPIC: user_input[CONF_MQTT_TOPIC]}
             )
             self._user_input = user_input
-            return await self.async_step_discovery_info()
+            return await self.async_step_fan_discovery()
 
         return self.async_show_form(
             step_id="user",
@@ -36,7 +36,7 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
         )
 
-    async def async_step_discovery_info(
+    async def async_step_fan_discovery(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
@@ -46,7 +46,7 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
             )
 
         return self.async_show_form(
-            step_id="discovery_info",
+            step_id="fan_discovery",
             description_placeholders={},
         )
 

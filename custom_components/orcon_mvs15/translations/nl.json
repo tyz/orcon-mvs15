@@ -13,7 +13,7 @@
           "mqtt_topic": "Het basistopic van de Rameses ESP-gateway, bijvoorbeeld RAMSES/GATEWAY."
         }
       },
-      "discovery_info": {
+      "fan_discovery": {
         "title": "Apparaatdetectie",
         "description": "Om de Orcon MVS-15 automatisch te detecteren, haal je de stekker even uit het stopcontact en steek je die daarna weer in. De ventilator wordt automatisch toegevoegd zodra het opstartbericht is ontvangen."
       },
@@ -37,7 +37,21 @@
   "entity": {
     "fan": {
       "fan_states": {
-        "name": "Ventilator"
+        "name": "Ventilator",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "auto": "Auto",
+              "low": "Laag",
+              "medium": "Midden",
+              "high": "Hoog",
+              "high_15m": "Hoog (15 min)",
+              "high_30m": "Hoog (30 min)",
+              "high_60m": "Hoog (60 min)",
+              "away": "Afwezig"
+            }
+          }
+        }
       }
     },
     "sensor": {

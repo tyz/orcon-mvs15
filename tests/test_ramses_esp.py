@@ -173,6 +173,6 @@ async def test_set_preset_mode_reports_a_publish_failure(hass: HomeAssistant) ->
     session.mqtt = FailingMQTT()  # pytest stub, duck typed on purpose
 
     with pytest.raises(HomeAssistantError, match="broker is offline"):
-        await session.set_preset_mode("Low")
+        await session.set_preset_mode("low")
 
     assert len(session._send_queue) == 0
