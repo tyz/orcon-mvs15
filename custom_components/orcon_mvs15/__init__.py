@@ -6,8 +6,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
+from .device import async_get_or_create_gateway
 from .models import OrconMVS15RuntimeData, OrconMVS15Config
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .mqtt import MQTT
@@ -47,15 +47,6 @@ async def _setup_coordinator(
         _LOGGER.debug(f"Storing discovered {config_key} ({ramses_id}) in config")
         new_data = {**entry.data, config_key: ramses_id}
         hass.config_entries.async_update_entry(entry, data=new_data)
-        # TODO?
-        # dev_reg = get_dev_reg(hass)
-        # dev_reg.async_get_or_create(
-        #    config_entry_id=entry.entry_id,
-        #    identifiers={(DOMAIN, ramses_id)},
-        #    manufacturer="TODO",
-        #    model="TODO",
-        #    name=f"TODO ({ramses_id})",
-        # )
         if unsub:
             unsub()
 
@@ -99,14 +90,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.config_entries.async_update_entry(entry, data=new_data)
         entry.runtime_data.config.gateway_id = mqtt.gateway_id
 
-    dev_reg = get_dev_reg(hass)
-    dev_reg.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, entry.runtime_data.config.gateway_id)},
-        manufacturer="Indalo-Tech",
-        model="RAMSES_ESP",
-        name=f"Indalo-Tech RAMSES_ESP ({entry.runtime_data.config.gateway_id})",
+    dev_reg = async_get_or_create_gateway(
+        hass, entry.entry_id, entry.runtime_data.config.gateway_id
     )
+    _LOGGER.debug("Gateway device is %s", dev_reg.id)
 
     try:
         ramses_esp = RamsesESP(

@@ -4,12 +4,11 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
 from typing import Callable
 
 from .codes import Code
-from .const import DOMAIN
+from .device import update_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -113,21 +112,20 @@ class DataHandlers:
         if payload.values["product_id"] not in ["26", "51"]:
             _LOGGER.warning(f"Unknown product_id {payload.values['product_id']}")
             return
-        dev_reg = get_dev_reg(self.hass)
-        identifier = (DOMAIN, payload.packet.src_id)
-        if (
-            entry := dev_reg.async_get_device_by_identifier(
-                identifier, self.config_entry.entry_id
-            )
-        ) is None:
+        ramses_id = payload.packet.src_id
+        software_ver_id = payload.values["software_ver_id"]
+        description = payload.values["description"]
+        if not isinstance(software_ver_id, str) or not isinstance(description, str):
+            _LOGGER.debug("Ignoring incomplete device info: %s", payload.values)
             return
-        dev_info = {
-            "device_id": entry.id,
-            "sw_version": f"{int(str(payload.values['software_ver_id']), 16)}",
-            "model_id": payload.values["description"],
-        }
-        _LOGGER.info(
-            f"Updating device info: {dev_info}, "
-            f"signal strength: {payload.values['signal_strength']} dBm"
-        )
-        dev_reg.async_update_device(**dev_info)
+        if update_device_info(
+            self.hass,
+            self.config_entry.entry_id,
+            ramses_id,
+            software_ver_id,
+            description,
+        ):
+            _LOGGER.info(
+                f"Updated device info for {ramses_id}, "
+                f"signal strength: {payload.values['signal_strength']} dBm"
+            )
