@@ -101,16 +101,17 @@ class RamsesESP:
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
 
     async def publish(self, packet: RamsesPacket) -> None:
+        if packet.expected_response:
+            packet.expected_response.cancel_retry_handler = async_call_later(
+                # Try again if expected_response wasn't received within packet.expected_response.timeout seconds
+                self.hass,
+                packet.expected_response.timeout,
+                lambda now, pkt=packet: self._schedule_retry(pkt),
+            )
+            # Queue before publishing: a fast response can otherwise arrive
+            # before the packet is known and would trigger a retry.
+            self._send_queue.add(packet)
         await self.mqtt.publish(packet)
-        if not packet.expected_response:
-            return
-        packet.expected_response.cancel_retry_handler = async_call_later(
-            # Try again if expected_response wasn't received within packet.expected_response.timeout seconds
-            self.hass,
-            packet.expected_response.timeout,
-            lambda now, pkt=packet: self._schedule_retry(pkt),
-        )
-        self._send_queue.add(packet)
 
     async def handle_ramses_mqtt_message(self, msg: ReceiveMessage) -> None:
         """Decode JSON, parse the MQTT payload and log it to file"""
