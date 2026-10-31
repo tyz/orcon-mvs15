@@ -103,8 +103,22 @@ async def test_packet_is_queued_before_it_is_published(
     assert mqtt.queued_at_publish == [True]
     assert mqtt.published == [packet]
     assert packet in session._send_queue
+    assert session.pending_packets == 1
     assert packet.expected_response is not None
     assert packet.expected_response.cancel_retry_handler is cancel_retry
+
+
+async def test_handled_codes_reports_the_registered_handlers(
+    hass: HomeAssistant,
+) -> None:
+    """Diagnostics see which packet codes the session handles."""
+    session = make_session(hass)
+
+    assert session.handled_codes == set()
+
+    session.add_handler("31D9", Mock())
+
+    assert session.handled_codes == {"31D9"}
 
 
 async def test_init_fan_starts_humidity_polling(
