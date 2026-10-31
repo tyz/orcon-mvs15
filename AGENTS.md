@@ -122,11 +122,12 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
   and the `OrconMVS15ConfigEntry` alias.
 * `discover_entity.py` — creates entities once a Ramses ID is known or discovered.
 * `fan.py`, `sensor.py`, `binary_sensor.py` — entities. They describe their
-  device through `device.py`.
+  device through `device.py`, take their names from translations and are
+  unavailable until the coordinator has the data they read.
 
-M1–M3 are done: test harness, correctness fixes, typed runtime data and the
-central device-info helper. Remaining: explicit code registry, entity
-translation keys/availability, config-flow options/reconfigure, diagnostics,
+M1–M4 are done: test harness, correctness fixes, typed runtime data, the
+central device-info helper, the explicit code registry, translated entity names
+with honest availability, and a reconfigure flow. Remaining: diagnostics,
 `quality_scale.yaml`, and CI.
 
 ## Testing
@@ -226,7 +227,7 @@ translation keys/availability, config-flow options/reconfigure, diagnostics,
 
 * Code, comments, documentation and commit messages are **English**.
 * This repository translates `en` and `nl` only. Keep
-  `custom_components/orcon_mvs15/strings.json` (once added),
+  `custom_components/orcon_mvs15/strings.json`,
   `translations/en.json` and `translations/nl.json` key-synced in the same change.
 * A removed key is removed from every file. Product names that are identical in a
   language are not untranslated; leave them.

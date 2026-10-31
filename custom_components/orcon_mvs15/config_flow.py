@@ -46,3 +46,26 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="discovery_info",
             description_placeholders={},
         )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        entry = self._get_reconfigure_entry()
+        if user_input is not None:
+            return self.async_update_reload_and_abort(entry, data_updates=user_input)
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=Schema(
+                {
+                    Required(
+                        CONF_REMOTE_ID,
+                        default=entry.data.get(CONF_REMOTE_ID, "29:163058"),
+                    ): str,
+                    Required(
+                        CONF_MQTT_TOPIC,
+                        default=entry.data.get(CONF_MQTT_TOPIC, "RAMSES/GATEWAY"),
+                    ): str,
+                }
+            ),
+        )

@@ -41,6 +41,7 @@ async def async_setup_entry(
 
 
 class OrconFan(CoordinatorEntity, FanEntity):
+    _attr_has_entity_name = True
     _attr_preset_modes = Code22f1.presets()
     _attr_supported_features = FanEntityFeature.PRESET_MODE
     _attr_translation_key = "fan_states"  # see icons.json
@@ -53,7 +54,6 @@ class OrconFan(CoordinatorEntity, FanEntity):
         config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
-        name: str,
         discovery_key: str,
     ) -> None:
         super().__init__(coordinator)
@@ -62,7 +62,6 @@ class OrconFan(CoordinatorEntity, FanEntity):
         self.ramses_esp = ramses_esp
         self.discovery_key = discovery_key
         self.gateway_id = config.gateway_id
-        self._attr_name = name
         self._attr_unique_id = f"orcon_mvs15_{self.fan_id}"
         self._attr_device_info = fan_device_info(
             hass,
@@ -78,6 +77,11 @@ class OrconFan(CoordinatorEntity, FanEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         await self.ramses_esp.set_preset_mode(preset_mode)
+
+    @property
+    def available(self) -> bool:
+        """The fan has no state until 31D9 has been received."""
+        return super().available and "fan_mode" in self.coordinator.data
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()

@@ -64,7 +64,6 @@ class DiscoverEntity:
                 config=self.config,
                 coordinator=self.coordinator,
                 ramses_esp=self.ramses_esp,
-                name=self.name,
                 discovery_key=self.discovery_key,
             )
             for x in self.entities

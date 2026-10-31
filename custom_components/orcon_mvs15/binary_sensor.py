@@ -36,6 +36,8 @@ async def async_setup_entry(
 
 
 class FaultBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    _attr_has_entity_name = True
+    _attr_translation_key = "fault"
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
 
     def __init__(
@@ -45,14 +47,18 @@ class FaultBinarySensor(CoordinatorEntity, BinarySensorEntity):
         config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
-        name: str,
         discovery_key: str,
     ) -> None:
         super().__init__(coordinator)
         self.discovery_key = discovery_key
-        self._attr_name = f"{name} fault"
         self._attr_unique_id = f"orcon_mvs15_{self.discovery_key}_fault_{ramses_id}"
         self._attr_device_info = attached_device_info(ramses_id)
+
+    @property
+    def available(self) -> bool:
+        """The sensor has no state until 31D9 has been received."""
+        key = f"{self.discovery_key}_fault"
+        return super().available and key in self.coordinator.data
 
     @callback
     def _handle_coordinator_update(self) -> None:

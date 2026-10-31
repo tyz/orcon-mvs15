@@ -20,7 +20,16 @@ from .device import update_gateway_version
 from .ramses_packet import RamsesPacket, RamsesID
 from .ramses_packet_queue import RamsesPacketQueue
 from .mqtt import MQTT, MQTTException
-from .codes import *  # noqa: F403
+from .codes import (
+    CODE_REGISTRY,
+    Code,
+    Code10e0,
+    Code1298,
+    Code12a0,
+    Code22f1,
+    Code31d9,
+    Code31e0,
+)
 
 # flake8: noqa: F405
 
@@ -205,9 +214,9 @@ class RamsesESP:
         except Exception:
             _LOGGER.error(f"Error parsing MQTT message {envelope}", exc_info=True)
             return
-        if (code_class := globals().get(f"Code{packet.code.lower()}")) is None:
+        if (code_class := CODE_REGISTRY.get(packet.code.upper())) is None:
             _LOGGER.warning(
-                f"Class Code{packet.code.lower()} not imported, or does not exist"
+                f"There is no class for code {packet.code}, using the generic Code"
             )
             code_class = Code
         payload = code_class(packet=packet)
