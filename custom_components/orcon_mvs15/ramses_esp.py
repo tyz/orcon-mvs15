@@ -202,7 +202,12 @@ class RamsesESP:
         _LOGGER.debug(f"Remove handler for code {code}")
         del self._handlers[code]
 
-    def _schedule_retry(self, packet: RamsesPacket) -> None:
+    def _schedule_retry(self, packet: RamsesPacket, _now: datetime) -> None:
+        """Queue a retry after async_call_later fires.
+
+        async_call_later passes the scheduled time as the last argument and runs
+        this synchronous callback in an executor, so it must accept the time.
+        """
         self.hass.loop.call_soon_threadsafe(
             lambda: self.hass.async_create_task(self._retry_pending_request(packet))
         )
