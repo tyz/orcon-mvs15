@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
@@ -29,11 +30,19 @@ MQTT_TOPIC = "RAMSES/GATEWAY"
 class FakeMQTT:
     """Stand-in for the transport during entry setup."""
 
+    last_instance: FakeMQTT | None = None
+
     def __init__(
-        self, hass: HomeAssistant, base_topic: str, gateway_id: RamsesID
+        self,
+        hass: HomeAssistant,
+        base_topic: str,
+        gateway_id: RamsesID,
+        connection_callback: Callable[[bool], None] | None = None,
     ) -> None:
         self.gateway_id = gateway_id
+        self.connection_callback = connection_callback
         self.cleaned = False
+        FakeMQTT.last_instance = self
 
     async def init(self) -> None:
         pass
@@ -121,6 +130,15 @@ async def test_setup_builds_the_runtime_data_and_unloads(
         "31E0",
     }
     assert runtime.ramses_esp.started
+    assert FakeMQTT.last_instance is not None
+    connection_callback = FakeMQTT.last_instance.connection_callback
+    assert connection_callback is not None
+    connection_callback(False)
+    assert runtime.fan_coordinator.last_update_success is False
+    assert runtime.co2_coordinator.last_update_success is False
+    assert runtime.rem_coordinator.last_update_success is False
+    connection_callback(True)
+    assert runtime.fan_coordinator.last_update_success is True
     fan_states = hass.states.async_all("fan")
     assert len(fan_states) == 1
     assert fan_states[0].name == "Orcon MVS-15 fan (29:224547) Fan"

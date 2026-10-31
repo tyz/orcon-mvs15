@@ -75,13 +75,17 @@ rules:
       There is no options flow. The setup parameters are changed through the
       documented reconfigure flow.
   docs-installation-parameters: done
-  entity-unavailable: done
+  entity-unavailable:
+    status: done
+    comment: |
+      Entities are unavailable until their first packet and while the MQTT
+      connection is down.
   integration-owner: done
   log-when-unavailable:
-    status: todo
+    status: done
     comment: |
-      Packet errors are logged, but a lost gateway connection and its recovery
-      are not reported once each.
+      A lost and restored MQTT connection is logged once at info level, and
+      the coordinators mark their entities unavailable in between.
   parallel-updates: done
   reauthentication-flow:
     status: exempt
