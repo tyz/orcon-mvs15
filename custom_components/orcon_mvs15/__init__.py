@@ -5,7 +5,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, CoreState
-from homeassistant.exceptions import ConfigEntryNotReady, PlatformNotReady
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
 from .models import OrconMVS15RuntimeData, OrconMVS15Config
@@ -89,7 +89,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         await mqtt.init()
     except Exception as e:
-        raise PlatformNotReady(f"MQTT: {e}")
+        raise ConfigEntryNotReady(f"MQTT: {e}") from e
 
     entry.runtime_data.cleanup.append(mqtt.cleanup)
 
@@ -121,7 +121,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except ConfigEntryNotReady:
         raise
     except Exception as e:
-        raise PlatformNotReady(f"RamsesESP: {e}")
+        raise ConfigEntryNotReady(f"RamsesESP: {e}") from e
 
     entry.runtime_data.ramses_esp = ramses_esp
 
