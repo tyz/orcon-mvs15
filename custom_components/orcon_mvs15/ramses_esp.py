@@ -12,13 +12,13 @@ from datetime import datetime, timedelta
 from homeassistant.components import mqtt as mqtt_client
 from homeassistant.components.mqtt import ReceiveMessage
 from homeassistant.core import HomeAssistant, Event
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
 from .ramses_packet import RamsesPacket, RamsesID
 from .ramses_packet_queue import RamsesPacketQueue
-from .mqtt import MQTT
+from .mqtt import MQTT, MQTTException
 from .const import DOMAIN
 from .codes import *  # noqa: F403
 
@@ -131,7 +131,14 @@ class RamsesESP:
             # Queue before publishing: a fast response can otherwise arrive
             # before the packet is known and would trigger a retry.
             self._send_queue.add(packet)
-        await self.mqtt.publish(packet)
+        try:
+            await self.mqtt.publish(packet)
+        except Exception:
+            if packet.expected_response:
+                # Publishing failed, so there is nothing to wait for. Drop the
+                # retry timer instead of retrying a command the caller saw fail.
+                self._send_queue.remove(packet)
+            raise
 
     async def handle_ramses_mqtt_message(self, msg: ReceiveMessage) -> None:
         """Decode JSON, parse the MQTT payload and log it to file"""
@@ -169,11 +176,15 @@ class RamsesESP:
         """Set fan preset mode"""
         try:
             packet = Code22f1.set(value=mode, src_id=self.remote_id, dst_id=self.fan_id)
-        except Exception as e:
-            _LOGGER.error(f"Error setting fan preset mode '{mode}': {e}")
-            return
+        except KeyError as err:
+            raise HomeAssistantError(f"Unknown fan preset mode: {mode}") from err
         _LOGGER.info(f"Setting fan preset mode to {mode}")
-        await self.publish(packet)
+        try:
+            await self.publish(packet)
+        except MQTTException as err:
+            raise HomeAssistantError(
+                f"Failed to set fan preset mode {mode}: {err}"
+            ) from err
 
     def add_handler(self, code: str, func: Callable) -> None:
         _LOGGER.debug(f"Adding handler for code {code}")

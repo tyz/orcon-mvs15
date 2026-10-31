@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from homeassistant.components.mqtt import ReceiveMessage
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceRegistry
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -18,6 +19,7 @@ from custom_components.orcon_mvs15.const import (
     CONF_REMOTE_ID,
     DOMAIN,
 )
+from custom_components.orcon_mvs15.mqtt import MQTTException
 from custom_components.orcon_mvs15.ramses_esp import RamsesESP
 from custom_components.orcon_mvs15.ramses_packet import RamsesID, RamsesPacket
 
@@ -136,3 +138,27 @@ async def test_humidity_polling_starts_once_and_is_cleaned_up(
 
     track.assert_called_once()
     unsub.assert_called_once_with()
+
+
+async def test_set_preset_mode_rejects_an_unknown_mode(hass: HomeAssistant) -> None:
+    """An unknown preset is a user error, not a silent no-op."""
+    session = make_session(hass)
+
+    with pytest.raises(HomeAssistantError, match="Turbo"):
+        await session.set_preset_mode("Turbo")
+
+
+async def test_set_preset_mode_reports_a_publish_failure(hass: HomeAssistant) -> None:
+    """A failed command must reach the caller so Home Assistant can report it."""
+    session = make_session(hass)
+
+    class FailingMQTT:
+        async def publish(self, packet: RamsesPacket) -> None:
+            raise MQTTException("broker is offline")
+
+    session.mqtt = FailingMQTT()  # pytest stub, duck typed on purpose
+
+    with pytest.raises(HomeAssistantError, match="broker is offline"):
+        await session.set_preset_mode("Low")
+
+    assert len(session._send_queue) == 0
