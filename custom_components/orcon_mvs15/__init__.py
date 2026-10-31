@@ -124,6 +124,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(f"RamsesESP: {e}") from e
 
     entry.runtime_data.ramses_esp = ramses_esp
+    entry.runtime_data.cleanup.append(ramses_esp.cleanup)
 
     dh = DataHandlers(hass, entry)
     for code, func in dh.pointers.items():

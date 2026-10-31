@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from homeassistant.components.mqtt import ReceiveMessage
@@ -103,3 +103,36 @@ async def test_packet_is_queued_before_it_is_published(
     assert packet in session._send_queue
     assert packet.expected_response is not None
     assert packet.expected_response.cancel_retry_handler is cancel_retry
+
+
+async def test_init_fan_starts_humidity_polling(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """12A0 is not broadcast, so polling must not depend on a response."""
+    track = Mock(return_value=Mock())
+    monkeypatch.setattr(ramses_esp_module, "async_track_time_interval", track)
+    session = make_session(hass)
+    session.publish = AsyncMock()
+
+    await session.init_fan(discovered_fan_id=RamsesID(FAN_ID))
+
+    track.assert_called_once()
+    assert track.call_args.args[1] == session.req_humidity
+
+
+async def test_humidity_polling_starts_once_and_is_cleaned_up(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Repeated fan setup does not add intervals, and cleanup removes it."""
+    unsub = Mock()
+    track = Mock(return_value=unsub)
+    monkeypatch.setattr(ramses_esp_module, "async_track_time_interval", track)
+    session = make_session(hass)
+    session.publish = AsyncMock()
+
+    await session.init_fan(discovered_fan_id=RamsesID(FAN_ID))
+    await session.init_fan(discovered_fan_id=RamsesID(FAN_ID))
+    session.cleanup()
+
+    track.assert_called_once()
+    unsub.assert_called_once_with()

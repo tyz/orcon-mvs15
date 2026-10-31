@@ -7,13 +7,13 @@ import json
 
 from collections.abc import Callable
 from typing import TextIO
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from homeassistant.components import mqtt as mqtt_client
 from homeassistant.components.mqtt import ReceiveMessage
 from homeassistant.core import HomeAssistant, Event
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.device_registry import async_get as get_dev_reg
 
 from .ramses_packet import RamsesPacket, RamsesID
@@ -25,6 +25,8 @@ from .codes import *  # noqa: F403
 # flake8: noqa: F405
 
 _LOGGER = logging.getLogger(__name__)
+
+HUMIDITY_POLL_INTERVAL = timedelta(minutes=5)
 
 
 class RamsesESP:
@@ -48,6 +50,7 @@ class RamsesESP:
         self._handlers: dict = {}
         self._send_queue = RamsesPacketQueue()
         self._log_f: TextIO | None = None
+        self._humidity_poll_unsub: Callable[[], None] | None = None
         if self.fan_id:
             _LOGGER.info(f"Using previously discovered fan id ({self.fan_id})")
         else:
@@ -83,6 +86,23 @@ class RamsesESP:
         await self.publish(Code10e0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
+        self.start_humidity_polling()
+
+    def start_humidity_polling(self) -> None:
+        """12A0 is not broadcast, so poll it even if a response was lost."""
+        if self._humidity_poll_unsub is not None:
+            return
+        self._humidity_poll_unsub = async_track_time_interval(
+            self.hass, self.req_humidity, HUMIDITY_POLL_INTERVAL
+        )
+        _LOGGER.info(f"Polling humidity every {HUMIDITY_POLL_INTERVAL}")
+
+    def cleanup(self) -> None:
+        """Stop the humidity poll when the config entry unloads."""
+        if self._humidity_poll_unsub is not None:
+            self._humidity_poll_unsub()
+            self._humidity_poll_unsub = None
+            _LOGGER.debug("Removed the humidity poll interval")
 
     async def init_co2(self, discovered_co2_id: RamsesID | None = None) -> None:
         """Fetch current CO2 sensor state + device info on startup or discovery"""
