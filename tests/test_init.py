@@ -121,7 +121,9 @@ async def test_setup_builds_the_runtime_data_and_unloads(
         "31E0",
     }
     assert runtime.ramses_esp.started
-    assert len(hass.states.async_all("fan")) == 1
+    fan_states = hass.states.async_all("fan")
+    assert len(fan_states) == 1
+    assert fan_states[0].name == "Orcon MVS-15 fan (29:224547) Fan"
     gateway = device_registry.async_get_device_by_identifier(
         (DOMAIN, GATEWAY_ID), entry.entry_id
     )

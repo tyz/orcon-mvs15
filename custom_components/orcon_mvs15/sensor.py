@@ -72,6 +72,8 @@ async def async_setup_entry(
 
 
 class Co2Sensor(CoordinatorEntity, SensorEntity):
+    _attr_has_entity_name = True
+    _attr_translation_key = "co2"
     _attr_native_unit_of_measurement = UnitOfRatio.PARTS_PER_MILLION
     _attr_device_class = SensorDeviceClass.CO2
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -83,7 +85,6 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
-        name: str,
         discovery_key: str,
     ) -> None:
         super().__init__(coordinator)
@@ -91,7 +92,6 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         self.ramses_esp = ramses_esp
         self.discovery_key = discovery_key
         self._state = None
-        self._attr_name = name
         self._attr_unique_id = f"orcon_mvs15_co2_{self.co2_id}"
         self._attr_device_info = co2_device_info(
             hass,
@@ -112,6 +112,11 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         ):  # only when HA is already running (ie after discovery)
             await self.ramses_esp.init_co2(discovered_co2_id=self.co2_id)
 
+    @property
+    def available(self) -> bool:
+        """The sensor has no state until 1298 has been received."""
+        return super().available and "co2" in self.coordinator.data
+
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -126,6 +131,8 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
 
 
 class HumiditySensor(CoordinatorEntity, SensorEntity):
+    _attr_has_entity_name = True
+    _attr_translation_key = "humidity"
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_device_class = SensorDeviceClass.HUMIDITY
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -137,14 +144,17 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
         config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
-        name: str,
         discovery_key: str,
     ) -> None:
         super().__init__(coordinator)
         self.discovery_key = discovery_key
-        self._attr_name = f"{name} relative humidity"
         self._attr_unique_id = f"orcon_mvs15_humidity_{ramses_id}"
         self._attr_device_info = attached_device_info(ramses_id)
+
+    @property
+    def available(self) -> bool:
+        """The sensor has no state until 12A0 has been received."""
+        return super().available and "relative_humidity" in self.coordinator.data
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -156,6 +166,8 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
 
 
 class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
+    _attr_has_entity_name = True
+    _attr_translation_key = "signal_strength"
     _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
     _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -167,14 +179,18 @@ class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
         config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
         ramses_esp: RamsesESP,
-        name: str,
         discovery_key: str,
     ) -> None:
         super().__init__(coordinator)
         self.discovery_key = discovery_key
-        self._attr_name = f"{name} signal strength"
         self._attr_unique_id = f"orcon_mvs15_{discovery_key}_dbm_{ramses_id}"
         self._attr_device_info = attached_device_info(ramses_id)
+
+    @property
+    def available(self) -> bool:
+        """The sensor has no state until a packet carried a signal strength."""
+        key = f"{self.discovery_key}_signal_strength"
+        return super().available and key in self.coordinator.data
 
     @callback
     def _handle_coordinator_update(self) -> None:

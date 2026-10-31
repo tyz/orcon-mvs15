@@ -14,5 +14,28 @@
         "description": "Om de Orcon MVS-15 automatisch te detecteren, haal je de stekker even uit het stopcontact en steek je die daarna weer in. De ventilator wordt automatisch toegevoegd zodra het opstartbericht is ontvangen."
       }
     }
+  },
+  "entity": {
+    "fan": {
+      "fan_states": {
+        "name": "Ventilator"
+      }
+    },
+    "sensor": {
+      "co2": {
+        "name": "CO₂"
+      },
+      "humidity": {
+        "name": "Relatieve luchtvochtigheid"
+      },
+      "signal_strength": {
+        "name": "Signaalsterkte"
+      }
+    },
+    "binary_sensor": {
+      "fault": {
+        "name": "Storing"
+      }
+    }
   }
 }
