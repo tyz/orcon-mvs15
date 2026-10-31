@@ -30,7 +30,7 @@ Receive payload:
 Publish payload:
 
 ```json
-{"msg": " I --- 18:149960 29:224547 --:------ 12A0 001 00"}
+{"msg": "I  --- 18:149960 29:224547 --:------ 12A0 001 00"}
 ```
 
 The timestamp is added by the gateway. The integration does not add a `ts` field
