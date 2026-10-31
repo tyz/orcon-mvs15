@@ -52,6 +52,12 @@ The remote's ID in this example is `29:123456`.
 1. The state of the humidity sensor (part of the fan) will be requested (12A0), and will be set up in HA if it responds
 1. The CO₂ sensor/remote will be discovered as soon as it sends a vent demand message (31E0) to the above fan (might take a while)
 
+## Reconfiguring
+
+If the remote ID or MQTT topic prefix is wrong, open the integration's menu in
+`Settings > Devices & services` and choose **Reconfigure**. The other discovered
+IDs are kept and the entry reloads after the change.
+
 ## Lovelace
 
 ```yaml
