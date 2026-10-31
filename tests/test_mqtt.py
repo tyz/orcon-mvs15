@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from collections.abc import Callable
 from unittest.mock import Mock
@@ -85,6 +86,58 @@ async def test_gateway_discovery_subscribes_to_the_gateway_topics(
     assert transport.pub_topic == f"{MQTT_TOPIC}/{GATEWAY_ID}/tx"
     assert transport.version_topic == f"{MQTT_TOPIC}/{GATEWAY_ID}/info/version"
     wildcard_unsub.assert_called_once_with()
+
+
+async def test_connection_transitions_are_logged_once(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Each lost and restored connection is reported exactly once."""
+    connection_callbacks: list[Callable[[bool], None]] = []
+    status_unsub = Mock()
+
+    async def fake_subscribe(
+        hass: HomeAssistant, topic: str, handler: Callable
+    ) -> Callable[[], None]:
+        return Mock()
+
+    def fake_connection_status(
+        hass_: HomeAssistant, callback: Callable[[bool], None]
+    ) -> Callable[[], None]:
+        connection_callbacks.append(callback)
+        return status_unsub
+
+    monkeypatch.setattr(mqtt_module.mqtt, "async_subscribe", fake_subscribe)
+    monkeypatch.setattr(
+        mqtt_module.mqtt,
+        "async_subscribe_connection_status",
+        fake_connection_status,
+    )
+    monkeypatch.setattr(mqtt_module.mqtt, "is_connected", lambda hass_: True)
+    observed: list[bool] = []
+    transport = MQTT(
+        hass,
+        MQTT_TOPIC,
+        gateway_id=RamsesID(GATEWAY_ID),
+        connection_callback=observed.append,
+    )
+    await transport.init()
+    await transport.setup(Mock(), Mock())
+
+    assert len(connection_callbacks) == 1
+    with caplog.at_level(logging.INFO):
+        connection_callbacks[0](False)
+        connection_callbacks[0](False)
+        connection_callbacks[0](True)
+        connection_callbacks[0](True)
+
+    assert observed == [False, True]
+    assert caplog.text.count("MQTT connection lost") == 1
+    assert caplog.text.count("MQTT connection restored") == 1
+
+    transport.cleanup()
+    status_unsub.assert_called_once_with()
 
 
 async def test_configured_gateway_skips_discovery(

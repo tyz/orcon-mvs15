@@ -25,14 +25,17 @@ class MQTT:
         base_topic: str,
         gateway_id: RamsesID = RamsesID(),
         discovery_timeout: float = 10.0,
+        connection_callback: Callable[[bool], None] | None = None,
     ) -> None:
         self.hass = hass
         self.base_topic = base_topic
         self.gateway_id = gateway_id
         self.discovery_timeout = discovery_timeout
+        self.connection_callback = connection_callback
         self.online_topic = f"{base_topic}/+"
         self._mqtt_unsubs: list = []
         self._online_event = asyncio.Event()
+        self._connected = False
 
     async def init(self) -> None:
         if not self.gateway_id:
@@ -62,6 +65,24 @@ class MQTT:
         """Setup message handlers"""
         await self._subscribe(self.sub_topic, handle_message)
         await self._subscribe(self.version_topic, handle_version_message)
+        unsub = mqtt.async_subscribe_connection_status(
+            self.hass, self._handle_connection_status
+        )
+        self._mqtt_unsubs.append(unsub)
+        self._connected = mqtt.is_connected(self.hass)
+
+    @callback
+    def _handle_connection_status(self, connected: bool) -> None:
+        """Log each MQTT connection transition once and forward it."""
+        if connected == self._connected:
+            return
+        self._connected = connected
+        if connected:
+            _LOGGER.info("MQTT connection restored")
+        else:
+            _LOGGER.info("MQTT connection lost; the fan is unavailable")
+        if self.connection_callback is not None:
+            self.connection_callback(connected)
 
     async def _subscribe(self, topic: str, handler: Callable) -> Callable[[], None]:
         _LOGGER.debug(f"Subscribed to {topic}")

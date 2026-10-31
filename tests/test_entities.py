@@ -80,6 +80,30 @@ async def test_entity_is_unavailable_until_its_data_arrives(
     assert entity.available is True
 
 
+async def test_entities_follow_the_coordinator_availability(
+    hass: HomeAssistant,
+) -> None:
+    """A lost MQTT connection makes pushed entities unavailable."""
+    coordinator = make_coordinator(hass)
+    coordinator.data = {"fan_mode": "low"}
+    entity = OrconFan(
+        hass=hass,
+        ramses_id=FAN_ID,
+        config=OrconMVS15Config(mqtt_topic=MQTT_TOPIC),
+        coordinator=coordinator,
+        ramses_esp=Mock(),
+        discovery_key="fan",
+    )
+
+    assert entity.available is True
+
+    coordinator.async_set_available(False)
+    assert entity.available is False
+
+    coordinator.async_set_available(True)
+    assert entity.available is True
+
+
 def test_signal_strength_is_a_diagnostic_entity(hass: HomeAssistant) -> None:
     """Signal strength describes the radio link, not the fan's function."""
     entity = SignalStrengthSensor(

@@ -119,7 +119,9 @@ The integration is push-based: the gateway publishes Ramses packets and the
 integration reacts to them. The fan state (`31D9`) and vent demand (`31E0`) are
 broadcast every 5 minutes, and device info (`10E0`) every 24 hours. The fan's
 humidity sensor (`12A0`) is not broadcast, so it is polled every 5 minutes.
-Entities are unavailable until the packet they read has arrived.
+Entities are unavailable until the packet they read has arrived. If the MQTT
+connection is lost, all entities become unavailable and the loss is logged once;
+they recover when the connection returns.
 
 ## Known limitations
 

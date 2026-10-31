@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DOMAIN
@@ -27,3 +27,15 @@ class OrconMVS15DataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if not self.data:
             return {}
         return {**self.data}
+
+    @callback
+    def async_set_available(self, available: bool) -> None:
+        """Set availability without logging a poll error on every transition.
+
+        Data is pushed, so a failed poll does not exist. The MQTT connection is
+        the signal that the fan can no longer be reached.
+        """
+        if self.last_update_success == available:
+            return
+        self.last_update_success = available
+        self.async_update_listeners()

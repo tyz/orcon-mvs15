@@ -72,11 +72,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
         hass, entry, "discovered_rem_id", CONF_REMOTE_ID
     )
 
+    def _handle_connection(connected: bool) -> None:
+        """Mark every coordinator unavailable while MQTT is down."""
+        for coordinator in (fan_coordinator, co2_coordinator, rem_coordinator):
+            coordinator.async_set_available(connected)
+
     try:
         mqtt = MQTT(
             hass,
             base_topic=config.mqtt_topic,
             gateway_id=config.gateway_id,
+            connection_callback=_handle_connection,
         )
         await mqtt.init()
     except Exception as e:
