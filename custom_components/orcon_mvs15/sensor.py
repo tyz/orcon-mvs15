@@ -8,6 +8,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    EntityCategory,
     UnitOfRatio,
     PERCENTAGE,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
@@ -24,6 +25,9 @@ from .ramses_packet import RamsesPacketDatetime, RamsesID
 from .ramses_esp import RamsesESP
 
 _LOGGER = logging.getLogger(__name__)
+
+# Sensors only read pushed data, so there is nothing to serialise.
+PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
@@ -167,6 +171,7 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
 
 class SignalStrengthSensor(CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_translation_key = "signal_strength"
     _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
     _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH

@@ -18,6 +18,9 @@ from .codes import Code22f1
 
 _LOGGER = logging.getLogger(__name__)
 
+# Fan commands are queued by the session, so entity calls do not collide.
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
