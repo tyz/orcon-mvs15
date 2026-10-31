@@ -21,6 +21,9 @@
           "mqtt_topic": "MQTT Topic Prefix (e.g., RAMSES/GATEWAY)"
         }
       }
+    },
+    "abort": {
+      "already_configured": "This MQTT topic is already configured."
     }
   },
   "entity": {
