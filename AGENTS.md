@@ -84,8 +84,11 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
   `manifest.json`, or dependencies in project metadata, without explicit
   permission.
 * **Architecture separation:** communication stays out of entity classes,
-  wrapped in the session/coordinator layers. Protocol decoding must stay free of
-  Home Assistant imports.
+  wrapped in the session/coordinator layers. Keep protocol and domain logic in a
+  Home Assistant-free core behind a narrow transport boundary: a new device or
+  sensor is a decoder/handler/entity addition, a new transport is an adapter,
+  and neither rewrites the session. The core never imports `homeassistant` and
+  must be testable without it.
 * **Lifecycle:** use `entry.runtime_data` for per-entry state, not
   `hass.data[DOMAIN]`. Register teardown with `entry.async_on_unload(...)`.
   Use `async_at_started`/`ConfigEntryNotReady` instead of ad-hoc sleeps.
