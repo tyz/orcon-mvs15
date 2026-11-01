@@ -13,6 +13,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.orcon_mvs15.const import DOMAIN
 from custom_components.orcon_mvs15.handlers import DataHandlers
+from custom_components.orcon_mvs15.ramses_packet import RamsesID
 
 FAN_ID = "29:224547"
 
@@ -89,6 +90,30 @@ async def test_device_info_updates_the_registered_device(
     assert updated is not None
     assert updated.sw_version == "42"
     assert updated.model_id == "Orcon MVS-15"
+
+
+async def test_vmc_device_info_updates_the_registered_device(
+    hass: HomeAssistant, device_registry: DeviceRegistry
+) -> None:
+    """The VMC-15RPS34 reports product 5F and is still an Orcon fan."""
+    entry, handlers = make_entry_handlers(hass)
+    device = device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, FAN_ID)},
+    )
+
+    handlers._device_info_handler(
+        device_info_payload(
+            product_id="5F",
+            software_ver_id="0E",
+            description="VMC-15RPS34",
+        )
+    )
+
+    updated = device_registry.async_get(device.id)
+    assert updated is not None
+    assert updated.sw_version == "14"
+    assert updated.model_id == "VMC-15RPS34"
 
 
 async def test_incomplete_device_info_is_ignored(
@@ -169,6 +194,19 @@ def test_powerup_handler_stores_the_announced_fan(
         "discovered_fan_id": FAN_ID,
         "fan_signal_strength": -61,
     }
+
+
+def test_powerup_handler_falls_back_to_the_sender(hass: HomeAssistant) -> None:
+    """A 042F without an announced ID still names the fan as its sender."""
+    handlers = make_recording_handlers(hass)
+    payload = SimpleNamespace(
+        values={"signal_strength": -61},
+        packet=SimpleNamespace(ann_id=RamsesID(), src_id=RamsesID(FAN_ID)),
+    )
+
+    handlers._powerup_handler(payload)
+
+    assert handlers.fan_coordinator.data["discovered_fan_id"] == FAN_ID
 
 
 def test_fan_state_handler_stores_mode_fault_and_signal(

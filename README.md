@@ -23,6 +23,8 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
 ## Supported devices
 
 - Orcon MVS-15 ventilation unit (fan, humidity sensor and fault state)
+- Orcon VMC-15RPS34 ventilation unit (same packets as the MVS-15; it reports
+  product ID `5F`)
 - Orcon MVS-15RH CO2B CO₂/humidity remote (15RF)
 - Ramses ESP gateway running the Ramses II firmware over MQTT
 

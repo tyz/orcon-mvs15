@@ -195,6 +195,42 @@ async def test_setup_stores_a_discovered_fan_id(hass: HomeAssistant) -> None:
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 
+async def test_an_empty_discovered_fan_id_is_not_stored(
+    hass: HomeAssistant,
+) -> None:
+    """A 042F without a sender must not stop discovery for the real fan."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", FakeMQTT),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    runtime = entry.runtime_data
+
+    runtime.fan_coordinator.async_set_updated_data({"discovered_fan_id": RamsesID()})
+
+    assert CONF_FAN_ID not in entry.data
+
+    runtime.fan_coordinator.async_set_updated_data(
+        {"discovered_fan_id": RamsesID(FAN_ID)}
+    )
+
+    assert entry.data[CONF_FAN_ID] == FAN_ID
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
 async def test_setup_stores_a_discovered_gateway_id(hass: HomeAssistant) -> None:
     """A wildcard-discovered gateway is remembered in the entry data."""
     entry = MockConfigEntry(
