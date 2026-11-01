@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from string import Formatter
 from typing import Any
 
 import pytest
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import translation
 
 from custom_components.orcon_mvs15.codes import Code22f1
+from custom_components.orcon_mvs15.const import DOMAIN
 
 COMPONENT = Path(__file__).parent.parent / "custom_components" / "orcon_mvs15"
 TRANSLATION_FILES = [
@@ -60,3 +64,31 @@ def test_translation_files_have_the_same_keys() -> None:
 
     for name in TRANSLATION_FILES[1:]:
         assert key_tree(load_json(name)) == source
+
+
+EXCEPTION_PLACEHOLDERS: dict[str, dict[str, str] | None] = {
+    "mqtt_setup_failed": {"error": "boom"},
+    "session_setup_failed": {"error": "boom"},
+    "mqtt_not_available": None,
+    "unknown_preset_mode": {"mode": "Turbo"},
+    "set_preset_failed": {"mode": "low", "error": "offline"},
+}
+
+
+async def test_exception_messages_resolve(hass: HomeAssistant) -> None:
+    """Every raised translation key resolves to a message with its values."""
+    assert set(EXCEPTION_PLACEHOLDERS) == set(load_json("strings.json")["exceptions"])
+
+    await translation.async_load_integrations(hass, {DOMAIN})
+    messages = translation.async_get_cached_translations(
+        hass, "en", "exceptions", DOMAIN
+    )
+
+    for key, placeholders in EXCEPTION_PLACEHOLDERS.items():
+        message = messages[f"component.{DOMAIN}.exceptions.{key}.message"]
+        fields = {
+            field for _, field, _, _ in Formatter().parse(message) if field is not None
+        }
+
+        assert fields == set(placeholders or {}), key
+        assert message.format(**(placeholders or {}))

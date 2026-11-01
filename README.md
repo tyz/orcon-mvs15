@@ -113,6 +113,47 @@ Check the LED on the fan unit if it reports a fault:
 | 2x           | No value from humidity sensor |
 | 3x           | RF communication failure      |
 
+## Automations
+
+The fan presets are useful automation targets. This example boosts the fan to
+`high` when the CO₂ level stays above 1200 ppm for two minutes, and returns it
+to `auto` after ten minutes below 800 ppm. The hysteresis stops the fan
+switching back and forth around a single threshold.
+
+```yaml
+automation:
+  - alias: Boost the Orcon MVS-15 on high CO₂
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.orcon_mvs_15_co2
+        above: 1200
+        for: "00:02:00"
+    actions:
+      - action: fan.set_preset_mode
+        target:
+          entity_id: fan.orcon_mvs_15_fan
+        data:
+          preset_mode: high
+
+  - alias: Return the Orcon MVS-15 to auto
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.orcon_mvs_15_co2
+        below: 800
+        for: "00:10:00"
+    actions:
+      - action: fan.set_preset_mode
+        target:
+          entity_id: fan.orcon_mvs_15_fan
+        data:
+          preset_mode: auto
+```
+
+Replace the entity IDs with the ones in your installation. The timed presets
+(`high_15m`, `high_30m` and `high_60m`) are sent to the fan, but the integration
+does not track when the timer ends; the preset follows the next state the fan
+reports.
+
 ## Data updates
 
 The integration is push-based: the gateway publishes Ramses packets and the

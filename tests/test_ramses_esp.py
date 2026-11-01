@@ -195,11 +195,15 @@ async def test_humidity_polling_starts_once_and_is_cleaned_up(
 
 
 async def test_set_preset_mode_rejects_an_unknown_mode(hass: HomeAssistant) -> None:
-    """An unknown preset is a user error, not a silent no-op."""
+    """An unknown preset is a user error with a translatable message."""
     session = make_session(hass)
 
-    with pytest.raises(HomeAssistantError, match="Turbo"):
+    with pytest.raises(HomeAssistantError) as err:
         await session.set_preset_mode("Turbo")
+
+    assert err.value.translation_domain == DOMAIN
+    assert err.value.translation_key == "unknown_preset_mode"
+    assert err.value.translation_placeholders == {"mode": "Turbo"}
 
 
 async def test_set_preset_mode_reports_a_publish_failure(hass: HomeAssistant) -> None:
@@ -212,9 +216,15 @@ async def test_set_preset_mode_reports_a_publish_failure(hass: HomeAssistant) ->
 
     session.mqtt = FailingMQTT()  # pytest stub, duck typed on purpose
 
-    with pytest.raises(HomeAssistantError, match="broker is offline"):
+    with pytest.raises(HomeAssistantError) as err:
         await session.set_preset_mode("low")
 
+    assert err.value.translation_domain == DOMAIN
+    assert err.value.translation_key == "set_preset_failed"
+    assert err.value.translation_placeholders == {
+        "mode": "low",
+        "error": "broker is offline",
+    }
     assert len(session._send_queue) == 0
 
 
@@ -241,8 +251,11 @@ async def test_setup_raises_when_mqtt_is_not_available(
     )
     session = make_session(hass)
 
-    with pytest.raises(ConfigEntryNotReady, match="MQTT"):
+    with pytest.raises(ConfigEntryNotReady) as err:
         await session.setup()
+
+    assert err.value.translation_domain == DOMAIN
+    assert err.value.translation_key == "mqtt_not_available"
 
 
 async def test_setup_subscribes_and_initialises_known_devices(

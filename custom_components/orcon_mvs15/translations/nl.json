@@ -10,7 +10,7 @@
         },
         "data_description": {
           "remote_id": "Het Ramses-ID van de 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
-          "mqtt_topic": "Het basistopic van de Rameses ESP-gateway, bijvoorbeeld RAMSES/GATEWAY."
+          "mqtt_topic": "Het basistopic van de Ramses ESP-gateway, bijvoorbeeld RAMSES/GATEWAY."
         }
       },
       "fan_discovery": {
@@ -26,12 +26,29 @@
         },
         "data_description": {
           "remote_id": "Het Ramses-ID van de 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
-          "mqtt_topic": "Het basistopic van de Rameses ESP-gateway, bijvoorbeeld RAMSES/GATEWAY."
+          "mqtt_topic": "Het basistopic van de Ramses ESP-gateway, bijvoorbeeld RAMSES/GATEWAY."
         }
       }
     },
     "abort": {
       "already_configured": "Dit MQTT-topic is al geconfigureerd."
+    }
+  },
+  "exceptions": {
+    "mqtt_setup_failed": {
+      "message": "Kon de MQTT-verbinding niet starten: {error}"
+    },
+    "session_setup_failed": {
+      "message": "Kon de Ramses-sessie niet starten: {error}"
+    },
+    "mqtt_not_available": {
+      "message": "De MQTT-integratie is niet beschikbaar."
+    },
+    "unknown_preset_mode": {
+      "message": "Onbekende stand voor de ventilator: {mode}"
+    },
+    "set_preset_failed": {
+      "message": "Kon de stand {mode} van de ventilator niet instellen: {error}"
     }
   },
   "entity": {

@@ -9,10 +9,10 @@ rules:
       Updates are pushed over MQTT. The humidity sensor (12A0) is polled every
       5 minutes because that packet is not broadcast.
   brands:
-    status: todo
+    status: done
     comment: |
-      A logo and icon still need to be added to the Home Assistant brands
-      repository.
+      The integration ships icon.png and logo.png in its brand directory, which
+      Home Assistant serves for custom integrations.
   common-modules:
     status: done
     comment: |
@@ -100,10 +100,12 @@ rules:
   devices: done
   diagnostics: done
   discovery:
-    status: todo
+    status: exempt
     comment: |
-      The fan and CO2 remote are discovered from Ramses packets after setup,
-      but there is no Home Assistant discovery flow (MQTT, DHCP or SSDP).
+      The fan is an RF device; the only network-facing part is the Ramses ESP
+      gateway, which is configured by MQTT topic and publishes no discovery
+      payload. The fan and CO2 remote are discovered from Ramses packets after
+      setup.
   discovery-update-info:
     status: exempt
     comment: |
@@ -111,10 +113,10 @@ rules:
       to update.
   docs-data-update: done
   docs-examples:
-    status: todo
+    status: done
     comment: |
-      The README has a Lovelace card and an alert example, but no automation
-      example or blueprint.
+      The README has a Lovelace card, an alert and a CO2-driven automation with
+      hysteresis that shows how to set the fan preset.
   docs-known-limitations: done
   docs-supported-devices: done
   docs-supported-functions: done
@@ -132,19 +134,21 @@ rules:
       user-facing.
   entity-device-class: done
   entity-disabled-by-default:
-    status: todo
+    status: done
     comment: |
-      The signal strength sensors are diagnostic but are still enabled by
-      default.
+      The signal strength sensors are diagnostic and disabled by default;
+      users enable them when they need them.
   entity-translations: done
   exception-translations:
-    status: todo
-    comment: Exception messages are English and are not defined in strings.json.
-  icon-translations:
-    status: todo
+    status: done
     comment: |
-      icons.json translates the fan preset icons only; the other entities use
-      their device-class icons.
+      User-facing errors raise HomeAssistantError with a translation key, and
+      the messages live in the exceptions section of strings.json.
+  icon-translations:
+    status: done
+    comment: |
+      icons.json defines the fan preset icons. No entity sets an icon in
+      Python; the other icons come from the device class.
   reconfiguration-flow: done
   repair-issues:
     status: todo
@@ -152,10 +156,11 @@ rules:
       No repair issues are raised yet, for example for a missing remote or a
       neighbour fan announcement.
   stale-devices:
-    status: todo
+    status: done
     comment: |
-      Devices are not removed automatically, and the integration does not
-      implement async_remove_config_entry_device.
+      The integration cannot enumerate the devices behind the RF gateway, so
+      async_remove_config_entry_device lets the user remove a fan or CO2 device
+      that is gone. The gateway stays while the entry exists.
 
   # Platinum
   async-dependency:

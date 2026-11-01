@@ -10,7 +10,7 @@
         },
         "data_description": {
           "remote_id": "The Ramses ID of the 15RF remote, for example 29:163058.",
-          "mqtt_topic": "The base topic of the Rameses ESP gateway, for example RAMSES/GATEWAY."
+          "mqtt_topic": "The base topic of the Ramses ESP gateway, for example RAMSES/GATEWAY."
         }
       },
       "fan_discovery": {
@@ -26,12 +26,29 @@
         },
         "data_description": {
           "remote_id": "The Ramses ID of the 15RF remote, for example 29:163058.",
-          "mqtt_topic": "The base topic of the Rameses ESP gateway, for example RAMSES/GATEWAY."
+          "mqtt_topic": "The base topic of the Ramses ESP gateway, for example RAMSES/GATEWAY."
         }
       }
     },
     "abort": {
       "already_configured": "This MQTT topic is already configured."
+    }
+  },
+  "exceptions": {
+    "mqtt_setup_failed": {
+      "message": "Could not start the MQTT transport: {error}"
+    },
+    "session_setup_failed": {
+      "message": "Could not start the Ramses session: {error}"
+    },
+    "mqtt_not_available": {
+      "message": "The MQTT integration is not available."
+    },
+    "unknown_preset_mode": {
+      "message": "Unknown fan preset mode: {mode}"
+    },
+    "set_preset_failed": {
+      "message": "Failed to set fan preset mode {mode}: {error}"
     }
   },
   "entity": {

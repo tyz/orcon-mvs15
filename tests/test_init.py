@@ -9,10 +9,13 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceRegistry
+from homeassistant.helpers.entity_registry import RegistryEntryDisabler
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.orcon_mvs15 import async_remove_config_entry_device
 from custom_components.orcon_mvs15.const import (
     CONF_FAN_ID,
     CONF_GATEWAY_ID,
@@ -93,6 +96,11 @@ async def test_setup_retries_when_the_gateway_is_not_found(
 
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_domain == DOMAIN
+    assert entry.error_reason_translation_key == "mqtt_setup_failed"
+    assert entry.error_reason_translation_placeholders == {
+        "error": "No gateway message"
+    }
 
 
 async def test_setup_builds_the_runtime_data_and_unloads(
@@ -239,6 +247,9 @@ async def test_setup_retries_when_the_session_cannot_be_built(
 
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_domain == DOMAIN
+    assert entry.error_reason_translation_key == "session_setup_failed"
+    assert entry.error_reason_translation_placeholders == {"error": "bad configuration"}
 
 
 async def test_setup_keeps_a_retryable_session_error(hass: HomeAssistant) -> None:
@@ -294,3 +305,56 @@ async def test_setup_waits_for_home_assistant_to_start(hass: HomeAssistant) -> N
     await hass.async_block_till_done()
 
     assert runtime.ramses_esp.started is True
+
+
+async def test_signal_strength_is_disabled_by_default(hass: HomeAssistant) -> None:
+    """A noisy diagnostic entity stays out of the history until enabled."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_FAN_ID: FAN_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", FakeMQTT),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    signal_entries = [
+        registry_entry
+        for registry_entry in registry.entities.values()
+        if registry_entry.unique_id.startswith("orcon_mvs15_fan_dbm_")
+    ]
+
+    assert len(signal_entries) == 1
+    assert signal_entries[0].disabled_by is RegistryEntryDisabler.INTEGRATION
+
+
+async def test_stale_device_removal_keeps_the_gateway(
+    hass: HomeAssistant, device_registry: DeviceRegistry
+) -> None:
+    """A fan may be removed; the gateway stays while the entry exists."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_GATEWAY_ID: GATEWAY_ID, CONF_MQTT_TOPIC: MQTT_TOPIC},
+    )
+    entry.add_to_hass(hass)
+    gateway = device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, GATEWAY_ID)},
+    )
+    fan = device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, FAN_ID)},
+    )
+
+    assert await async_remove_config_entry_device(hass, entry, gateway) is False
+    assert await async_remove_config_entry_device(hass, entry, fan) is True

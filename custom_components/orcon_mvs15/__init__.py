@@ -5,6 +5,7 @@ import logging
 from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.device_registry import DeviceEntry
 
 from .device import async_get_or_create_gateway
 from .models import (
@@ -21,6 +22,7 @@ from .const import (
     CONF_FAN_ID,
     CONF_GATEWAY_ID,
     CONF_REMOTE_ID,
+    DOMAIN,
 )
 
 PLATFORMS = [Platform.FAN, Platform.SENSOR, Platform.BINARY_SENSOR]
@@ -86,7 +88,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
         )
         await mqtt.init()
     except Exception as e:
-        raise ConfigEntryNotReady(f"MQTT: {e}") from e
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="mqtt_setup_failed",
+            translation_placeholders={"error": str(e)},
+        ) from e
 
     if not config.gateway_id:
         _LOGGER.debug(f"Storing discovered gateway ({mqtt.gateway_id}) in config")
@@ -110,7 +116,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
     except ConfigEntryNotReady:
         raise
     except Exception as e:
-        raise ConfigEntryNotReady(f"RamsesESP: {e}") from e
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="session_setup_failed",
+            translation_placeholders={"error": str(e)},
+        ) from e
 
     entry.runtime_data = OrconMVS15RuntimeData(
         config=config,
@@ -141,3 +151,29 @@ async def async_unload_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) 
     while entry.runtime_data.cleanup:
         entry.runtime_data.cleanup.pop()()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    config_entry: OrconMVS15ConfigEntry,
+    device_entry: DeviceEntry,
+) -> bool:
+    """Allow removing a device that is no longer part of the installation.
+
+    The gateway is the connection this entry runs on, so it stays until the
+    entry itself is removed. A fan or CO2 device is recreated when it still
+    sends packets; the integration cannot know that an RF device is gone.
+
+    Args:
+        hass: Home Assistant instance.
+        config_entry: The entry the device belongs to.
+        device_entry: The device the user wants to remove.
+
+    Returns:
+        True when the device may be removed.
+    """
+    gateway_id = config_entry.data.get(CONF_GATEWAY_ID)
+    if gateway_id is not None and (DOMAIN, gateway_id) in device_entry.identifiers:
+        _LOGGER.info("Keeping the gateway device %s while the entry exists", gateway_id)
+        return False
+    return True
