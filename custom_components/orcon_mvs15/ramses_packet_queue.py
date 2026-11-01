@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from typing import Iterator
+from collections.abc import Iterator
 
 try:
     from .ramses_packet import RamsesPacket
@@ -18,7 +18,7 @@ class RamsesPacketQueueException(Exception):
 
 class RamsesPacketQueue:
     def __init__(self) -> None:
-        self._queue: dict = {}
+        self._queue: dict[str, RamsesPacket] = {}
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self._queue})"
@@ -26,7 +26,7 @@ class RamsesPacketQueue:
     def __len__(self) -> int:
         return len(self._queue)
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self) -> Iterator[RamsesPacket]:
         return iter(self._queue.values())
 
     def __contains__(self, packet: RamsesPacket) -> bool:

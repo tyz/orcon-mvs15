@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from homeassistant.components.binary_sensor import (
-    BinarySensorEntity,
-    BinarySensorDeviceClass,
-)
+from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.binary_sensor.const import BinarySensorDeviceClass
 from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity

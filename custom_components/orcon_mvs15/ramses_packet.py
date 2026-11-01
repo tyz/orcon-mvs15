@@ -77,7 +77,7 @@ class RamsesID(str):
 class RamsesPacket:
     def __init__(
         self,
-        envelope: dict = {},
+        envelope: dict[str, str] | None = None,
         src_id: RamsesID = RamsesID(),
         dst_id: RamsesID = RamsesID(),
         ann_id: RamsesID = RamsesID(),
@@ -96,7 +96,7 @@ class RamsesPacket:
         self.length: int = 0
         self.packet_id = uuid.uuid4().hex
         self.data = data
-        self._envelope = envelope
+        self._envelope = envelope or {}
         if self._envelope:
             self.parse()
 
@@ -123,7 +123,7 @@ class RamsesPacket:
         self._data = RamsesPacketData(value)
         self.length = len(self._data)
 
-    def ramses_esp_envelope(self) -> dict:
+    def ramses_esp_envelope(self) -> dict[str, str]:
         return {
             "msg": f"{self.type:2s} --- {self.src_id} {self.dst_id} {self.ann_id} {self.code} {self.length:03d} {self.data}"
         }

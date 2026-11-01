@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 
 
-from homeassistant.components.fan import FanEntity, FanEntityFeature
+from homeassistant.components.fan import FanEntity
+from homeassistant.components.fan.const import FanEntityFeature
 from homeassistant.core import callback, CoreState, HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity

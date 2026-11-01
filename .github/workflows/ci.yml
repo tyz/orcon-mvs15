@@ -36,7 +36,7 @@ jobs:
           cache-dependency-path: requirements-test.txt
       - name: Install Home Assistant and mypy
         run: pip install -r requirements-test.txt mypy
-      - name: Run mypy
+      - name: Run mypy in strict mode
         run: mypy custom_components/
 
   tests:
