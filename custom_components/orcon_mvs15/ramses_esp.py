@@ -12,12 +12,16 @@ from datetime import datetime, timedelta
 
 from homeassistant.components import mqtt as mqtt_client
 from homeassistant.components.mqtt import ReceiveMessage
-from homeassistant.core import HomeAssistant, Event
+from homeassistant.core import HomeAssistant, Event, callback
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 
 from .const import DOMAIN
 from .device import update_gateway_version
+from .issues import (
+    async_create_fan_not_responding_issue,
+    async_delete_fan_not_responding_issue,
+)
 from .ramses_packet import RamsesPacket, RamsesID
 from .ramses_packet_queue import RamsesPacketQueue
 from .mqtt import MQTT, MQTTException
@@ -37,6 +41,11 @@ from .codes import (
 _LOGGER = logging.getLogger(__name__)
 
 HUMIDITY_POLL_INTERVAL = timedelta(minutes=5)
+
+# The fan broadcasts 31D9 every 5 minutes and answers the 31D9 request sent at
+# setup, so half an hour of silence means the RF link or the fan itself is
+# broken. Keep the window wide enough to survive a missed broadcast.
+FAN_RESPONSE_TIMEOUT = timedelta(minutes=30)
 
 
 class RamsesESP:
@@ -61,6 +70,7 @@ class RamsesESP:
         self._send_queue = RamsesPacketQueue()
         self._log_f: TextIO | None = None
         self._humidity_poll_unsub: Callable[[], None] | None = None
+        self._fan_watchdog_unsub: Callable[[], None] | None = None
         if self.fan_id:
             _LOGGER.info(f"Using previously discovered fan id ({self.fan_id})")
         else:
@@ -100,6 +110,7 @@ class RamsesESP:
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
         await self.publish(Code31d9.get(src_id=self.gateway_id, dst_id=self.fan_id))
         self.start_humidity_polling()
+        self.start_fan_watchdog()
 
     def start_humidity_polling(self) -> None:
         """12A0 is not broadcast, so poll it even if a response was lost."""
@@ -110,12 +121,57 @@ class RamsesESP:
         )
         _LOGGER.info(f"Polling humidity every {HUMIDITY_POLL_INTERVAL}")
 
+    def start_fan_watchdog(self) -> None:
+        """Wait for the fan's first packet and raise a repair issue on silence.
+
+        Restarting is intentional: every init_fan() asks the fan for its state,
+        so a fresh request deserves a fresh response window.
+        """
+        self.cancel_fan_watchdog()
+        if not self.fan_id:
+            return
+        self._fan_watchdog_unsub = async_call_later(
+            self.hass, FAN_RESPONSE_TIMEOUT, self._fan_response_timeout
+        )
+
+    def cancel_fan_watchdog(self) -> None:
+        """Stop waiting for the fan."""
+        if self._fan_watchdog_unsub is not None:
+            self._fan_watchdog_unsub()
+            self._fan_watchdog_unsub = None
+
+    @callback
+    def _fan_response_timeout(self, _now: datetime) -> None:
+        """Raise the issue when the fan stayed silent for the whole window."""
+        self._fan_watchdog_unsub = None
+        async_create_fan_not_responding_issue(self.hass, self.fan_id)
+
+    @callback
+    def _fan_responded(self) -> None:
+        """The fan is alive: stop the timer and clear any stale issue."""
+        self.cancel_fan_watchdog()
+        async_delete_fan_not_responding_issue(self.hass, self.fan_id)
+
+    @callback
+    def async_set_mqtt_connected(self, connected: bool) -> None:
+        """Pause the fan watchdog while the gateway is unreachable.
+
+        A missing MQTT connection says nothing about the RF link, and the
+        entities already report the outage as unavailable.
+        """
+        if connected:
+            self.start_fan_watchdog()
+        else:
+            self.cancel_fan_watchdog()
+
     def cleanup(self) -> None:
-        """Stop the humidity poll when the config entry unloads."""
+        """Stop the timers and drop the issue when the entry unloads."""
         if self._humidity_poll_unsub is not None:
             self._humidity_poll_unsub()
             self._humidity_poll_unsub = None
             _LOGGER.debug("Removed the humidity poll interval")
+        self.cancel_fan_watchdog()
+        async_delete_fan_not_responding_issue(self.hass, self.fan_id)
 
     async def init_co2(self, discovered_co2_id: RamsesID | None = None) -> None:
         """Fetch current CO2 sensor state + device info on startup or discovery"""
@@ -268,6 +324,15 @@ class RamsesESP:
                 _LOGGER.debug(f"Discovered CO2 sensor ({self.co2_id})")
             else:
                 return
+        # 042F names the fan in ann_id; every other packet names the sender in
+        # src_id. A neighbour's power-up must not hide our fan's silence.
+        fan_responded = (
+            packet.ann_id == self.fan_id
+            if packet.code == "042F"
+            else packet.src_id == self.fan_id
+        )
+        if self.fan_id and fan_responded:
+            self._fan_responded()
         if (
             packet.signal_strength == 0 and packet.code != "042F"
         ):  # 042F is for testing only, when I publish it myself (ss == 0)

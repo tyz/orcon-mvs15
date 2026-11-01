@@ -162,7 +162,9 @@ broadcast every 5 minutes, and device info (`10E0`) every 24 hours. The fan's
 humidity sensor (`12A0`) is not broadcast, so it is polled every 5 minutes.
 Entities are unavailable until the packet they read has arrived. If the MQTT
 connection is lost, all entities become unavailable and the loss is logged once;
-they recover when the connection returns.
+they recover when the connection returns. A configured fan gets 30 minutes to
+answer the requests sent when the entry starts, and raises a repair issue if it
+stays silent.
 
 ## Known limitations
 
@@ -192,6 +194,16 @@ supported codes, discovery flows and retry behaviour are documented in
 [docs/protocol.md](docs/protocol.md).
 
 ## Troubleshooting
+
+### The fan stopped responding
+
+When the fan ID is known, the integration asks the fan for its state at startup.
+If no packet arrives from the fan within 30 minutes, Home Assistant shows a
+repair issue under **Settings > System > Repairs**. The issue is deleted
+automatically as soon as the fan is heard again. Check that the fan has power
+and that the Ramses ESP gateway is within RF range, then power-cycle the fan so
+it announces itself. The watchdog pauses while the MQTT connection is down,
+because an unreachable gateway says nothing about the RF link.
 
 ### Debug logging
 

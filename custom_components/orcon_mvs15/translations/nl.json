@@ -51,6 +51,12 @@
       "message": "Kon de stand {mode} van de ventilator niet instellen: {error}"
     }
   },
+  "issues": {
+    "fan_not_responding": {
+      "title": "De Orcon MVS-15-ventilator reageert niet",
+      "description": "Er is al 30 minuten geen bericht van ventilator {fan_id} ontvangen. Controleer of de ventilator stroom heeft en of de Ramses ESP-gateway binnen RF-bereik staat, en start de ventilator daarna opnieuw op. Deze melding verdwijnt zodra de ventilator weer wordt ontvangen."
+    }
+  },
   "entity": {
     "fan": {
       "fan_states": {
