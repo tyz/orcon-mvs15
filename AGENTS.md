@@ -17,14 +17,14 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 | Platforms | `fan`, `sensor`, `binary_sensor` in a single config entry |
 | Discovery | MQTT wildcard `<base_topic>/+` for the gateway; Ramses `042F`, `12A0` and `31E0` packets for devices |
 | Update model | `local_push` — the gateway pushes packets; humidity is polled because `12A0` is not broadcast |
-| Quality scale | `quality_scale.yaml` targets Bronze; the remaining `todo` rules are listed there |
+| Quality scale | Platinum — all 54 rules are done or validly exempt; `quality_scale.yaml` is the source of truth |
 
 ## Before You Change Anything
 
 1. Run the checks below. If one fails before your change, stop and report it —
    do not "fix" unrelated failures and never delete or `xfail` a test to get
    green.
-2. Read `README.md`, `docs/protocol.md`, `TODO.md` and, once it exists,
+2. Read `README.md`, `docs/protocol.md`, `TODO.md` and
    `quality_scale.yaml`.
 3. Skim `git log -20` to absorb the commit style.
 4. Check `git status`. Uncommitted work belongs to the user; never overwrite or
@@ -127,10 +127,10 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
   device through `device.py`, take their names from translations and are
   unavailable until the coordinator has the data they read.
 
-M1–M4 are done: test harness, correctness fixes, typed runtime data, the
+M1–M5 are done: test harness, correctness fixes, typed runtime data, the
 central device-info helper, the explicit code registry, translated entity names
-with honest availability, and a reconfigure flow. M5 adds diagnostics, a
-truthful `quality_scale.yaml` and the CI workflow.
+with honest availability, a reconfigure flow, diagnostics, the CI workflow, and
+a truthful `quality_scale.yaml` that meets Gold and Platinum.
 
 ## Testing
 
