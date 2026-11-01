@@ -42,8 +42,8 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
   `tests/conftest.py` loads `pytest-homeassistant-custom-component` and enables
   custom integrations.
 * Compile check: `python -m compileall -q custom_components/orcon_mvs15`.
-* Approved test environment: `pip install -r requirements-test.txt`, which pins
-  `pytest-homeassistant-custom-component==0.13.375` and therefore
+* Approved test environment: `pip install --user -r requirements-test.txt`,
+  which pins `pytest-homeassistant-custom-component==0.13.375` and therefore
   `homeassistant==2026.10.4`; it requires Python `>=3.14`.
 * CI: `.github/workflows/ci.yml` runs `pre-commit`, `mypy` against the
   installed Home Assistant version, `pytest`, the compile check and hassfest.
@@ -210,8 +210,9 @@ truthful `quality_scale.yaml` and the CI workflow.
   Keep it current when behaviour changes.
 * `docs/protocol.md` is the technical reference. Correct it when reality
   contradicts it.
-* `TODO.md` at the repository root is the working list. Tick items only after
-  the user approves the result.
+* `TODO.md` is a gitignored working list with the sections **New features**,
+  **Improvements** and **Bugs**. Tick items off (`[ ]` to `[x]`) only after the
+  user has approved the result.
 * Comments explain *why*, not *what*. Name firmware/protocol bugs and where they
   were observed.
 
@@ -239,7 +240,11 @@ truthful `quality_scale.yaml` and the CI workflow.
 * Linux, Python 3.14.6. You run in an OCI container; only `/project` and
   `/project/.opencode` survive a restart. Use `/tmp/opencode` for scratch files.
 * Home Assistant is not preinstalled. Install the approved test pin before
-  meaningful type checking or tests.
+  meaningful type checking or tests, and install it into the persistent user
+  site with `pip install --user -r requirements-test.txt` (it lands in
+  `$HOME/.local`). Never install it into the global site-packages: `$HOME` is
+  `/project/.opencode` in this container, and only `/project` and
+  `/project/.opencode` survive a restart, so a global install is lost.
 * `pre-commit` environments are cached; `pre-commit autoupdate` is allowed when
   updating lint tooling, but keep that in its own commit.
 * Ask for missing tooling instead of working around it.
