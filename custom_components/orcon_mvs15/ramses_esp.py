@@ -66,7 +66,7 @@ class RamsesESP:
         self.co2_id = co2_id
         self.gateway_id = gateway_id
         self.config_entry_id = config_entry_id
-        self._handlers: dict = {}
+        self._handlers: dict[str, Callable[[Code], None]] = {}
         self._send_queue = RamsesPacketQueue()
         self._log_f: TextIO | None = None
         self._humidity_poll_unsub: Callable[[], None] | None = None
@@ -260,7 +260,7 @@ class RamsesESP:
         """Return the packet codes this session has a handler for."""
         return set(self._handlers)
 
-    def add_handler(self, code: str, func: Callable) -> None:
+    def add_handler(self, code: str, func: Callable[[Code], None]) -> None:
         _LOGGER.debug(f"Adding handler for code {code}")
         self._handlers[code] = func
 
@@ -289,7 +289,7 @@ class RamsesESP:
         _LOGGER.debug(f"Retry {packet}")
         await self.publish(packet)
 
-    async def _handle_ramses_packet(self, envelope: dict) -> None:
+    async def _handle_ramses_packet(self, envelope: dict[str, str]) -> None:
         try:
             packet = RamsesPacket(envelope=envelope)
         except Exception:
@@ -345,7 +345,7 @@ class RamsesESP:
 
     async def packet_log(
         self,
-        envelope: dict,
+        envelope: dict[str, str],
         path: str = "/config/packet.log",
         max_size: int = 10_000_000,
     ) -> None:

@@ -102,7 +102,7 @@ class Code:
         raise NotImplementedError
 
     @classmethod
-    def presets(cls) -> list:
+    def presets(cls) -> list[str]:
         """Return a list of optional values for self.set"""
         raise NotImplementedError
 
@@ -180,7 +180,7 @@ class Code22f1(Code):
         return p
 
     @classmethod
-    def presets(cls) -> list:
+    def presets(cls) -> list[str]:
         return list(cls._fan_modes.keys())
 
 
@@ -232,7 +232,7 @@ class Code31d9(Code):
             )
 
     @classmethod
-    def presets(cls) -> list:
+    def presets(cls) -> list[str]:
         return list(cls._presets.values())
 
 

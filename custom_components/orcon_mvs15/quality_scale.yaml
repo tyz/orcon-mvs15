@@ -174,5 +174,9 @@ rules:
     status: exempt
     comment: The integration does not use a web session.
   strict-typing:
-    status: todo
-    comment: mypy passes the project settings, but strict mode is not enabled.
+    status: done
+    comment: |
+      mypy.ini enables strict mode and mypy reports no issues. The remaining
+      annotations were filled in for the packet envelope, the packet queue, the
+      handler callbacks and the entity factories, and the platform constants
+      are imported from their defining modules.

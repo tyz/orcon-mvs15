@@ -4,7 +4,9 @@ import logging
 import asyncio
 import json
 
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
+from typing import Any
+
 from homeassistant.components import mqtt
 from homeassistant.components.mqtt import ReceiveMessage
 from homeassistant.core import callback, HomeAssistant
@@ -12,6 +14,8 @@ from homeassistant.core import callback, HomeAssistant
 from .ramses_packet import RamsesPacket, RamsesID
 
 _LOGGER = logging.getLogger(__name__)
+
+type MessageHandler = Callable[[ReceiveMessage], Coroutine[Any, Any, None] | None]
 
 
 class MQTTException(Exception):
@@ -33,7 +37,7 @@ class MQTT:
         self.discovery_timeout = discovery_timeout
         self.connection_callback = connection_callback
         self.online_topic = f"{base_topic}/+"
-        self._mqtt_unsubs: list = []
+        self._mqtt_unsubs: list[Callable[[], None]] = []
         self._online_event = asyncio.Event()
         self._connected = False
 
@@ -60,7 +64,9 @@ class MQTT:
         self.version_topic = f"{self.base_topic}/{self.gateway_id}/info/version"
 
     async def setup(
-        self, handle_message: Callable, handle_version_message: Callable
+        self,
+        handle_message: MessageHandler,
+        handle_version_message: MessageHandler,
     ) -> None:
         """Setup message handlers"""
         await self._subscribe(self.sub_topic, handle_message)
@@ -84,7 +90,9 @@ class MQTT:
         if self.connection_callback is not None:
             self.connection_callback(connected)
 
-    async def _subscribe(self, topic: str, handler: Callable) -> Callable[[], None]:
+    async def _subscribe(
+        self, topic: str, handler: MessageHandler
+    ) -> Callable[[], None]:
         _LOGGER.debug(f"Subscribed to {topic}")
         unsub = await mqtt.async_subscribe(self.hass, topic, handler)
         self._mqtt_unsubs.append(unsub)

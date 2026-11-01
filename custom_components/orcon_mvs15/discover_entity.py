@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 
 from collections.abc import Callable
+from typing import Protocol
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import OrconMVS15DataUpdateCoordinator
@@ -13,6 +15,27 @@ from .ramses_packet import RamsesID
 from .ramses_esp import RamsesESP
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class EntityFactory(Protocol):
+    """Constructor of one entity created for a discovered device.
+
+    The concrete classes live in the platform modules and share this keyword
+    interface. Typing it here keeps DiscoverEntity independent of them.
+    """
+
+    __name__: str
+
+    def __call__(
+        self,
+        *,
+        hass: HomeAssistant,
+        ramses_id: RamsesID,
+        config: OrconMVS15Config,
+        coordinator: OrconMVS15DataUpdateCoordinator,
+        ramses_esp: RamsesESP,
+        discovery_key: str,
+    ) -> Entity: ...
 
 
 class DiscoverEntity:
@@ -28,7 +51,7 @@ class DiscoverEntity:
         ramses_id: RamsesID,
         name: str,
         discovery_key: str,
-        entities: list,
+        entities: list[EntityFactory],
     ) -> None:
         self.hass = hass
         self.async_add_entities = async_add_entities
