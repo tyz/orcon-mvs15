@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant, Event
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 
+from .const import DOMAIN
 from .device import update_gateway_version
 from .ramses_packet import RamsesPacket, RamsesID
 from .ramses_packet_queue import RamsesPacketQueue
@@ -75,7 +76,10 @@ class RamsesESP:
 
     async def setup(self, event: Event | None = None) -> None:
         if not await mqtt_client.async_wait_for_mqtt_client(self.hass):
-            raise ConfigEntryNotReady("MQTT integration is not available")
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="mqtt_not_available",
+            )
         await self.mqtt.setup(
             self.handle_ramses_mqtt_message, self.handle_ramses_mqtt_version_message
         )
@@ -175,13 +179,19 @@ class RamsesESP:
         try:
             packet = Code22f1.set(value=mode, src_id=self.remote_id, dst_id=self.fan_id)
         except KeyError as err:
-            raise HomeAssistantError(f"Unknown fan preset mode: {mode}") from err
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="unknown_preset_mode",
+                translation_placeholders={"mode": mode},
+            ) from err
         _LOGGER.info(f"Setting fan preset mode to {mode}")
         try:
             await self.publish(packet)
         except MQTTException as err:
             raise HomeAssistantError(
-                f"Failed to set fan preset mode {mode}: {err}"
+                translation_domain=DOMAIN,
+                translation_key="set_preset_failed",
+                translation_placeholders={"mode": mode, "error": str(err)},
             ) from err
 
     @property

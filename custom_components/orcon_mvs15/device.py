@@ -34,7 +34,7 @@ def _via_device_id(
 
 
 def gateway_device_info(gateway_id: RamsesID) -> DeviceInfo:
-    """Return the device info for the Rameses ESP gateway."""
+    """Return the device info for the Ramses ESP gateway."""
     return DeviceInfo(
         identifiers={(DOMAIN, gateway_id)},
         manufacturer="Indalo-Tech",

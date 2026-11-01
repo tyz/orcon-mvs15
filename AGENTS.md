@@ -2,7 +2,7 @@
 
 `orcon_mvs15` is a custom Home Assistant integration for the Orcon MVS-15
 ventilation fan, its optional CO₂/15RF remote and its humidity sensor. It talks
-Ramses II over MQTT through a Rameses ESP stick. This file is the operating
+Ramses II over MQTT through a Ramses ESP stick. This file is the operating
 manual for agents working on the integration. The wire protocol lives in
 `docs/protocol.md`; user-facing documentation lives in `README.md`; the packet
 naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
@@ -12,7 +12,7 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 | | |
 |---|---|
 | Domain | `orcon_mvs15` — must match `custom_components/orcon_mvs15/` |
-| Transport | MQTT (`homeassistant.components.mqtt`) through a Rameses ESP gateway |
+| Transport | MQTT (`homeassistant.components.mqtt`) through a Ramses ESP gateway |
 | Client layer | `protocol` modules (`ramses_packet.py`, `codes.py`, `ramses_packet_queue.py`) are Home Assistant-free; `mqtt.py` is transport; `ramses_esp.py` is the protocol session |
 | Platforms | `fan`, `sensor`, `binary_sensor` in a single config entry |
 | Discovery | MQTT wildcard `<base_topic>/+` for the gateway; Ramses `042F`, `12A0` and `31E0` packets for devices |
@@ -24,8 +24,8 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 1. Run the checks below. If one fails before your change, stop and report it —
    do not "fix" unrelated failures and never delete or `xfail` a test to get
    green.
-2. Read `README.md`, `docs/protocol.md`, `custom_components/orcon_mvs15/TODO.txt`
-   and, once it exists, `quality_scale.yaml`.
+2. Read `README.md`, `docs/protocol.md`, `TODO.md` and, once it exists,
+   `quality_scale.yaml`.
 3. Skim `git log -20` to absorb the commit style.
 4. Check `git status`. Uncommitted work belongs to the user; never overwrite or
    revert it.
@@ -42,8 +42,8 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
   `tests/conftest.py` loads `pytest-homeassistant-custom-component` and enables
   custom integrations.
 * Compile check: `python -m compileall -q custom_components/orcon_mvs15`.
-* Approved test environment: `pip install -r requirements-test.txt`, which pins
-  `pytest-homeassistant-custom-component==0.13.375` and therefore
+* Approved test environment: `pip install --user -r requirements-test.txt`,
+  which pins `pytest-homeassistant-custom-component==0.13.375` and therefore
   `homeassistant==2026.10.4`; it requires Python `>=3.14`.
 * CI: `.github/workflows/ci.yml` runs `pre-commit`, `mypy` against the
   installed Home Assistant version, `pytest`, the compile check and hassfest.
@@ -210,8 +210,9 @@ truthful `quality_scale.yaml` and the CI workflow.
   Keep it current when behaviour changes.
 * `docs/protocol.md` is the technical reference. Correct it when reality
   contradicts it.
-* `custom_components/orcon_mvs15/TODO.txt` is the working list. Tick items only
-  after the user approves the result.
+* `TODO.md` is a gitignored working list with the sections **New features**,
+  **Improvements** and **Bugs**. Tick items off (`[ ]` to `[x]`) only after the
+  user has approved the result.
 * Comments explain *why*, not *what*. Name firmware/protocol bugs and where they
   were observed.
 
@@ -220,7 +221,7 @@ truthful `quality_scale.yaml` and the CI workflow.
 * [ramses_rf](https://github.com/zxdavb/ramses_rf) and the
   [Ramses protocol wiki](https://github.com/zxdavb/ramses_protocol/wiki) for
   packet semantics and field layouts.
-* [Rameses ESP](https://indalo-tech.onlineweb.shop/product/ramses-esp) for the
+* [Ramses ESP](https://indalo-tech.onlineweb.shop/product/ramses-esp) for the
   MQTT gateway behaviour.
 * Home Assistant developer docs for config entries, coordinators and device
   registry APIs.
@@ -239,7 +240,11 @@ truthful `quality_scale.yaml` and the CI workflow.
 * Linux, Python 3.14.6. You run in an OCI container; only `/project` and
   `/project/.opencode` survive a restart. Use `/tmp/opencode` for scratch files.
 * Home Assistant is not preinstalled. Install the approved test pin before
-  meaningful type checking or tests.
+  meaningful type checking or tests, and install it into the persistent user
+  site with `pip install --user -r requirements-test.txt` (it lands in
+  `$HOME/.local`). Never install it into the global site-packages: `$HOME` is
+  `/project/.opencode` in this container, and only `/project` and
+  `/project/.opencode` survive a restart, so a global install is lost.
 * `pre-commit` environments are cached; `pre-commit autoupdate` is allowed when
   updating lint tooling, but keep that in its own commit.
 * Ask for missing tooling instead of working around it.

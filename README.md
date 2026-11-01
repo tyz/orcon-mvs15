@@ -24,7 +24,7 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
 
 - Orcon MVS-15 ventilation unit (fan, humidity sensor and fault state)
 - Orcon MVS-15RH CO2B CO₂/humidity remote (15RF)
-- Rameses ESP gateway running the Ramses II firmware over MQTT
+- Ramses ESP gateway running the Ramses II firmware over MQTT
 
 ## TODO
 
@@ -44,7 +44,7 @@ The setup form asks for two values:
 - **Remote ID** — the Ramses ID of the 15RF remote that sends commands to the
   fan, for example `29:163058`. If you do not know it yet, use a fake ID and
   follow [Fan ID](#fan-id).
-- **MQTT topic prefix** — the base topic of the Rameses ESP gateway, for
+- **MQTT topic prefix** — the base topic of the Ramses ESP gateway, for
   example `RAMSES/GATEWAY`. The integration discovers the gateway on
   `<prefix>/+` and then exchanges packets on `<prefix>/<gateway>/rx` and
   `<prefix>/<gateway>/tx`.
@@ -112,6 +112,47 @@ Check the LED on the fan unit if it reports a fault:
 | 1x           | Motor not running             |
 | 2x           | No value from humidity sensor |
 | 3x           | RF communication failure      |
+
+## Automations
+
+The fan presets are useful automation targets. This example boosts the fan to
+`high` when the CO₂ level stays above 1200 ppm for two minutes, and returns it
+to `auto` after ten minutes below 800 ppm. The hysteresis stops the fan
+switching back and forth around a single threshold.
+
+```yaml
+automation:
+  - alias: Boost the Orcon MVS-15 on high CO₂
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.orcon_mvs_15_co2
+        above: 1200
+        for: "00:02:00"
+    actions:
+      - action: fan.set_preset_mode
+        target:
+          entity_id: fan.orcon_mvs_15_fan
+        data:
+          preset_mode: high
+
+  - alias: Return the Orcon MVS-15 to auto
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.orcon_mvs_15_co2
+        below: 800
+        for: "00:10:00"
+    actions:
+      - action: fan.set_preset_mode
+        target:
+          entity_id: fan.orcon_mvs_15_fan
+        data:
+          preset_mode: auto
+```
+
+Replace the entity IDs with the ones in your installation. The timed presets
+(`high_15m`, `high_30m` and `high_60m`) are sent to the fan, but the integration
+does not track when the timer ends; the preset follows the next state the fan
+reports.
 
 ## Data updates
 

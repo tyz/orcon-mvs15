@@ -23,7 +23,7 @@ MQTT_TOPIC = "RAMSES/GATEWAY"
 
 
 def online_message(topic: str) -> ReceiveMessage:
-    """Build the wildcard message a Rameses ESP publishes on boot."""
+    """Build the wildcard message a Ramses ESP publishes on boot."""
     return ReceiveMessage(
         topic=topic,
         payload=b"online",
