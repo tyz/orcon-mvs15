@@ -1,3 +1,4 @@
 {
-  "name": "orcon_mvs15"
+  "name": "orcon_mvs15",
+  "homeassistant": "2026.10.0"
 }
