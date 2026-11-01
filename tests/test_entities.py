@@ -234,6 +234,25 @@ async def test_co2_update_tracks_the_level_and_vent_demand(
     entity.async_write_ha_state.assert_called_once_with()
 
 
+async def test_co2_update_accepts_unavailable_values(hass: HomeAssistant) -> None:
+    """FE/FF vent demand and an empty 1298 must not crash the sensor."""
+    entity = make_co2_sensor(hass)
+    entity.async_write_ha_state = Mock()
+    entity.coordinator.data = {"co2": 800, "vent_demand": None}
+
+    entity._handle_coordinator_update()
+
+    assert entity.native_value == 800
+    assert entity.extra_state_attributes["vent_demand"] is None
+
+    entity.coordinator.data = {"co2": None}
+
+    entity._handle_coordinator_update()
+
+    assert entity.native_value is None
+    entity.async_write_ha_state.assert_called()
+
+
 async def test_humidity_update_tracks_the_level(hass: HomeAssistant) -> None:
     """A 12A0 response updates the humidity sensor."""
     entity = HumiditySensor(

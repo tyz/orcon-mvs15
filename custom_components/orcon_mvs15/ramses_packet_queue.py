@@ -76,6 +76,16 @@ class RamsesPacketQueue:
     def remove(self, packet: RamsesPacket) -> None:
         del self[packet]
 
+    def discard(self, packet: RamsesPacket) -> None:
+        """Remove a packet if it is still queued.
+
+        A response and a retry timer can race: the response cancels the timer,
+        but a timer that already fired still runs its callback. Whoever runs
+        second must not raise for a packet that is already gone.
+        """
+        if packet in self:
+            self.remove(packet)
+
     def clear(self) -> None:
         for packet_id in list(self._queue):
             del self._queue[packet_id]

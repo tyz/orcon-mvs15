@@ -119,13 +119,17 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        if "co2" in self.coordinator.data:
-            self._attr_native_value = int(self.coordinator.data["co2"])
-        if "vent_demand" in self.coordinator.data:
-            self._attr_extra_state_attributes["vent_demand"] = int(
-                self.coordinator.data["vent_demand"]
+        data = self.coordinator.data
+        if "co2" in data:
+            co2 = data["co2"]
+            self._attr_native_value = None if co2 is None else int(co2)
+        if "vent_demand" in data:
+            # 31E0 encodes "no demand" as FE/FF, which decodes to None.
+            vent_demand = data["vent_demand"]
+            self._attr_extra_state_attributes["vent_demand"] = (
+                None if vent_demand is None else int(vent_demand)
             )
-        if "co2" in self.coordinator.data or "vent_demand" in self.coordinator.data:
+        if "co2" in data or "vent_demand" in data:
             self.async_write_ha_state()
 
 

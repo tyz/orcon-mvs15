@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -508,6 +510,175 @@ async def test_a_response_removes_its_request_and_calls_the_handler(
     assert session.pending_packets == 0
     handler.assert_called_once()
     assert isinstance(handler.call_args.args[0], Code12a0)
+
+
+async def test_a_response_cancels_a_retry_that_already_fired(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A late retry must not resend a request that was already answered."""
+    scheduled: list[Callable[[datetime], None]] = []
+    monkeypatch.setattr(
+        ramses_esp_module,
+        "async_call_later",
+        lambda hass_, delay, action: scheduled.append(action),
+    )
+    session = make_session(hass)
+    mqtt = RecordingMQTT(session)
+    session.mqtt = mqtt  # pytest stub, duck typed on purpose
+    handler = Mock()
+    session.add_handler("12A0", handler)
+    packet = Code12a0.get(RamsesID(GATEWAY_ID), RamsesID(FAN_ID))
+    await session.publish(packet)
+
+    await session._handle_ramses_packet(
+        make_envelope(f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 12A0 002 002F")
+    )
+    assert session.pending_packets == 0
+
+    # The timer had already fired, so cancelling it cannot stop the callback.
+    scheduled[0](datetime.now(UTC))
+    await hass.async_block_till_done()
+
+    assert mqtt.published == [packet]
+    assert session.pending_packets == 0
+    handler.assert_called_once()
+
+
+async def test_a_retry_for_an_unqueued_packet_is_ignored(
+    hass: HomeAssistant,
+) -> None:
+    """An exhausted retry for a packet that is gone must not raise KeyError."""
+    session = make_session(hass)
+    session.publish = AsyncMock()
+    packet = Code12a0.get(RamsesID(GATEWAY_ID), RamsesID(FAN_ID))
+    assert packet.expected_response is not None
+    packet.expected_response.max_retries = -1
+
+    await session._retry_pending_request(packet)
+
+    session.publish.assert_not_awaited()
+    assert session.pending_packets == 0
+
+
+async def test_cleanup_drops_pending_retries(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unloading clears the queue so an armed retry cannot publish again."""
+    scheduled: list[Callable[[datetime], None]] = []
+    monkeypatch.setattr(
+        ramses_esp_module,
+        "async_call_later",
+        lambda hass_, delay, action: scheduled.append(action),
+    )
+    session = make_session(hass)
+    mqtt = RecordingMQTT(session)
+    session.mqtt = mqtt  # pytest stub, duck typed on purpose
+    packet = Code12a0.get(RamsesID(GATEWAY_ID), RamsesID(FAN_ID))
+    await session.publish(packet)
+    assert session.pending_packets == 1
+
+    session.cleanup()
+
+    assert session.pending_packets == 0
+    scheduled[0](datetime.now(UTC))
+    await hass.async_block_till_done()
+    assert mqtt.published == [packet]
+
+
+async def test_a_closed_session_ignores_late_initialisation(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Work started before unload must not publish or arm timers afterwards."""
+    track = Mock(return_value=Mock())
+    call_later = Mock(return_value=Mock())
+    monkeypatch.setattr(ramses_esp_module, "async_track_time_interval", track)
+    monkeypatch.setattr(ramses_esp_module, "async_call_later", call_later)
+    session = make_session(hass)
+    session.publish = AsyncMock()
+    session.mqtt = Mock()
+    session.mqtt.setup = AsyncMock()
+    session.cleanup()
+
+    await session.setup()
+    await session.init_fan(discovered_fan_id=RamsesID(FAN_ID))
+    await session.init_co2(discovered_co2_id=RamsesID(CO2_ID))
+    await session.req_humidity()
+
+    session.mqtt.setup.assert_not_awaited()
+    session.publish.assert_not_awaited()
+    track.assert_not_called()
+    call_later.assert_not_called()
+
+
+async def test_a_closed_session_refuses_a_command(hass: HomeAssistant) -> None:
+    """A command after unload must fail instead of pretending to be sent."""
+    session = make_session(hass)
+    session.cleanup()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await session.set_preset_mode("low")
+
+    assert err.value.translation_key == "set_preset_failed"
+    assert err.value.translation_placeholders == {
+        "mode": "low",
+        "error": "The Orcon MVS-15 session is unloading",
+    }
+
+
+async def test_cleanup_closes_the_packet_log(
+    hass: HomeAssistant, tmp_path: Path
+) -> None:
+    """A reload must not leak the debug log handle."""
+    session = make_session(hass)
+    path = tmp_path / "packet.log"
+
+    await session.packet_log({"ts": TIMESTAMP, "msg": "frame"}, path=str(path))
+    log_file = session._log_f
+    assert log_file is not None
+
+    await session.async_cleanup()
+
+    assert log_file.closed
+    assert session._log_f is None
+
+
+async def test_packet_log_serialises_concurrent_writes(
+    hass: HomeAssistant, tmp_path: Path
+) -> None:
+    """Two MQTT messages logged at once must not interleave their lines."""
+    session = make_session(hass)
+    path = tmp_path / "packet.log"
+    path.touch()
+
+    class OverlapDetectingFile:
+        """A log file that notices when two writes overlap."""
+
+        def __init__(self) -> None:
+            self.active = False
+            self.overlap = False
+
+        def write(self, text: str) -> None:
+            if self.active:
+                self.overlap = True
+            self.active = True
+            time.sleep(0.02)  # hold the writer so a second thread can enter
+            self.active = False
+
+        def flush(self) -> None:
+            """Nothing to flush for the stub."""
+
+        def close(self) -> None:
+            """Nothing to close for the stub."""
+
+    log_file = OverlapDetectingFile()
+    session._log_f = log_file
+
+    await asyncio.gather(
+        session.packet_log({"ts": TIMESTAMP, "msg": "first"}, path=str(path)),
+        session.packet_log({"ts": TIMESTAMP, "msg": "second"}, path=str(path)),
+    )
+
+    assert log_file.overlap is False
 
 
 async def test_packet_log_writes_and_rotates(
