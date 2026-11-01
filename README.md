@@ -1,5 +1,8 @@
 # Orcon MVS-15
 
+[![CI](https://github.com/tyz/orcon-mvs15/actions/workflows/ci.yml/badge.svg)](https://github.com/tyz/orcon-mvs15/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/tyz/orcon-mvs15/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/tyz/orcon-mvs15/actions/workflows/github-code-scanning/codeql)
+
 (Work in progress, currently requires a working 15RF wireless remote until pairing a fake remote is implemented)
 
 Home Assistant integration for the [Orcon MVS-15 fan](https://orcon.nl/mechanische-ventilatie/),
