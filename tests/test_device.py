@@ -69,7 +69,7 @@ async def test_fan_device_info_links_to_the_gateway(
 async def test_co2_device_info_links_to_the_gateway(
     hass: HomeAssistant, device_registry: DeviceRegistry
 ) -> None:
-    """The CO2 remote is connected through the gateway device."""
+    """The CO2 room sensor is connected through the gateway device."""
     entry = make_entry(hass)
     gateway = async_get_or_create_gateway(hass, entry.entry_id, GATEWAY_ID)
 
@@ -77,7 +77,7 @@ async def test_co2_device_info_links_to_the_gateway(
 
     assert info["identifiers"] == {(DOMAIN, CO2_ID)}
     assert info["manufacturer"] == "Orcon"
-    assert info["model"] == "MVS-15RH CO2B"
+    assert info["model"] == "CO2 ruimtesensor 15RF"
     assert info["via_device_id"] == gateway.id
 
 
@@ -126,7 +126,7 @@ async def test_fan_device_is_created_once(
 async def test_co2_device_is_created_once(
     hass: HomeAssistant, device_registry: DeviceRegistry
 ) -> None:
-    """Setup registers the CO2 remote with its gateway link."""
+    """Setup registers the CO2 room sensor with its gateway link."""
     entry = make_entry(hass)
     gateway = async_get_or_create_gateway(hass, entry.entry_id, GATEWAY_ID)
 
@@ -135,8 +135,8 @@ async def test_co2_device_is_created_once(
 
     assert first.id == second.id
     assert second.manufacturer == "Orcon"
-    assert second.model == "MVS-15RH CO2B"
-    assert second.name == f"Orcon CO2 remote 15RF ({CO2_ID})"
+    assert second.model == "CO2 ruimtesensor 15RF"
+    assert second.name == f"Orcon CO2 room sensor ({CO2_ID})"
     assert second.via_device_id == gateway.id
 
 

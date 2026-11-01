@@ -9,7 +9,7 @@
           "mqtt_topic": "MQTT Topic Prefix (e.g., RAMSES/GATEWAY)"
         },
         "data_description": {
-          "remote_id": "The Ramses ID of the 15RF remote, for example 29:163058.",
+          "remote_id": "The Ramses ID of the 15RF wireless remote, for example 29:163058.",
           "mqtt_topic": "The base topic of the Ramses ESP gateway, for example RAMSES/GATEWAY."
         }
       },
@@ -25,7 +25,7 @@
           "mqtt_topic": "MQTT Topic Prefix (e.g., RAMSES/GATEWAY)"
         },
         "data_description": {
-          "remote_id": "The Ramses ID of the 15RF remote, for example 29:163058.",
+          "remote_id": "The Ramses ID of the 15RF wireless remote, for example 29:163058.",
           "mqtt_topic": "The base topic of the Ramses ESP gateway, for example RAMSES/GATEWAY."
         }
       }

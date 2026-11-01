@@ -277,7 +277,7 @@ async def test_setup_creates_the_configured_devices(
     assert fan.model == "MVS-15"
     assert fan.via_device_id == gateway.id
     assert co2 is not None
-    assert co2.model == "MVS-15RH CO2B"
+    assert co2.model == "CO2 ruimtesensor 15RF"
     assert co2.via_device_id == gateway.id
 
     assert await hass.config_entries.async_unload(entry.entry_id)

@@ -461,7 +461,7 @@ async def test_a_packet_from_another_fan_is_ignored(hass: HomeAssistant) -> None
 async def test_unknown_31e0_from_the_fan_discovers_the_co2_sensor(
     hass: HomeAssistant,
 ) -> None:
-    """A vent-demand frame addressed to the fan reveals the CO2 remote."""
+    """A vent-demand frame addressed to the fan reveals the CO2 room sensor."""
     session = make_session(hass, co2_id="")
     handler = Mock()
     session.add_handler("31E0", handler)

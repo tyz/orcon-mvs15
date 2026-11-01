@@ -9,7 +9,7 @@
           "mqtt_topic": "MQTT topic prefix (bijv. RAMSES/GATEWAY)"
         },
         "data_description": {
-          "remote_id": "Het Ramses-ID van de 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
+          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
           "mqtt_topic": "Het basistopic van de Ramses ESP-gateway, bijvoorbeeld RAMSES/GATEWAY."
         }
       },
@@ -25,7 +25,7 @@
           "mqtt_topic": "MQTT topic prefix (bijv. RAMSES/GATEWAY)"
         },
         "data_description": {
-          "remote_id": "Het Ramses-ID van de 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
+          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
           "mqtt_topic": "Het basistopic van de Ramses ESP-gateway, bijvoorbeeld RAMSES/GATEWAY."
         }
       }
