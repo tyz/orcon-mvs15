@@ -92,3 +92,29 @@ async def test_exception_messages_resolve(hass: HomeAssistant) -> None:
 
         assert fields == set(placeholders or {}), key
         assert message.format(**(placeholders or {}))
+
+
+ISSUE_PLACEHOLDERS: dict[str, dict[str, str]] = {
+    "fan_not_responding": {"fan_id": "29:224547"},
+}
+
+
+async def test_issue_messages_resolve(hass: HomeAssistant) -> None:
+    """Every repair issue has a translated title and description."""
+    assert set(ISSUE_PLACEHOLDERS) == set(load_json("strings.json")["issues"])
+
+    await translation.async_load_integrations(hass, {DOMAIN})
+    messages = translation.async_get_cached_translations(hass, "en", "issues", DOMAIN)
+
+    for key, placeholders in ISSUE_PLACEHOLDERS.items():
+        used: set[str] = set()
+        for part in ("title", "description"):
+            message = messages[f"component.{DOMAIN}.issues.{key}.{part}"]
+            used |= {
+                field
+                for _, field, _, _ in Formatter().parse(message)
+                if field is not None
+            }
+            assert message.format(**placeholders), (key, part)
+
+        assert used == set(placeholders), key

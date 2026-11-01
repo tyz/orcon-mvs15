@@ -174,6 +174,7 @@ async def test_init_fan_starts_humidity_polling(
 
     track.assert_called_once()
     assert track.call_args.args[1] == session.req_humidity
+    session.cleanup()
 
 
 async def test_humidity_polling_starts_once_and_is_cleaned_up(

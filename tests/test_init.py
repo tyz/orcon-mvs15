@@ -74,6 +74,9 @@ class FakeRamses:
     async def setup(self, event: object | None = None) -> None:
         self.started = True
 
+    def async_set_mqtt_connected(self, connected: bool) -> None:
+        self.mqtt_connected = connected
+
     def cleanup(self) -> None:
         self.cleaned = True
 
@@ -147,8 +150,10 @@ async def test_setup_builds_the_runtime_data_and_unloads(
     assert runtime.fan_coordinator.last_update_success is False
     assert runtime.co2_coordinator.last_update_success is False
     assert runtime.rem_coordinator.last_update_success is False
+    assert runtime.ramses_esp.mqtt_connected is False
     connection_callback(True)
     assert runtime.fan_coordinator.last_update_success is True
+    assert runtime.ramses_esp.mqtt_connected is True
     fan_states = hass.states.async_all("fan")
     assert len(fan_states) == 1
     assert fan_states[0].name == "Orcon MVS-15 fan (29:224547) Fan"

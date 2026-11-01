@@ -51,6 +51,12 @@
       "message": "Failed to set fan preset mode {mode}: {error}"
     }
   },
+  "issues": {
+    "fan_not_responding": {
+      "title": "The Orcon MVS-15 fan is not responding",
+      "description": "No packet has been received from the fan {fan_id} for 30 minutes. Check that the fan has power and that the Ramses ESP gateway is within RF range, then power-cycle the fan. This issue disappears as soon as the fan is heard again."
+    }
+  },
   "entity": {
     "fan": {
       "fan_states": {

@@ -151,10 +151,12 @@ rules:
       Python; the other icons come from the device class.
   reconfiguration-flow: done
   repair-issues:
-    status: todo
+    status: done
     comment: |
-      No repair issues are raised yet, for example for a missing remote or a
-      neighbour fan announcement.
+      A configured fan that sends no packet for 30 minutes raises a translated
+      repair issue with the steps to check. The issue is deleted when the fan is
+      heard again, when the entry unloads, and its timer pauses while MQTT is
+      down.
   stale-devices:
     status: done
     comment: |

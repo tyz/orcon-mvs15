@@ -74,10 +74,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
         hass, entry, "discovered_rem_id", CONF_REMOTE_ID
     )
 
+    ramses_esp: RamsesESP | None = None
+
     def _handle_connection(connected: bool) -> None:
-        """Mark every coordinator unavailable while MQTT is down."""
+        """Mark every coordinator unavailable while MQTT is down.
+
+        The session pauses its fan watchdog too: an unreachable gateway is not
+        evidence that the fan stopped answering.
+        """
         for coordinator in (fan_coordinator, co2_coordinator, rem_coordinator):
             coordinator.async_set_available(connected)
+        if ramses_esp is not None:
+            ramses_esp.async_set_mqtt_connected(connected)
 
     try:
         mqtt = MQTT(
