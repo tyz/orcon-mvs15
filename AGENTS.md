@@ -24,8 +24,8 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 1. Run the checks below. If one fails before your change, stop and report it —
    do not "fix" unrelated failures and never delete or `xfail` a test to get
    green.
-2. Read `README.md`, `docs/protocol.md`, `custom_components/orcon_mvs15/TODO.txt`
-   and, once it exists, `quality_scale.yaml`.
+2. Read `README.md`, `docs/protocol.md`, `TODO.md` and, once it exists,
+   `quality_scale.yaml`.
 3. Skim `git log -20` to absorb the commit style.
 4. Check `git status`. Uncommitted work belongs to the user; never overwrite or
    revert it.
@@ -210,8 +210,8 @@ truthful `quality_scale.yaml` and the CI workflow.
   Keep it current when behaviour changes.
 * `docs/protocol.md` is the technical reference. Correct it when reality
   contradicts it.
-* `custom_components/orcon_mvs15/TODO.txt` is the working list. Tick items only
-  after the user approves the result.
+* `TODO.md` at the repository root is the working list. Tick items only after
+  the user approves the result.
 * Comments explain *why*, not *what*. Name firmware/protocol bugs and where they
   were observed.
 
