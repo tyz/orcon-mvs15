@@ -112,7 +112,9 @@ Offsets below are zero-based indices into the **data hex string**, not bytes.
 * `data[6:10]` — second counter.
 * `data[0:2]` — unknown.
 * Not requestable; sent by the fan on power-up.
-* The session uses `ann_id` as the fan ID when this packet is received.
+* The session uses `ann_id` as the fan ID when it is present, and falls back to
+  the sender in `src_id` otherwise. This keeps discovery working for units that
+  do not fill in `ann_id`.
 
 Example from `startup-emu.sh`:
 
@@ -129,7 +131,7 @@ I --- --:------ --:------ 29:224547 042F 006 00004C004C00
 |---|---|
 | `[2:6]` | Manufacturer group (`0001` HVAC, `0002` CH/DHW) |
 | `[6:8]` | Manufacturer sub-ID (`C8` for Orcon) |
-| `[8:10]` | Product ID (`26` or `51` for the MVS-15) |
+| `[8:10]` | Product ID (`26` or `51` for the MVS-15, `5F` for the VMC-15RPS34) |
 | `[10:12]` | Software version ID (hex) |
 | `[12:14]` | List version ID |
 | `[14:16]` | OEM code / unknown (the current decoder labels this both `sz_oem_code` and `unknown`) |
@@ -150,7 +152,9 @@ day   = int(value[0:2], 16) & 0b11111  # top 3 bits are day-of-week
 `FFFFFFFF` means “no date”.
 
 The integration updates the Home Assistant device registry from this packet:
-`sw_version` and `model_id`.
+`sw_version` and `model_id`. The VMC-15RPS34 reports product ID `5F` and the
+description `VMC-15RPS34`; it uses the same packets as the MVS-15, so it is
+accepted as a fan.
 
 ### `10E1` — device ID
 
@@ -298,7 +302,8 @@ makes Home Assistant retry entry setup instead of leaving it pending.
 ### Fan
 
 1. The fan broadcasts `042F` on power-up.
-2. The session takes `ann_id` as the fan ID.
+2. The session takes `ann_id` as the fan ID, or `src_id` when the broadcast has
+   no `ann_id`.
 3. Entity creation calls `init_fan()`, which requests `10E0`, `12A0` and `31D9`.
 4. `31D9` updates the fan mode and fault state.
 

@@ -46,9 +46,12 @@ async def _setup_coordinator(
             if unsub:
                 unsub()
             return
-        if (ramses_id := coordinator.data.get(discover_key)) is None:
+        ramses_id = coordinator.data.get(discover_key)
+        if not isinstance(ramses_id, str) or not ramses_id:
+            # An empty RamsesID means a 042F frame without a usable sender. Keep
+            # listening instead of storing an address that can never be used.
             _LOGGER.debug(
-                f"_device_discovered: Got {coordinator.data} without {discover_key}"
+                f"_device_discovered: Got {coordinator.data} without a valid {discover_key}"
             )
             return
         _LOGGER.debug(f"Storing discovered {config_key} ({ramses_id}) in config")

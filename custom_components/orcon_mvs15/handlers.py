@@ -33,14 +33,19 @@ class DataHandlers:
         }
 
     def _powerup_handler(self, payload: Code) -> None:
-        """Fan powerup payload, we use it for fan discovery"""
+        """Fan powerup payload, we use it for fan discovery.
+
+        Not every unit fills in ``ann_id``. When it is empty, fall back to the
+        sender so a broadcast that only names a source still discovers the fan.
+        """
+        fan_id = payload.packet.ann_id or payload.packet.src_id
         _LOGGER.info(
             "Fan startup payload received, "
             f"signal strength: {payload.values['signal_strength']} dBm"
         )
         new_data = {
             **self.fan_coordinator.data,
-            "discovered_fan_id": payload.packet.ann_id,
+            "discovered_fan_id": fan_id,
             "fan_signal_strength": payload.values["signal_strength"],
         }
         self.fan_coordinator.async_set_updated_data(new_data)
@@ -109,7 +114,9 @@ class DataHandlers:
         if payload.values["manufacturer_sub_id"] != "C8":
             _LOGGER.warning(f"This doesn't look like an Orcon device: {payload.values}")
             return
-        if payload.values["product_id"] not in ["26", "51"]:
+        # 26 and 51 are the MVS-15; 5F is the VMC-15RPS34, which sends the same
+        # packets but reports a different product ID.
+        if payload.values["product_id"] not in ["26", "51", "5F"]:
             _LOGGER.warning(f"Unknown product_id {payload.values['product_id']}")
             return
         ramses_id = payload.packet.src_id
