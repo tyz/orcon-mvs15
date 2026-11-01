@@ -74,6 +74,12 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 * Formatting is enforced by `ruff format`.
 * Do not add `# type: ignore` or `cast()` to silence a finding; fix the cause or
   use the correct type.
+* When validation guarantees a dict key exists, use `data["key"]` instead of
+  `data.get("key")` so a contract violation fails loudly instead of being masked.
+* Keep `try` clauses as small as the operation warrants: do not wrap large
+  blocks, and do not catch exceptions from calls that are not expected to raise.
+* An `assert` that exists only to narrow a type belongs behind
+  `if TYPE_CHECKING:` so it does not run in production.
 
 ## Home Assistant Guidelines
 
@@ -96,6 +102,10 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
   translate them into `HomeAssistantError`, `ConfigEntryNotReady`, or a domain
   exception callers can act on. Never log-and-continue when the caller needs to
   know a command failed.
+* **Validated input:** when reviewing entity actions, do not suggest extra
+  defensive checks for fields already validated by Home Assistant's service/action
+  schemas and entity selection filters. Suggest a guard only when data bypasses
+  those validators or is transformed into a less-safe form.
 * **Availability:** entities must be `unavailable` whenever the device cannot be
   controlled or no state has been received. "Optimistic but wrong" is worse than
   "unavailable".
@@ -105,6 +115,9 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
   config_entry_id)`; `async_get_device()` is deprecated. Pass the config entry ID,
   never the gateway Ramses ID.
 * **Discovery** uses the integration's own transport helpers, not a fresh scan.
+* **Service actions:** actions that change configuration or have security
+  implications must require an admin user. Register them with
+  `async_register_admin_service`, which enforces this.
 * **Quality scale:** claims are checked against the code. If the code does not do
   it, the rule is `exempt` with a reason or `todo`, not `done`.
 * **Naming:** always "Home Assistant", two words, never hyphenated.
@@ -216,8 +229,14 @@ a truthful `quality_scale.yaml` that meets Gold and Platinum.
 * `TODO.md` is a gitignored working list with the sections **New features**,
   **Improvements** and **Bugs**. Tick items off (`[ ]` to `[x]`) only after the
   user has approved the result.
-* Comments explain *why*, not *what*. Name firmware/protocol bugs and where they
-  were observed.
+* Comments explain *why*, not *what*.
+  - Keep them concise: one short line about the non-obvious constraint, or none.
+  - Never restate the code (`# Check if initialized` above `if self.initialized:`),
+    and never justify a change by describing the old code. Comments in tests that
+    explain why a call or assertion is made are fine.
+  - Do not add section or divider comments (`# --- XYZ Triggers ---`); they go
+    stale and mislead.
+  - Name firmware/protocol bugs and where they were observed.
 
 ## External Resources
 
