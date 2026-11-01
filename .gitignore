@@ -4,5 +4,6 @@
 !.github/
 __pycache__
 coverage.json
+opencode.json
 TODO.md
 AGENTS.template.md
