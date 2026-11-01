@@ -74,13 +74,13 @@ def co2_device_info(
     gateway_id: RamsesID,
     co2_id: RamsesID,
 ) -> DeviceInfo:
-    """Return the device info for the CO2 remote, connected through the gateway."""
+    """Return the device info for the wired CO₂ sensor, connected through the gateway."""
     return _with_via_device(
         DeviceInfo(
             identifiers={(DOMAIN, co2_id)},
             manufacturer="Orcon",
-            model="MVS-15RH CO2B",
-            name=f"Orcon CO2 remote 15RF ({co2_id})",
+            model="CO2 ruimtesensor 15RF",
+            name=f"Orcon CO2 room sensor ({co2_id})",
         ),
         _via_device_id(hass, config_entry_id, gateway_id),
     )
@@ -134,7 +134,7 @@ def async_get_or_create_co2(
     gateway_id: RamsesID,
     co2_id: RamsesID,
 ) -> DeviceEntry:
-    """Create the CO2 remote device or return the existing one."""
+    """Create the CO2 room sensor device or return the existing one."""
     return _async_get_or_create_device(
         hass,
         config_entry_id,

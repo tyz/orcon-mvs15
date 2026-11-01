@@ -114,8 +114,10 @@ class DataHandlers:
         if payload.values["manufacturer_sub_id"] != "C8":
             _LOGGER.warning(f"This doesn't look like an Orcon device: {payload.values}")
             return
-        # 26 and 51 are the MVS-15; 5F is the VMC-15RPS34, which sends the same
-        # packets but reports a different product ID.
+        # 26 is the fan (VMC-15RP01), 51 the wired CO₂ room sensor
+        # (VMS-15CM17) and 5F the newer fan (VMC-15RPS34). MVx-15 is the sold
+        # name, VMx-15 the internal Orcon name. Product 27 belongs to another
+        # Orcon system and is not a fan.
         if payload.values["product_id"] not in ["26", "51", "5F"]:
             _LOGGER.warning(f"Unknown product_id {payload.values['product_id']}")
             return

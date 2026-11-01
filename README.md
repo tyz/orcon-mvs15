@@ -1,9 +1,10 @@
 # Orcon MVS-15
 
-(Work in progress, currently requires a working 15RF remote until pairing a fake remote is implemented)
+(Work in progress, currently requires a working 15RF wireless remote until pairing a fake remote is implemented)
 
 Home Assistant integration for the [Orcon MVS-15 fan](https://orcon.nl/mechanische-ventilatie/),
-(optional) remote with CO₂ sensor and (optional) 15RF remote.
+the (optional) wired `CO2 ruimtesensor 15RF` with its CO₂ sensor and the
+(optional) `Afstandsbediening 15RF` wireless remote.
 
 Uses MQTT and a [Ramses ESP stick](https://indalo-tech.onlineweb.shop/product/ramses-esp)
 to communicate with the fan.
@@ -14,18 +15,21 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
 
 - Creates a fan entity with all supported presets (Away, Auto, Low, Medium, High + High 15/30/60m timed modes)
 - Auto-detects the fan
-- Auto-detects a CO₂ remote and creates an HA sensor
+- Auto-detects the wired `CO2 ruimtesensor 15RF` and creates an HA sensor
 - Auto-detects the fan's humidity sensor and creates an HA sensor
 - Creates a binary sensor that triggers when the fan reports a fault
 - The fan reported mode is used to update the fan's current preset in HA, so it
-  will immediately notice when the mode was changed by a 15RF remote, for example
+  will immediately notice when the mode was changed by a 15RF wireless remote, for example
 
 ## Supported devices
 
-- Orcon MVS-15 ventilation unit (fan, humidity sensor and fault state)
+- Orcon MVS-15 ventilation unit (fan, humidity sensor and fault state). The
+  sold model name is `MVS-15xxx`, where `xxx` names the fitted humidity or CO₂
+  option, for example `MVS-15RH CO2B`.
 - Orcon VMC-15RPS34 ventilation unit (same packets as the MVS-15; it reports
   product ID `5F`)
-- Orcon MVS-15RH CO2B CO₂/humidity remote (15RF)
+- Orcon `CO2 ruimtesensor 15RF` wired CO₂ sensor (product ID `51`)
+- Orcon `Afstandsbediening 15RF` wireless remote
 - Ramses ESP gateway running the Ramses II firmware over MQTT
 
 ## TODO
@@ -43,9 +47,9 @@ configuration under `Custom repositories`. Then install it in HACS, and add the
 
 The setup form asks for two values:
 
-- **Remote ID** — the Ramses ID of the 15RF remote that sends commands to the
-  fan, for example `29:163058`. If you do not know it yet, use a fake ID and
-  follow [Fan ID](#fan-id).
+- **Remote ID** — the Ramses ID of the 15RF wireless remote that sends commands
+  to the fan, for example `29:163058`. If you do not know it yet, use a fake ID
+  and follow [Fan ID](#fan-id).
 - **MQTT topic prefix** — the base topic of the Ramses ESP gateway, for
   example `RAMSES/GATEWAY`. The integration discovers the gateway on
   `<prefix>/+` and then exchanges packets on `<prefix>/<gateway>/rx` and
@@ -53,7 +57,7 @@ The setup form asks for two values:
 
 ## Fan ID
 
-If you don't know the ID of the 15RF remote then use a fake ID (e.g. `29:123456`).
+If you don't know the ID of the 15RF wireless remote then use a fake ID (e.g. `29:123456`).
 Tail the `packet.log` file in the Home Assistant config directory, and press the
 `auto` button on the remote a couple of times. The resulting log entries should
 look something like this:
@@ -66,11 +70,11 @@ The remote's ID in this example is `29:123456`.
 
 ## Auto-discovery
 
-1. Install and configure the integration. The `remote ID` it asks for is the 15RF remote's ID.
+1. Install and configure the integration. The `remote ID` it asks for is the 15RF wireless remote's ID.
 1. Turn the fan off and on again
 1. The fan will be discovered by a startup message (042F) it sends out
 1. The state of the humidity sensor (part of the fan) will be requested (12A0), and will be set up in HA if it responds
-1. The CO₂ sensor/remote will be discovered as soon as it sends a vent demand message (31E0) to the above fan (might take a while)
+1. The wired `CO2 ruimtesensor 15RF` will be discovered as soon as it sends a vent demand message (31E0) to the above fan (might take a while)
 
 ## Reconfiguring
 
@@ -170,7 +174,7 @@ stays silent.
 
 ## Known limitations
 
-- A working 15RF remote is required to send commands. Pairing a fake remote is
+- A working 15RF wireless remote is required to send commands. Pairing a fake remote is
   not implemented yet.
 - Timed high modes (`22F3`) are sent, but the integration does not track when
   the timer ends; the preset follows the next state the fan reports.

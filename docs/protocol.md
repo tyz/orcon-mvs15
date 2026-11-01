@@ -10,6 +10,17 @@ The packet terminology used here is defined in
 [`custom_components/orcon_mvs15/README.naming.md`](../custom_components/orcon_mvs15/README.naming.md):
 message → envelope → frame → packet → payload.
 
+## Scope
+
+The integration targets the `MVS-15` simple ventilator family. `MVx-xx` is the
+model name the units are sold under (the fan's `xxx` suffix names the fitted
+humidity or CO₂ option, for example `MVS-15RH CO2B`); `VMx-xx` is Orcon's
+internal name. Other Orcon systems, such as the heat-recovery (WTW) units that
+a gateway may also hear, share the transport, but they are out of scope for
+now: their additional codes are not decoded, and their packets are ignored
+unless they come from a device of the config entry (`042F` is the exception,
+see below).
+
 ## MQTT transport
 
 The integration uses a base topic, `RAMSES/GATEWAY` by default.
@@ -80,14 +91,14 @@ that behaviour is unverified and should not be changed without protocol evidence
 | `042F` | Power cycle counter | Yes | Yes | No | No | Power-up | No | Sent on fan power-up; not requestable. |
 | `10E0` | Device info | Yes | Yes | Yes | No | 24 h | Yes | Manufacturer, product, firmware, serial dates, description. |
 | `10E1` | Device ID | No | Yes | Yes | No | — | Yes | 24-bit device identifier. |
-| `1060` | Battery state | No | No | No | No | — | No | Occasionally received from another Orcon system; not used by the 15RF remote. |
+| `1060` | Battery state | No | No | No | No | — | No | Occasionally received from another Orcon system; not used by the 15RF wireless remote. |
 | `1298` | CO₂ sensor | Yes | No | Yes | No | 10 m | Yes | CO₂ concentration in ppm. |
 | `12A0` | Indoor humidity | Yes | Yes | No | No | — | Yes | Not announced; polled by the integration. |
 | `1FC9` | RF bind | No | ? | ? | ? | — | No | Pairing is work in progress. |
 | `22F1` | Fan mode | Yes | Yes | No | No | — | Yes | 3-byte fan mode. |
 | `22F3` | Fan mode with timer | Yes | Yes | No | No | — | No | 7-byte timed fan mode. |
 | `31D9` | Fan state | Yes | Yes | No | No | 5 m | Yes | Current mode plus fault flag. |
-| `31E0` | Vent demand | Yes | No | Yes | No | 5 m | Yes | CO₂ remote vent demand. |
+| `31E0` | Vent demand | Yes | No | Yes | No | 5 m | Yes | CO₂ room sensor vent demand. |
 
 ### Percentages
 
@@ -131,7 +142,7 @@ I --- --:------ --:------ 29:224547 042F 006 00004C004C00
 |---|---|
 | `[2:6]` | Manufacturer group (`0001` HVAC, `0002` CH/DHW) |
 | `[6:8]` | Manufacturer sub-ID (`C8` for Orcon) |
-| `[8:10]` | Product ID (`26` or `51` for the MVS-15, `5F` for the VMC-15RPS34) |
+| `[8:10]` | Product ID (`26` fan, `51` wired CO₂ room sensor, `5F` newer fan; see below) |
 | `[10:12]` | Software version ID (hex) |
 | `[12:14]` | List version ID |
 | `[14:16]` | OEM code / unknown (the current decoder labels this both `sz_oem_code` and `unknown`) |
@@ -152,9 +163,16 @@ day   = int(value[0:2], 16) & 0b11111  # top 3 bits are day-of-week
 `FFFFFFFF` means “no date”.
 
 The integration updates the Home Assistant device registry from this packet:
-`sw_version` and `model_id`. The VMC-15RPS34 reports product ID `5F` and the
-description `VMC-15RPS34`; it uses the same packets as the MVS-15, so it is
-accepted as a fan.
+`sw_version` and `model_id`. It accepts three product IDs:
+
+| Product ID | Internal name | Role |
+|---|---|---|
+| `26` | `VMC-15RP01` | Fan, sold as `MVS-15xxx` |
+| `51` | `VMS-15CM17` | Wired CO₂ room sensor, sold as `CO2 ruimtesensor 15RF` |
+| `5F` | `VMC-15RPS34` | Newer fan, same packets as the MVS-15 |
+
+Product `27` (seen from `29:167925`, `VMN-15LF01`) belongs to another Orcon
+system and is not accepted.
 
 ### `10E1` — device ID
 
@@ -318,9 +336,9 @@ adopted. This is a known risk; ownership verification is an open design question
 3. The session polls `12A0` every 5 minutes, starting when the fan ID is known,
    so a lost first response does not stop later polls.
 
-### CO₂ remote
+### Wired CO₂ room sensor
 
-1. The remote sends `31E0` (vent demand) to the fan.
+1. The sensor sends `31E0` (vent demand) to the fan.
 2. If no CO₂ ID is configured and the packet is an 8-byte `I` frame addressed to
    the fan, the session takes `src_id` as the CO₂ ID.
 3. Entity creation calls `init_co2()`, which requests `10E0`, `1298` and `31E0`.

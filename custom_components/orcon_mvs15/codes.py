@@ -342,7 +342,7 @@ class Code12a0(Code):
 
 class Code1060(Code):
     """Battery state
-    Not used by the RF15 remote, but I occasionally receive it
+    Not used by the 15RF wireless remote, but I occasionally receive it
     from one of my neighbours with another Orcon system"""
 
     _code = "1060"
