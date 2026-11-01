@@ -24,7 +24,7 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
 
 - Orcon MVS-15 ventilation unit (fan, humidity sensor and fault state)
 - Orcon MVS-15RH CO2B CO₂/humidity remote (15RF)
-- Rameses ESP gateway running the Ramses II firmware over MQTT
+- Ramses ESP gateway running the Ramses II firmware over MQTT
 
 ## TODO
 
@@ -44,7 +44,7 @@ The setup form asks for two values:
 - **Remote ID** — the Ramses ID of the 15RF remote that sends commands to the
   fan, for example `29:163058`. If you do not know it yet, use a fake ID and
   follow [Fan ID](#fan-id).
-- **MQTT topic prefix** — the base topic of the Rameses ESP gateway, for
+- **MQTT topic prefix** — the base topic of the Ramses ESP gateway, for
   example `RAMSES/GATEWAY`. The integration discovers the gateway on
   `<prefix>/+` and then exchanges packets on `<prefix>/<gateway>/rx` and
   `<prefix>/<gateway>/tx`.

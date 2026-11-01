@@ -2,7 +2,7 @@
 
 `orcon_mvs15` is a custom Home Assistant integration for the Orcon MVS-15
 ventilation fan, its optional CO₂/15RF remote and its humidity sensor. It talks
-Ramses II over MQTT through a Rameses ESP stick. This file is the operating
+Ramses II over MQTT through a Ramses ESP stick. This file is the operating
 manual for agents working on the integration. The wire protocol lives in
 `docs/protocol.md`; user-facing documentation lives in `README.md`; the packet
 naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
@@ -12,7 +12,7 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 | | |
 |---|---|
 | Domain | `orcon_mvs15` — must match `custom_components/orcon_mvs15/` |
-| Transport | MQTT (`homeassistant.components.mqtt`) through a Rameses ESP gateway |
+| Transport | MQTT (`homeassistant.components.mqtt`) through a Ramses ESP gateway |
 | Client layer | `protocol` modules (`ramses_packet.py`, `codes.py`, `ramses_packet_queue.py`) are Home Assistant-free; `mqtt.py` is transport; `ramses_esp.py` is the protocol session |
 | Platforms | `fan`, `sensor`, `binary_sensor` in a single config entry |
 | Discovery | MQTT wildcard `<base_topic>/+` for the gateway; Ramses `042F`, `12A0` and `31E0` packets for devices |
@@ -220,7 +220,7 @@ truthful `quality_scale.yaml` and the CI workflow.
 * [ramses_rf](https://github.com/zxdavb/ramses_rf) and the
   [Ramses protocol wiki](https://github.com/zxdavb/ramses_protocol/wiki) for
   packet semantics and field layouts.
-* [Rameses ESP](https://indalo-tech.onlineweb.shop/product/ramses-esp) for the
+* [Ramses ESP](https://indalo-tech.onlineweb.shop/product/ramses-esp) for the
   MQTT gateway behaviour.
 * Home Assistant developer docs for config entries, coordinators and device
   registry APIs.

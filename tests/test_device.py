@@ -32,7 +32,7 @@ def make_entry(hass: HomeAssistant) -> MockConfigEntry:
 
 
 def test_gateway_device_info() -> None:
-    """The gateway is the Rameses ESP stick."""
+    """The gateway is the Ramses ESP stick."""
     info = gateway_device_info(GATEWAY_ID)
 
     assert info["identifiers"] == {(DOMAIN, GATEWAY_ID)}
