@@ -185,8 +185,8 @@ system and is not accepted.
 * `data[2:4]` — battery level, using the half-percent encoding.
 * `data[4:6]` — `00` means low battery.
 * Not used by the 15RF remote.
-* The current decoder unconditionally parses the data even for a 1-byte status
-  request; that is a known bug to fix with a test.
+* A 1-byte status request carries no battery state; the decoder only exposes
+  `level` and `low` for a 6-byte payload.
 
 ### `1298` — CO₂
 
