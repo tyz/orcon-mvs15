@@ -182,7 +182,8 @@ stays silent.
 - Timed high modes (`22F3`) are sent, but the integration does not track when
   the timer ends; the preset follows the next state the fan reports.
 - A `042F` power-up message is accepted from any source. A neighbouring Orcon
-  unit that powers up at the same time could be adopted as this fan.
+  unit that powers up while this fan is still being discovered could be
+  adopted as this fan.
 - Only MQTT transport is supported; USB is on the TODO list.
 - The integration writes `/config/packet.log` (rolled over at 10 MB) as a
   debugging aid. It is not a stable interface.
