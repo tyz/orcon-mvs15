@@ -5,7 +5,7 @@ import logging
 from collections.abc import Callable
 
 from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import HomeAssistant, CoreState
+from homeassistant.core import Event, HomeAssistant, CoreState
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceEntry
 
@@ -159,7 +159,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
         co2_coordinator=co2_coordinator,
         rem_coordinator=rem_coordinator,
         ramses_esp=ramses_esp,
-        cleanup=[mqtt.cleanup, ramses_esp.cleanup],
+        cleanup=[mqtt.cleanup],
     )
 
     dh = DataHandlers(hass, entry)
@@ -168,10 +168,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
 
     if hass.state == CoreState.running:
         _LOGGER.info("Orcon MVS-15 integration has been setup")
-        hass.async_create_task(ramses_esp.setup())
+        try:
+            # Await setup so a broker that is not ready reaches Home Assistant
+            # as ConfigEntryNotReady and the entry retries. A detached task
+            # would only log the failure and leave the entry loaded without
+            # subscriptions.
+            await ramses_esp.setup()
+        except Exception as e:
+            await ramses_esp.async_cleanup()
+            mqtt.cleanup()
+            if isinstance(e, ConfigEntryNotReady):
+                raise
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="session_setup_failed",
+                translation_placeholders={"error": str(e)},
+            ) from e
     else:
         _LOGGER.info("Orcon MVS-15 integration has been loaded after restart")
-        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, ramses_esp.setup)
+
+        async def _start_session(event: Event) -> None:
+            """Start the session once Home Assistant is up, retrying on failure."""
+            try:
+                await ramses_esp.setup(event=event)
+            except Exception as err:  # no caller left to raise to
+                _LOGGER.error("The Orcon MVS-15 session failed to start: %s", err)
+                hass.config_entries.async_schedule_reload(entry.entry_id)
+
+        entry.async_on_unload(
+            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _start_session)
+        )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -181,6 +207,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) 
     _LOGGER.debug("Unloading")
     while entry.runtime_data.cleanup:
         entry.runtime_data.cleanup.pop()()
+    await entry.runtime_data.ramses_esp.async_cleanup()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

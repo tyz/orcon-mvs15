@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Callable
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, HomeAssistant
@@ -80,6 +83,9 @@ class FakeRamses:
         self.mqtt_connected = connected
 
     def cleanup(self) -> None:
+        self.cleaned = True
+
+    async def async_cleanup(self) -> None:
         self.cleaned = True
 
 
@@ -431,6 +437,120 @@ async def test_setup_waits_for_home_assistant_to_start(hass: HomeAssistant) -> N
     await hass.async_block_till_done()
 
     assert runtime.ramses_esp.started is True
+
+
+async def test_a_failed_session_start_retries_the_entry(
+    hass: HomeAssistant,
+) -> None:
+    """A broker that is not ready must send the entry back to SETUP_RETRY."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_FAN_ID: FAN_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    class MqttNotReady(FakeRamses):
+        """Session that finds no MQTT client."""
+
+        async def setup(self, event: object | None = None) -> None:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="mqtt_not_available",
+            )
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", FakeMQTT),
+        patch("custom_components.orcon_mvs15.RamsesESP", MqttNotReady),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
+
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_key == "mqtt_not_available"
+    assert FakeMQTT.last_instance is not None
+    assert FakeMQTT.last_instance.cleaned
+
+
+async def test_an_unexpected_session_start_failure_is_retryable(
+    hass: HomeAssistant,
+) -> None:
+    """A broken session becomes a translated retryable failure."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_FAN_ID: FAN_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    class BrokenSession(FakeRamses):
+        """Session that cannot subscribe."""
+
+        async def setup(self, event: object | None = None) -> None:
+            raise RuntimeError("the stick is unplugged")
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", FakeMQTT),
+        patch("custom_components.orcon_mvs15.RamsesESP", BrokenSession),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
+
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_domain == DOMAIN
+    assert entry.error_reason_translation_key == "session_setup_failed"
+    assert entry.error_reason_translation_placeholders == {
+        "error": "the stick is unplugged"
+    }
+
+
+async def test_a_failed_start_after_restart_schedules_a_reload(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The deferred start has no caller to raise to, so it reloads instead."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_FAN_ID: FAN_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        },
+    )
+    entry.add_to_hass(hass)
+    hass.set_state(CoreState.not_running)
+
+    class SlowMqtt(FakeRamses):
+        """Session whose start fails once."""
+
+        async def setup(self, event: object | None = None) -> None:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="mqtt_not_available",
+            )
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", FakeMQTT),
+        patch("custom_components.orcon_mvs15.RamsesESP", SlowMqtt),
+        patch.object(hass.config_entries, "async_schedule_reload") as reload,
+        caplog.at_level(logging.ERROR),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+        await hass.async_block_till_done()
+
+    reload.assert_called_once_with(entry.entry_id)
+    assert "failed to start" in caplog.text
 
 
 async def test_signal_strength_is_disabled_by_default(hass: HomeAssistant) -> None:

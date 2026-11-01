@@ -4,6 +4,7 @@ import os
 import logging
 import asyncio
 import json
+import threading
 
 from collections.abc import Callable
 from functools import partial
@@ -69,6 +70,8 @@ class RamsesESP:
         self._handlers: dict[str, Callable[[Code], None]] = {}
         self._send_queue = RamsesPacketQueue()
         self._log_f: TextIO | None = None
+        self._log_lock = threading.Lock()
+        self._closed = False
         self._humidity_poll_unsub: Callable[[], None] | None = None
         self._fan_watchdog_unsub: Callable[[], None] | None = None
         if self.fan_id:
@@ -85,6 +88,9 @@ class RamsesESP:
             )
 
     async def setup(self, event: Event | None = None) -> None:
+        if self._closed:
+            _LOGGER.debug("Session is closed, not starting it")
+            return
         if not await mqtt_client.async_wait_for_mqtt_client(self.hass):
             raise ConfigEntryNotReady(
                 translation_domain=DOMAIN,
@@ -96,6 +102,8 @@ class RamsesESP:
         if event:  # only on Home-Assistant restart
             """sleep for a bit, mqtt (or the stick) is not ready yet for some reason"""
             await asyncio.sleep(2)
+        if self._closed:  # the entry unloaded while we waited
+            return
         if self.fan_id:
             await self.init_fan()
         if self.co2_id:
@@ -103,6 +111,8 @@ class RamsesESP:
 
     async def init_fan(self, discovered_fan_id: RamsesID | None = None) -> None:
         """Fetch current fan state + device info on startup"""
+        if self._closed:
+            return
         if discovered_fan_id:
             self.fan_id = discovered_fan_id
             _LOGGER.debug(f"Fetching device info for discovered fan ({self.fan_id})")
@@ -114,7 +124,7 @@ class RamsesESP:
 
     def start_humidity_polling(self) -> None:
         """12A0 is not broadcast, so poll it even if a response was lost."""
-        if self._humidity_poll_unsub is not None:
+        if self._closed or self._humidity_poll_unsub is not None:
             return
         self._humidity_poll_unsub = async_track_time_interval(
             self.hass, self.req_humidity, HUMIDITY_POLL_INTERVAL
@@ -128,7 +138,7 @@ class RamsesESP:
         so a fresh request deserves a fresh response window.
         """
         self.cancel_fan_watchdog()
-        if not self.fan_id:
+        if not self.fan_id or self._closed:
             return
         self._fan_watchdog_unsub = async_call_later(
             self.hass, FAN_RESPONSE_TIMEOUT, self._fan_response_timeout
@@ -165,16 +175,44 @@ class RamsesESP:
             self.cancel_fan_watchdog()
 
     def cleanup(self) -> None:
-        """Stop the timers and drop the issue when the entry unloads."""
+        """Stop all session work when the entry unloads.
+
+        The packet log is closed by ``async_cleanup``: a file close is blocking
+        I/O, so it belongs in an executor.
+        """
+        if self._closed:
+            return
+        self._closed = True
         if self._humidity_poll_unsub is not None:
             self._humidity_poll_unsub()
             self._humidity_poll_unsub = None
             _LOGGER.debug("Removed the humidity poll interval")
         self.cancel_fan_watchdog()
+        # Clearing the queue also cancels the armed retry timers, so no retry
+        # can publish a command after unload.
+        self._send_queue.clear()
         async_delete_fan_not_responding_issue(self.hass, self.fan_id)
+
+    async def async_cleanup(self) -> None:
+        """Stop the session and close the packet log off the event loop."""
+        self.cleanup()
+        await self.hass.async_add_executor_job(self._close_packet_log)
+
+    def _close_packet_log(self) -> None:
+        """Close the debug log without racing a write in another thread."""
+        with self._log_lock:
+            if self._log_f is None:
+                return
+            try:
+                self._log_f.close()
+            except OSError:
+                _LOGGER.debug("Failed to close the packet log", exc_info=True)
+            self._log_f = None
 
     async def init_co2(self, discovered_co2_id: RamsesID | None = None) -> None:
         """Fetch current CO2 sensor state + device info on startup or discovery"""
+        if self._closed:
+            return
         if discovered_co2_id:
             self.co2_id = discovered_co2_id
             _LOGGER.debug(
@@ -187,9 +225,15 @@ class RamsesESP:
     async def req_humidity(self, now: datetime | None = None) -> None:
         """12A0 is not announced so we need to fetch it ourselves
         Will be called by async_track_time_interval, if the 12A0 call from self.setup responds"""
+        if self._closed:
+            return
         await self.publish(Code12a0.get(src_id=self.gateway_id, dst_id=self.fan_id))
 
     async def publish(self, packet: RamsesPacket) -> None:
+        if self._closed:
+            # The caller is an entity command; silently dropping it would
+            # report success for a command that was never sent.
+            raise MQTTException("The Orcon MVS-15 session is unloading")
         if packet.expected_response:
             packet.expected_response.cancel_retry_handler = async_call_later(
                 # Try again if expected_response wasn't received within packet.expected_response.timeout seconds
@@ -206,7 +250,7 @@ class RamsesESP:
             if packet.expected_response:
                 # Publishing failed, so there is nothing to wait for. Drop the
                 # retry timer instead of retrying a command the caller saw fail.
-                self._send_queue.remove(packet)
+                self._send_queue.discard(packet)
             raise
 
     async def handle_ramses_mqtt_message(self, msg: ReceiveMessage) -> None:
@@ -268,23 +312,29 @@ class RamsesESP:
         _LOGGER.debug(f"Remove handler for code {code}")
         del self._handlers[code]
 
+    @callback
     def _schedule_retry(self, packet: RamsesPacket, _now: datetime) -> None:
-        """Queue a retry after async_call_later fires.
+        """Queue a retry when async_call_later fires.
 
-        async_call_later passes the scheduled time as the last argument and runs
-        this synchronous callback in an executor, so it must accept the time.
+        async_call_later passes the scheduled time. The @callback decorator
+        keeps this on the event loop, so the retry task is created directly
+        instead of hopping through call_soon_threadsafe.
         """
-        self.hass.loop.call_soon_threadsafe(
-            lambda: self.hass.async_create_task(self._retry_pending_request(packet))
-        )
+        self.hass.async_create_task(self._retry_pending_request(packet))
 
     async def _retry_pending_request(self, packet: RamsesPacket) -> None:
         """Outgoing request timed out, retry it"""
+        if packet not in self._send_queue:
+            # The response arrived after the timer fired but before this task
+            # ran. Publishing again would duplicate a command that was already
+            # answered.
+            _LOGGER.debug(f"Not retrying {packet}: already answered")
+            return
         assert packet.expected_response is not None
         packet.expected_response.max_retries -= 1
         if packet.expected_response.max_retries < 0:
             _LOGGER.warning(f"Request timed out: {packet}")
-            self._send_queue.remove(packet)
+            self._send_queue.discard(packet)
             return
         _LOGGER.debug(f"Retry {packet}")
         await self.publish(packet)
@@ -352,31 +402,37 @@ class RamsesESP:
         """Log raw packets to disk, rolling over at 10 MB, offloaded to executor."""
 
         def _sync_log() -> None:
-            if self._log_f is None:
-                try:
-                    self._log_f = open(path, "a")
-                except Exception as e:
-                    _LOGGER.error("Error opening %s: %s", path, e)
+            # MQTT messages are handled by concurrent tasks, so two writes can
+            # reach the executor at once. The lock keeps each line whole and
+            # stops a close from racing a write.
+            with self._log_lock:
+                if self._closed:
                     return
-
-            print(f"{envelope['ts']} {envelope['msg']}", file=self._log_f)
-            self._log_f.flush()
-
-            if os.path.getsize(path) > max_size:
-                try:
-                    self._log_f.close()
-                except Exception:
-                    pass
-                for i in range(10, 0, -1):  # keep up to 10 old log files
-                    src = f"{path}{'' if i == 1 else f'.{i - 1}'}"
-                    dst = f"{path}.{i}"
+                if self._log_f is None:
                     try:
-                        os.replace(src, dst)
-                    except FileNotFoundError:
-                        continue
-                try:
-                    self._log_f = open(path, "a")
-                except Exception as e:
-                    _LOGGER.error("Error reopening %s: %s", path, e)
+                        self._log_f = open(path, "a")
+                    except Exception as e:
+                        _LOGGER.error("Error opening %s: %s", path, e)
+                        return
+
+                print(f"{envelope['ts']} {envelope['msg']}", file=self._log_f)
+                self._log_f.flush()
+
+                if os.path.getsize(path) > max_size:
+                    try:
+                        self._log_f.close()
+                    except Exception:
+                        pass
+                    for i in range(10, 0, -1):  # keep up to 10 old log files
+                        src = f"{path}{'' if i == 1 else f'.{i - 1}'}"
+                        dst = f"{path}.{i}"
+                        try:
+                            os.replace(src, dst)
+                        except FileNotFoundError:
+                            continue
+                    try:
+                        self._log_f = open(path, "a")
+                    except Exception as e:
+                        _LOGGER.error("Error reopening %s: %s", path, e)
 
         await self.hass.async_add_executor_job(_sync_log)
