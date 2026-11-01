@@ -9,6 +9,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.orcon_mvs15.const import DOMAIN
 from custom_components.orcon_mvs15.device import (
+    async_get_or_create_co2,
+    async_get_or_create_fan,
     async_get_or_create_gateway,
     attached_device_info,
     co2_device_info,
@@ -102,6 +104,58 @@ async def test_gateway_device_is_created_once(
     assert first.id == second.id
     assert second.manufacturer == "Indalo-Tech"
     assert second.model == "RAMSES_ESP"
+
+
+async def test_fan_device_is_created_once(
+    hass: HomeAssistant, device_registry: DeviceRegistry
+) -> None:
+    """Setup registers the fan with its gateway link, not only an entity."""
+    entry = make_entry(hass)
+    gateway = async_get_or_create_gateway(hass, entry.entry_id, GATEWAY_ID)
+
+    first = async_get_or_create_fan(hass, entry.entry_id, GATEWAY_ID, FAN_ID)
+    second = async_get_or_create_fan(hass, entry.entry_id, GATEWAY_ID, FAN_ID)
+
+    assert first.id == second.id
+    assert second.manufacturer == "Orcon"
+    assert second.model == "MVS-15"
+    assert second.name == f"Orcon MVS-15 fan ({FAN_ID})"
+    assert second.via_device_id == gateway.id
+
+
+async def test_co2_device_is_created_once(
+    hass: HomeAssistant, device_registry: DeviceRegistry
+) -> None:
+    """Setup registers the CO2 remote with its gateway link."""
+    entry = make_entry(hass)
+    gateway = async_get_or_create_gateway(hass, entry.entry_id, GATEWAY_ID)
+
+    first = async_get_or_create_co2(hass, entry.entry_id, GATEWAY_ID, CO2_ID)
+    second = async_get_or_create_co2(hass, entry.entry_id, GATEWAY_ID, CO2_ID)
+
+    assert first.id == second.id
+    assert second.manufacturer == "Orcon"
+    assert second.model == "MVS-15RH CO2B"
+    assert second.name == f"Orcon CO2 remote 15RF ({CO2_ID})"
+    assert second.via_device_id == gateway.id
+
+
+async def test_creating_a_fan_updates_a_device_an_entity_attached_first(
+    hass: HomeAssistant, device_registry: DeviceRegistry
+) -> None:
+    """An entity may have registered a bare device before setup creates it."""
+    entry = make_entry(hass)
+    gateway = async_get_or_create_gateway(hass, entry.entry_id, GATEWAY_ID)
+    bare = device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, FAN_ID)},
+    )
+
+    created = async_get_or_create_fan(hass, entry.entry_id, GATEWAY_ID, FAN_ID)
+
+    assert created.id == bare.id
+    assert created.model == "MVS-15"
+    assert created.via_device_id == gateway.id
 
 
 async def test_update_gateway_version(
