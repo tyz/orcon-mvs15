@@ -9,7 +9,7 @@ from homeassistant.core import callback, CoreState, HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .device import fan_device_info
+from .device import attached_device_info
 from .models import OrconMVS15Config, OrconMVS15ConfigEntry
 from .ramses_packet import RamsesPacketDatetime, RamsesID
 from .ramses_esp import RamsesESP
@@ -67,12 +67,7 @@ class OrconFan(CoordinatorEntity, FanEntity):
         self.discovery_key = discovery_key
         self.gateway_id = config.gateway_id
         self._attr_unique_id = f"orcon_mvs15_{self.fan_id}"
-        self._attr_device_info = fan_device_info(
-            hass,
-            coordinator.config_entry.entry_id,
-            self.gateway_id,
-            self.fan_id,
-        )
+        self._attr_device_info = attached_device_info(self.fan_id)
         self._attr_extra_state_attributes: dict[
             str, str | int | bool | RamsesPacketDatetime | None
         ] = {

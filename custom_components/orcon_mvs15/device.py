@@ -91,18 +91,54 @@ def attached_device_info(ramses_id: RamsesID) -> DeviceInfo:
     return DeviceInfo(identifiers={(DOMAIN, ramses_id)})
 
 
+def _async_get_or_create_device(
+    hass: HomeAssistant, config_entry_id: str, info: DeviceInfo
+) -> DeviceEntry:
+    """Create a device from its DeviceInfo, or update the existing one."""
+    return get_dev_reg(hass).async_get_or_create(
+        config_entry_id=config_entry_id,
+        identifiers=info["identifiers"],
+        manufacturer=info.get("manufacturer"),
+        model=info.get("model"),
+        name=info.get("name"),
+        via_device_id=info.get("via_device_id"),
+    )
+
+
 def async_get_or_create_gateway(
     hass: HomeAssistant, config_entry_id: str, gateway_id: RamsesID
 ) -> DeviceEntry:
     """Create the gateway device or return the existing one."""
-    dev_reg = get_dev_reg(hass)
-    info = gateway_device_info(gateway_id)
-    return dev_reg.async_get_or_create(
-        config_entry_id=config_entry_id,
-        identifiers=info["identifiers"],
-        manufacturer=info["manufacturer"],
-        model=info["model"],
-        name=info["name"],
+    return _async_get_or_create_device(
+        hass, config_entry_id, gateway_device_info(gateway_id)
+    )
+
+
+def async_get_or_create_fan(
+    hass: HomeAssistant,
+    config_entry_id: str,
+    gateway_id: RamsesID,
+    fan_id: RamsesID,
+) -> DeviceEntry:
+    """Create the fan device or return the existing one."""
+    return _async_get_or_create_device(
+        hass,
+        config_entry_id,
+        fan_device_info(hass, config_entry_id, gateway_id, fan_id),
+    )
+
+
+def async_get_or_create_co2(
+    hass: HomeAssistant,
+    config_entry_id: str,
+    gateway_id: RamsesID,
+    co2_id: RamsesID,
+) -> DeviceEntry:
+    """Create the CO2 remote device or return the existing one."""
+    return _async_get_or_create_device(
+        hass,
+        config_entry_id,
+        co2_device_info(hass, config_entry_id, gateway_id, co2_id),
     )
 
 

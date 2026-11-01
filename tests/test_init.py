@@ -17,6 +17,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.orcon_mvs15 import async_remove_config_entry_device
 from custom_components.orcon_mvs15.const import (
+    CONF_CO2_ID,
     CONF_FAN_ID,
     CONF_GATEWAY_ID,
     CONF_MQTT_TOPIC,
@@ -28,6 +29,7 @@ from custom_components.orcon_mvs15.ramses_packet import RamsesID
 
 REMOTE_ID = "29:163058"
 FAN_ID = "29:224547"
+CO2_ID = "29:111111"
 GATEWAY_ID = "18:149960"
 MQTT_TOPIC = "RAMSES/GATEWAY"
 
@@ -232,6 +234,89 @@ async def test_an_empty_discovered_fan_id_is_not_stored(
     )
 
     assert entry.data[CONF_FAN_ID] == FAN_ID
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_setup_creates_the_configured_devices(
+    hass: HomeAssistant, device_registry: DeviceRegistry
+) -> None:
+    """The fan and CO2 devices exist before any entity is added."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_FAN_ID: FAN_ID,
+            CONF_CO2_ID: CO2_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", FakeMQTT),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    gateway = device_registry.async_get_device_by_identifier(
+        (DOMAIN, GATEWAY_ID), entry.entry_id
+    )
+    fan = device_registry.async_get_device_by_identifier(
+        (DOMAIN, FAN_ID), entry.entry_id
+    )
+    co2 = device_registry.async_get_device_by_identifier(
+        (DOMAIN, CO2_ID), entry.entry_id
+    )
+
+    assert gateway is not None
+    assert fan is not None
+    assert fan.model == "MVS-15"
+    assert fan.via_device_id == gateway.id
+    assert co2 is not None
+    assert co2.model == "MVS-15RH CO2B"
+    assert co2.via_device_id == gateway.id
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_a_discovered_fan_creates_its_device(
+    hass: HomeAssistant, device_registry: DeviceRegistry
+) -> None:
+    """Discovery registers the device even when no entity is added yet."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", FakeMQTT),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    runtime = entry.runtime_data
+    runtime.fan_coordinator.async_set_updated_data(
+        {"discovered_fan_id": RamsesID(FAN_ID)}
+    )
+
+    fan = device_registry.async_get_device_by_identifier(
+        (DOMAIN, FAN_ID), entry.entry_id
+    )
+
+    assert entry.data[CONF_FAN_ID] == FAN_ID
+    assert fan is not None
+    assert fan.model == "MVS-15"
 
     assert await hass.config_entries.async_unload(entry.entry_id)
 

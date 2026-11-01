@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import logging
 
+from collections.abc import Callable
+
 from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceEntry
 
-from .device import async_get_or_create_gateway
+from .device import (
+    async_get_or_create_co2,
+    async_get_or_create_fan,
+    async_get_or_create_gateway,
+)
 from .models import (
     OrconMVS15ConfigEntry,
     OrconMVS15Config,
@@ -17,6 +23,7 @@ from .coordinator import OrconMVS15DataUpdateCoordinator
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
 from .handlers import DataHandlers
+from .ramses_packet import RamsesID
 from .const import (
     CONF_CO2_ID,
     CONF_FAN_ID,
@@ -35,6 +42,7 @@ async def _setup_coordinator(
     entry: OrconMVS15ConfigEntry,
     discover_key: str,
     config_key: str,
+    create_device: Callable[[RamsesID], None] | None = None,
 ) -> OrconMVS15DataUpdateCoordinator:
     coordinator = OrconMVS15DataUpdateCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
@@ -57,6 +65,8 @@ async def _setup_coordinator(
         _LOGGER.debug(f"Storing discovered {config_key} ({ramses_id}) in config")
         new_data = {**entry.data, config_key: ramses_id}
         hass.config_entries.async_update_entry(entry, data=new_data)
+        if create_device is not None and isinstance(ramses_id, str):
+            create_device(RamsesID(ramses_id))
         if unsub:
             unsub()
 
@@ -67,11 +77,17 @@ async def _setup_coordinator(
 async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -> bool:
     config = OrconMVS15Config.from_data(entry.data)
 
+    def _create_fan_device(fan_id: RamsesID) -> None:
+        async_get_or_create_fan(hass, entry.entry_id, config.gateway_id, fan_id)
+
+    def _create_co2_device(co2_id: RamsesID) -> None:
+        async_get_or_create_co2(hass, entry.entry_id, config.gateway_id, co2_id)
+
     fan_coordinator = await _setup_coordinator(
-        hass, entry, "discovered_fan_id", CONF_FAN_ID
+        hass, entry, "discovered_fan_id", CONF_FAN_ID, _create_fan_device
     )
     co2_coordinator = await _setup_coordinator(
-        hass, entry, "discovered_co2_id", CONF_CO2_ID
+        hass, entry, "discovered_co2_id", CONF_CO2_ID, _create_co2_device
     )
     rem_coordinator = await _setup_coordinator(
         hass, entry, "discovered_rem_id", CONF_REMOTE_ID
@@ -113,6 +129,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
 
     dev_reg = async_get_or_create_gateway(hass, entry.entry_id, config.gateway_id)
     _LOGGER.debug("Gateway device is %s", dev_reg.id)
+    if config.fan_id:
+        async_get_or_create_fan(hass, entry.entry_id, config.gateway_id, config.fan_id)
+    if config.co2_id:
+        async_get_or_create_co2(hass, entry.entry_id, config.gateway_id, config.co2_id)
 
     try:
         ramses_esp = RamsesESP(

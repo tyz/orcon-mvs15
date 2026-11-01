@@ -18,7 +18,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import OrconMVS15DataUpdateCoordinator
-from .device import attached_device_info, co2_device_info
+from .device import attached_device_info
 from .models import OrconMVS15Config, OrconMVS15ConfigEntry
 from .discover_entity import DiscoverEntity
 from .ramses_packet import RamsesPacketDatetime, RamsesID
@@ -97,12 +97,7 @@ class Co2Sensor(CoordinatorEntity, SensorEntity):
         self.discovery_key = discovery_key
         self._state = None
         self._attr_unique_id = f"orcon_mvs15_co2_{self.co2_id}"
-        self._attr_device_info = co2_device_info(
-            hass,
-            coordinator.config_entry.entry_id,
-            config.gateway_id,
-            self.co2_id,
-        )
+        self._attr_device_info = attached_device_info(self.co2_id)
         self._attr_extra_state_attributes: dict[
             str, str | int | bool | RamsesPacketDatetime | None
         ] = {
