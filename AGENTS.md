@@ -222,6 +222,11 @@ The rules in this file still apply, and a skill never overrides them.
   example `docs/agents-and-protocol` or `fix/gateway-discovery`.
 * New commits use Conventional Commits (`docs:`, `fix:`, `chore:`), one commit per
   logical change.
+* Write the message for someone reading the repository history, not the session.
+  Describe the change as it exists here: no other project names, review
+  conversations, intermediate attempts, or "replace X" for a file that is new.
+* Keep the subject imperative and within the Conventional Commit type; the body
+  states the problem and the approach, not the agent's process.
 * Open a pull request describing the problem and the approach. Do not merge your
   own pull request unless explicitly asked.
 * Do not push, tag, force-push or delete a remote branch without the user's
