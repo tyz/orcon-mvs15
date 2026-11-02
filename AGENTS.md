@@ -148,18 +148,23 @@ central device-info helper, the explicit code registry, translated entity names
 with honest availability, a reconfigure flow, diagnostics, the CI workflow, and
 a truthful `quality_scale.yaml` that meets Gold and Platinum.
 
+## Skills
+
+On-demand detail lives in `.agents/skills/`; load a skill when its task matches.
+The rules in this file still apply, and a skill never overrides them.
+
+* `testing` — test harness, fixtures, stubs, regression tests and the coverage
+  gate. Load it before writing or changing tests.
+* `release` — version bump, full gate, release PR, tag and GitHub release. Load
+  it when preparing or publishing a release.
+
 ## Testing
 
-* No device or MQTT broker is needed: the suite must mock MQTT and the session.
-* Home Assistant is mocked through `pytest-homeassistant-custom-component`, not
-  hand-written imports of Home Assistant internals.
-* Fixtures must be protocol-correct: real frame layout, real byte order, real
-  examples from `docs/protocol.md`. Do not invent values.
-* Stubs must mirror real behaviour, not smooth it over. A stub that hides an
-  `AttributeError` also hides the bug.
 * Every bug fix needs a test that fails against the previous code. Verify that it
   does before claiming the fix works.
 * Never weaken an assertion to make a test pass.
+* Load the `testing` skill before writing or changing tests; it covers the
+  harness, fixtures, stubs and the coverage gate.
 
 ## Platform and Protocol Gotchas
 
@@ -219,6 +224,7 @@ a truthful `quality_scale.yaml` that meets Gold and Platinum.
   own pull request unless explicitly asked.
 * Do not push, tag, force-push or delete a remote branch without the user's
   permission. A local commit is not permission to publish it.
+* Releases follow the `release` skill; it encodes the tag and permission gates.
 
 ## Documentation
 
