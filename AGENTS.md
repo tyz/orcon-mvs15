@@ -157,6 +157,8 @@ The rules in this file still apply, and a skill never overrides them.
   gate. Load it before writing or changing tests.
 * `release` — version bump, full gate, release PR, tag and GitHub release. Load
   it when preparing or publishing a release.
+* `ha-translations` — translation key sync, adding or removing keys, placeholders
+  and entity translation keys. Load it when a user-visible string changes.
 
 ## Testing
 
@@ -262,6 +264,8 @@ The rules in this file still apply, and a skill never overrides them.
   `translations/en.json` and `translations/nl.json` key-synced in the same change.
 * A removed key is removed from every file. Product names that are identical in a
   language are not untranslated; leave them.
+* Never overwrite an existing translated value. Add missing keys and translate
+  them; a key-sync check passes even when English text is copied into `nl.json`.
 
 ## Your Environment
 
