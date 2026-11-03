@@ -34,6 +34,20 @@
       "already_configured": "Dit MQTT-topic is al geconfigureerd."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Orcon MVS-15-opties",
+        "description": "Kies welke optionele diagnostiek de integratie moet inschakelen.",
+        "data": {
+          "packet_log": "Pakketten naar packet.log schrijven"
+        },
+        "data_description": {
+          "packet_log": "Sla elk ontvangen pakket op in packet.log in de configuratiemap van Home Assistant. Schakel dit uit als je niet aan het probleemoplossen bent; het bestand wordt na 10 MB vervangen."
+        }
+      }
+    }
+  },
   "exceptions": {
     "mqtt_setup_failed": {
       "message": "Kon de MQTT-verbinding niet starten: {error}"

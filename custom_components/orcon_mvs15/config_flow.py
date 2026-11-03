@@ -2,19 +2,33 @@ from __future__ import annotations
 
 from probatio import Required, Schema
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlowWithReload,
+)
+from homeassistant.core import callback
 
 from typing import Any
 
 from .const import (
     DOMAIN,
+    CONF_PACKET_LOG,
     CONF_REMOTE_ID,
     CONF_MQTT_TOPIC,
+    DEFAULT_PACKET_LOG,
 )
 
 
 class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OrconOptionsFlow:
+        """Return the options flow for the packet log."""
+        return OrconOptionsFlow()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -72,6 +86,30 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_MQTT_TOPIC,
                         default=entry.data.get(CONF_MQTT_TOPIC, "RAMSES/GATEWAY"),
                     ): str,
+                }
+            ),
+        )
+
+
+class OrconOptionsFlow(OptionsFlowWithReload):
+    """Options that do not belong in the connection setup."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=Schema(
+                {
+                    Required(
+                        CONF_PACKET_LOG,
+                        default=self.config_entry.options.get(
+                            CONF_PACKET_LOG, DEFAULT_PACKET_LOG
+                        ),
+                    ): bool,
                 }
             ),
         )

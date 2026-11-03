@@ -59,6 +59,7 @@ class RamsesESP:
         co2_id: RamsesID,
         gateway_id: RamsesID,
         config_entry_id: str,
+        packet_log: bool = False,
     ) -> None:
         self.hass = hass
         self.mqtt = mqtt
@@ -67,6 +68,7 @@ class RamsesESP:
         self.co2_id = co2_id
         self.gateway_id = gateway_id
         self.config_entry_id = config_entry_id
+        self.packet_log_enabled = packet_log
         self._handlers: dict[str, Callable[[Code], None]] = {}
         self._send_queue = RamsesPacketQueue()
         self._log_f: TextIO | None = None
@@ -258,7 +260,8 @@ class RamsesESP:
         try:
             envelope = json.loads(msg.payload)
             await self._handle_ramses_packet(envelope)
-            await self.packet_log(envelope)
+            if self.packet_log_enabled:
+                await self.packet_log(envelope)
         except Exception:
             _LOGGER.error(
                 f"Failed to process Ramses-ESP MQTT message {msg.payload!r}",

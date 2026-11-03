@@ -45,6 +45,7 @@ def make_session(
     *,
     fan_id: str = FAN_ID,
     co2_id: str = "",
+    packet_log: bool = False,
 ) -> RamsesESP:
     """Build a session without an MQTT connection."""
     return RamsesESP(
@@ -55,6 +56,7 @@ def make_session(
         co2_id=RamsesID(co2_id),
         gateway_id=RamsesID(GATEWAY_ID),
         config_entry_id=config_entry_id,
+        packet_log=packet_log,
     )
 
 
@@ -359,7 +361,7 @@ async def test_handle_ramses_mqtt_message_processes_and_logs_the_packet(
     hass: HomeAssistant,
 ) -> None:
     """A valid envelope is parsed and appended to the packet log."""
-    session = make_session(hass)
+    session = make_session(hass, packet_log=True)
     session._handle_ramses_packet = AsyncMock()
     session.packet_log = AsyncMock()
     envelope = {
@@ -379,6 +381,30 @@ async def test_handle_ramses_mqtt_message_processes_and_logs_the_packet(
 
     session._handle_ramses_packet.assert_awaited_once_with(envelope)
     session.packet_log.assert_awaited_once_with(envelope)
+
+
+async def test_packet_log_is_off_by_default(hass: HomeAssistant) -> None:
+    """A fresh entry does not write the debugging log."""
+    session = make_session(hass)
+    session._handle_ramses_packet = AsyncMock()
+    session.packet_log = AsyncMock()
+    envelope = {
+        "ts": TIMESTAMP,
+        "msg": f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 000004",
+    }
+    msg = ReceiveMessage(
+        topic=f"{MQTT_TOPIC}/{GATEWAY_ID}/rx",
+        payload=json.dumps(envelope).encode(),
+        qos=0,
+        retain=False,
+        subscribed_topic=f"{MQTT_TOPIC}/{GATEWAY_ID}/rx",
+        timestamp=0.0,
+    )
+
+    await session.handle_ramses_mqtt_message(msg)
+
+    session._handle_ramses_packet.assert_awaited_once_with(envelope)
+    session.packet_log.assert_not_awaited()
 
 
 async def test_remove_handler_stops_dispatching(hass: HomeAssistant) -> None:

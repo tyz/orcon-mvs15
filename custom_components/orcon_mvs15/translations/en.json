@@ -34,6 +34,20 @@
       "already_configured": "This MQTT topic is already configured."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Orcon MVS-15 options",
+        "description": "Choose which optional diagnostics the integration should enable.",
+        "data": {
+          "packet_log": "Write packets to packet.log"
+        },
+        "data_description": {
+          "packet_log": "Save every received packet to packet.log in the Home Assistant configuration directory. Disable this when you are not troubleshooting; the file rolls over at 10 MB."
+        }
+      }
+    }
+  },
   "exceptions": {
     "mqtt_setup_failed": {
       "message": "Could not start the MQTT transport: {error}"

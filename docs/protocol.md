@@ -363,5 +363,6 @@ This is a manual debugging path, not part of the integration’s normal transpor
   the source.
 * The timed-mode countdown is maintained by the integration; the fan's next
   `31D9` state remains the source of truth for the preset.
-* Packet logging is always enabled and writes to `/config/packet.log`.
+* Packet logging is off by default and writes to `/config/packet.log` when
+  enabled in the options flow.
 * The `FFFFFF` device ID conversion is unverified.

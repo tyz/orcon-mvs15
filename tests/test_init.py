@@ -24,6 +24,7 @@ from custom_components.orcon_mvs15.const import (
     CONF_FAN_ID,
     CONF_GATEWAY_ID,
     CONF_MQTT_TOPIC,
+    CONF_PACKET_LOG,
     CONF_REMOTE_ID,
     DOMAIN,
 )
@@ -142,6 +143,7 @@ async def test_setup_builds_the_runtime_data_and_unloads(
     assert runtime.config.gateway_id == GATEWAY_ID
     assert runtime.ramses_esp.kwargs["fan_id"] == RamsesID(FAN_ID)
     assert runtime.ramses_esp.kwargs["config_entry_id"] == entry.entry_id
+    assert runtime.ramses_esp.kwargs["packet_log"] is False
     assert set(runtime.ramses_esp.handlers) == {
         "042F",
         "10E0",
@@ -177,6 +179,34 @@ async def test_setup_builds_the_runtime_data_and_unloads(
 
     assert entry.state is ConfigEntryState.NOT_LOADED
     assert runtime.ramses_esp.cleaned
+
+
+async def test_setup_passes_the_packet_log_option_to_the_session(
+    hass: HomeAssistant,
+) -> None:
+    """Enabling the option turns the debugging log on for the session."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_FAN_ID: FAN_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        },
+        options={CONF_PACKET_LOG: True},
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.orcon_mvs15.MQTT", FakeMQTT),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.runtime_data.ramses_esp.kwargs["packet_log"] is True
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 async def test_setup_stores_a_discovered_fan_id(hass: HomeAssistant) -> None:
