@@ -59,6 +59,7 @@ class RamsesESP:
         co2_id: RamsesID,
         gateway_id: RamsesID,
         config_entry_id: str,
+        packet_log: bool = False,
     ) -> None:
         self.hass = hass
         self.mqtt = mqtt
@@ -67,6 +68,7 @@ class RamsesESP:
         self.co2_id = co2_id
         self.gateway_id = gateway_id
         self.config_entry_id = config_entry_id
+        self.packet_log_enabled = packet_log
         self._handlers: dict[str, Callable[[Code], None]] = {}
         self._send_queue = RamsesPacketQueue()
         self._log_f: TextIO | None = None
@@ -258,7 +260,8 @@ class RamsesESP:
         try:
             envelope = json.loads(msg.payload)
             await self._handle_ramses_packet(envelope)
-            await self.packet_log(envelope)
+            if self.packet_log_enabled:
+                await self.packet_log(envelope)
         except Exception:
             _LOGGER.error(
                 f"Failed to process Ramses-ESP MQTT message {msg.payload!r}",
@@ -383,10 +386,14 @@ class RamsesESP:
         )
         if self.fan_id and fan_responded:
             self._fan_responded()
-        if (
-            packet.signal_strength == 0 and packet.code != "042F"
-        ):  # 042F is for testing only, when I publish it myself (ss == 0)
-            """Don't call handler function on something we send ourselves (TODO: needed w/ timed fan with 22F3)"""
+        # 042F is for testing only, when I publish it myself (ss == 0).
+        if packet.signal_strength == 0 and packet.code not in {"042F", "22F1", "22F3"}:
+            """Ignore the gateway echo of our own requests.
+
+            22F1 and 22F3 are the exception: their echo is the only proof that
+            a locally sent mode command reached the stick, and a timed preset
+            needs it to start its countdown.
+            """
             return
         if (q_packet := self._send_queue.get(packet)) is not None:
             self._send_queue.remove(q_packet)

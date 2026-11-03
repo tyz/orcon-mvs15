@@ -17,6 +17,8 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
 ## Features
 
 - Creates a fan entity with all supported presets (Away, Auto, Low, Medium, High + High 15/30/60m timed modes)
+- Exposes the end and the remaining minutes of a timed preset while it runs
+- Optional packet log for debugging, disabled by default
 - Auto-detects the fan
 - Auto-detects the wired `CO2 ruimtesensor 15RF` and creates an HA sensor
 - Auto-detects the fan's humidity sensor and creates an HA sensor
@@ -61,7 +63,8 @@ The setup form asks for two values:
 ## Fan ID
 
 If you don't know the ID of the 15RF wireless remote then use a fake ID (e.g. `29:123456`).
-Tail the `packet.log` file in the Home Assistant config directory, and press the
+Enable the packet log first (see [Options](#options)), then tail the
+`packet.log` file in the Home Assistant config directory, and press the
 `auto` button on the remote a couple of times. The resulting log entries should
 look something like this:
 
@@ -84,6 +87,22 @@ The remote's ID in this example is `29:123456`.
 If the remote ID or MQTT topic prefix is wrong, open the integration's menu in
 `Settings > Devices & services` and choose **Reconfigure**. The other discovered
 IDs are kept and the entry reloads after the change.
+
+## Options
+
+Open the integration's menu in `Settings > Devices & services` and choose
+**Configure** to change the optional diagnostics. **Write packets to
+packet.log** is off by default. When enabled, every received packet is appended
+to `/config/packet.log`, which rolls over at 10 MB. Use it to find the remote ID
+or to troubleshoot, then turn it off again.
+
+## Timed modes
+
+The `high_15m`, `high_30m` and `high_60m` presets start a countdown in the
+integration. While it runs, the fan entity exposes `timer_end` (an ISO 8601
+timestamp) and `timer_remaining` (the number of whole minutes left). Any new
+mode command, from Home Assistant or the remote, replaces the previous
+countdown. The preset itself still follows the next state the fan reports.
 
 ## Lovelace
 
@@ -158,10 +177,7 @@ automation:
           preset_mode: auto
 ```
 
-Replace the entity IDs with the ones in your installation. The timed presets
-(`high_15m`, `high_30m` and `high_60m`) are sent to the fan, but the integration
-does not track when the timer ends; the preset follows the next state the fan
-reports.
+Replace the entity IDs with the ones in your installation.
 
 ## Data updates
 
@@ -179,14 +195,14 @@ stays silent.
 
 - A working 15RF wireless remote is required to send commands. Pairing a fake remote is
   not implemented yet.
-- Timed high modes (`22F3`) are sent, but the integration does not track when
-  the timer ends; the preset follows the next state the fan reports.
+- The timed-mode countdown is maintained by the integration; the fan's next
+  reported state remains the source of truth for the preset.
 - A `042F` power-up message is accepted from any source. A neighbouring Orcon
   unit that powers up while this fan is still being discovered could be
   adopted as this fan.
 - Only MQTT transport is supported; USB is on the TODO list.
-- The integration writes `/config/packet.log` (rolled over at 10 MB) as a
-  debugging aid. It is not a stable interface.
+- The optional `/config/packet.log` (rolled over at 10 MB) is a debugging aid.
+  It is not a stable interface.
 
 ## Remove
 
@@ -194,8 +210,8 @@ stays silent.
    **Delete**.
 2. If you installed it through HACS, remove the custom repository there as
    well.
-3. The integration does not create configuration files. You can delete
-   `/config/packet.log` if you no longer need the packet log.
+3. The integration does not create configuration files. If you enabled the
+   packet log, you can delete `/config/packet.log` if you no longer need it.
 
 ## Protocol
 

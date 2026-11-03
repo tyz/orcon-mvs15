@@ -180,7 +180,8 @@ The rules in this file still apply, and a skill never overrides them.
 * `31D9` and `12A0` use `src_id` as the fan/humidity device ID. `042F` uses
   `ann_id`.
 * `22F1` carries 3-byte fan modes. Timed modes use `22F3` with 7 bytes. The
-  integration does not track when a timed mode ends.
+  integration starts a countdown for a timed preset and exposes `timer_end` and
+  `timer_remaining`; any new `22F1`/`22F3` command resets it.
 * `12A0` is not announced; it must be polled. The session starts the 5-minute
   poll as soon as the fan ID is known, so a lost first response does not stop
   later polls.
@@ -189,8 +190,9 @@ The rules in this file still apply, and a skill never overrides them.
 * Expected-response matching is by type, code, source and destination. A packet
   must be in the retry queue **before** it is published; otherwise a fast
   response can be missed by the queue.
-* Packet logging currently writes to `/config/packet.log`, rolls over at 10 MB and
-  is always on. It is a debugging aid, not a stable interface.
+* Packet logging is off by default and writes to `/config/packet.log` when the
+  options flow enables it. It rolls over at 10 MB and is a debugging aid, not a
+  stable interface.
 * `10E0` device info is broadcast every 24 hours and is requestable; `31D9` fan
   state is broadcast every 5 minutes; `31E0` vent demand every 5 minutes.
 

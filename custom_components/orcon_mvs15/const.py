@@ -6,3 +6,5 @@ CONF_REMOTE_ID: str = "remote_id"
 CONF_FAN_ID: str = "fan_id"
 CONF_CO2_ID: str = "co2_id"
 CONF_MQTT_TOPIC: str = "mqtt_topic"
+CONF_PACKET_LOG: str = "packet_log"
+DEFAULT_PACKET_LOG: bool = False

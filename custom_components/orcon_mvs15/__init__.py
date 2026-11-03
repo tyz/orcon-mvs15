@@ -28,7 +28,9 @@ from .const import (
     CONF_CO2_ID,
     CONF_FAN_ID,
     CONF_GATEWAY_ID,
+    CONF_PACKET_LOG,
     CONF_REMOTE_ID,
+    DEFAULT_PACKET_LOG,
     DOMAIN,
 )
 
@@ -143,6 +145,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
             fan_id=config.fan_id,
             co2_id=config.co2_id,
             config_entry_id=entry.entry_id,
+            packet_log=entry.options.get(CONF_PACKET_LOG, DEFAULT_PACKET_LOG),
         )
     except ConfigEntryNotReady:
         raise

@@ -63,6 +63,7 @@ def make_handlers(hass: HomeAssistant) -> tuple[MockConfigEntry, DataHandlers]:
     entry.runtime_data = SimpleNamespace(
         co2_coordinator=SimpleNamespace(data={}),
         fan_coordinator=SimpleNamespace(data={}),
+        cleanup=[],
     )
     return entry, DataHandlers(hass, entry)
 
@@ -304,8 +305,10 @@ async def test_the_recorded_power_up_ignores_the_neighbour(hass: HomeAssistant) 
     assert session.fan_id == FAN_ID
 
 
-async def test_the_recorded_command_echo_is_ignored(hass: HomeAssistant) -> None:
-    """The gateway echoes our own command with signal strength 000."""
+async def test_the_recorded_command_echo_reaches_the_handler(
+    hass: HomeAssistant,
+) -> None:
+    """The gateway echo of our own command drives the timed-mode countdown."""
     session = make_session(hass)
     handler = Mock()
     session.add_handler("22F1", handler)
@@ -322,8 +325,25 @@ async def test_the_recorded_command_echo_is_ignored(hass: HomeAssistant) -> None
     )
 
     await session._handle_ramses_packet(envelope(echo))
-    handler.assert_not_called()
+    handler.assert_called_once()
 
     await session._handle_ramses_packet(envelope(press))
-    handler.assert_called_once()
+    assert handler.call_count == 2
     assert handler.call_args.args[0].values["fan_mode"] == "auto"
+
+
+async def test_the_recorded_request_echo_is_ignored(hass: HomeAssistant) -> None:
+    """The gateway echoes our status requests too, without dispatching them."""
+    session = make_session(hass)
+    handler = Mock()
+    session.add_handler("31D9", handler)
+
+    echo = next(
+        frame
+        for frame in frames("fan_state.log")
+        if frame.startswith("000 ") and " 31D9 " in frame
+    )
+
+    await session._handle_ramses_packet(envelope(echo))
+
+    handler.assert_not_called()

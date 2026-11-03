@@ -22,8 +22,8 @@ rules:
   config-flow-test-coverage:
     status: done
     comment: |
-      The user, discovery-info and reconfigure steps are covered, including
-      the duplicate-topic abort.
+      The user, discovery-info, reconfigure and options steps are covered,
+      including the duplicate-topic abort.
   dependency-transparency:
     status: done
     comment: |
@@ -70,10 +70,11 @@ rules:
       transport and validation failures into HomeAssistantError.
   config-entry-unloading: done
   docs-configuration-parameters:
-    status: exempt
+    status: done
     comment: |
-      There is no options flow. The setup parameters are changed through the
-      documented reconfigure flow.
+      README.md documents the remote ID, MQTT topic and the packet-log
+      option. The connection settings use the reconfigure flow; the packet
+      log uses the options flow.
   docs-installation-parameters: done
   entity-unavailable:
     status: done

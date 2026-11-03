@@ -145,6 +145,8 @@ class Code22f1(Code):
         "away": "000004",
     }
 
+    _timed_modes = {"high_15m": 15, "high_30m": 30, "high_60m": 60}
+
     def _expected_length(self, length: int) -> bool:
         return length in [1, 3]
 
@@ -153,11 +155,17 @@ class Code22f1(Code):
             "_label": "Fan mode",
             "signal_strength": -self.packet.signal_strength,
             "fan_mode": None,
+            "timer_minutes": None,
         }
         if self.packet.length != 1:
             for k, v in self._fan_modes.items():
                 if v == self.packet.data:
-                    self.values.update({"fan_mode": k})
+                    self.values.update(
+                        {
+                            "fan_mode": k,
+                            "timer_minutes": self._timed_modes.get(k),
+                        }
+                    )
                     return
             _LOGGER.debug(f"Unknown preset for 22F1/22F3: {self.packet.data}")
 

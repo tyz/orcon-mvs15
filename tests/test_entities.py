@@ -192,6 +192,22 @@ async def test_fan_update_tracks_the_mode_and_fault(hass: HomeAssistant) -> None
     entity.async_write_ha_state.assert_called_once_with()
 
 
+async def test_fan_update_tracks_a_timed_mode(hass: HomeAssistant) -> None:
+    """The fan exposes when a timed mode ends and how long is left."""
+    entity = make_fan(hass)
+    entity.async_write_ha_state = Mock()
+    entity.coordinator.data = {
+        "fan_timer_end": "2026-11-03T19:15:00+00:00",
+        "fan_timer_remaining": 14,
+    }
+
+    entity._handle_coordinator_update()
+
+    assert entity.extra_state_attributes["timer_end"] == "2026-11-03T19:15:00+00:00"
+    assert entity.extra_state_attributes["timer_remaining"] == 14
+    entity.async_write_ha_state.assert_called_once_with()
+
+
 def make_co2_sensor(hass: HomeAssistant, ramses_esp: Mock | None = None) -> Co2Sensor:
     """Build a CO2 sensor without adding it to a platform."""
     return Co2Sensor(

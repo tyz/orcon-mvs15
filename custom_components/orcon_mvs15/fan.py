@@ -72,6 +72,8 @@ class OrconFan(CoordinatorEntity, FanEntity):
             str, str | int | bool | RamsesPacketDatetime | None
         ] = {
             "fan_fault": None,
+            "timer_end": None,
+            "timer_remaining": None,
         }
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
@@ -96,5 +98,18 @@ class OrconFan(CoordinatorEntity, FanEntity):
             self._attr_extra_state_attributes["fan_fault"] = self.coordinator.data[
                 "fan_fault"
             ]
-        if "fan_mode" in self.coordinator.data or "fan_fault" in self.coordinator.data:
+        if "fan_timer_end" in self.coordinator.data:
+            self._attr_extra_state_attributes["timer_end"] = self.coordinator.data[
+                "fan_timer_end"
+            ]
+        if "fan_timer_remaining" in self.coordinator.data:
+            self._attr_extra_state_attributes["timer_remaining"] = (
+                self.coordinator.data["fan_timer_remaining"]
+            )
+        if (
+            "fan_mode" in self.coordinator.data
+            or "fan_fault" in self.coordinator.data
+            or "fan_timer_end" in self.coordinator.data
+            or "fan_timer_remaining" in self.coordinator.data
+        ):
             self.async_write_ha_state()

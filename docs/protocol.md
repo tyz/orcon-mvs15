@@ -250,8 +250,10 @@ when the payload length is 7.
 * Length: 7 bytes.
 * Same mode names as `22F1`; the timer duration is encoded in the payload
   (`0F` = 15, `1E` = 30, `3C` = 60).
-* The integration does not track when the timer expires; the fan’s later `31D9`
-  state is the source of truth.
+* The integration starts a countdown from a `22F1` or `22F3` command and exposes
+  it as the fan's `timer_end` and `timer_remaining` attributes. Any new
+  `22F1`/`22F3` command resets the countdown. The fan’s later `31D9` state
+  remains the source of truth for the preset.
 
 ### `31D9` — fan state
 
@@ -359,6 +361,8 @@ This is a manual debugging path, not part of the integration’s normal transpor
 * No ownership check for `042F` discovery.
 * No pairing/binding flow (`1FC9`) yet; commands use the configured remote ID as
   the source.
-* Timed fan modes (`22F3`) are not tracked to completion.
-* Packet logging is always enabled and writes to `/config/packet.log`.
+* The timed-mode countdown is maintained by the integration; the fan's next
+  `31D9` state remains the source of truth for the preset.
+* Packet logging is off by default and writes to `/config/packet.log` when
+  enabled in the options flow.
 * The `FFFFFF` device ID conversion is unverified.
