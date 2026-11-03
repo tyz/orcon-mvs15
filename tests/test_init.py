@@ -147,6 +147,8 @@ async def test_setup_builds_the_runtime_data_and_unloads(
         "10E0",
         "1298",
         "12A0",
+        "22F1",
+        "22F3",
         "31D9",
         "31E0",
     }

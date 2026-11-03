@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import logging
+import math
 
-from homeassistant.core import HomeAssistant
+from collections.abc import Callable
+from datetime import datetime, timedelta
 
-from typing import Callable
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
+from homeassistant.util import dt as dt_util
 
 from .codes import Code
 from .device import update_device_info
 from .models import OrconMVS15ConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
+
+FAN_TIMER_UPDATE_INTERVAL = timedelta(minutes=1)
 
 
 class HandlerException(Exception):
@@ -23,14 +29,80 @@ class DataHandlers:
         self.config_entry = entry
         self.co2_coordinator = entry.runtime_data.co2_coordinator
         self.fan_coordinator = entry.runtime_data.fan_coordinator
+        self._fan_timer_end: datetime | None = None
+        self._fan_timer_unsub: Callable[[], None] | None = None
+        self._fan_timer_tick_unsub: Callable[[], None] | None = None
         self.pointers: dict[str, Callable[[Code], None]] = {
             "042F": self._powerup_handler,
             "10E0": self._device_info_handler,
             "1298": self._co2_handler,
             "12A0": self._relative_humidity_handler,
+            "22F1": self._fan_command_handler,
+            "22F3": self._fan_command_handler,
             "31D9": self._fan_state_handler,
             "31E0": self._vent_demand_handler,
         }
+        entry.runtime_data.cleanup.append(self.cleanup)
+
+    def _fan_command_handler(self, payload: Code) -> None:
+        """Start or clear the countdown for a fan command."""
+        if payload.packet.length == 1:
+            return  # A request carries no mode and must not touch the timer.
+        minutes = payload.values.get("timer_minutes")
+        self._set_fan_timer(minutes if isinstance(minutes, int) else None)
+
+    def _set_fan_timer(self, minutes: int | None) -> None:
+        """Replace the running countdown with one for minutes, or clear it."""
+        self._cancel_fan_timer()
+        if minutes is None:
+            self._fan_timer_end = None
+            self._publish_fan_timer(None, None)
+            return
+        self._fan_timer_end = dt_util.utcnow() + timedelta(minutes=minutes)
+        self._fan_timer_unsub = async_call_later(
+            self.hass, timedelta(minutes=minutes), self._fan_timer_expired
+        )
+        self._fan_timer_tick_unsub = async_track_time_interval(
+            self.hass, self._fan_timer_tick, FAN_TIMER_UPDATE_INTERVAL
+        )
+        self._publish_fan_timer(self._fan_timer_end, minutes)
+
+    def _cancel_fan_timer(self) -> None:
+        if self._fan_timer_unsub is not None:
+            self._fan_timer_unsub()
+            self._fan_timer_unsub = None
+        if self._fan_timer_tick_unsub is not None:
+            self._fan_timer_tick_unsub()
+            self._fan_timer_tick_unsub = None
+
+    def cleanup(self) -> None:
+        """Stop the countdown when the entry unloads."""
+        self._cancel_fan_timer()
+        self._fan_timer_end = None
+
+    @callback
+    def _fan_timer_tick(self, now: datetime) -> None:
+        """Publish the remaining whole minutes while the timer runs."""
+        if self._fan_timer_end is None:
+            return
+        remaining = max(0, math.ceil((self._fan_timer_end - now).total_seconds() / 60))
+        if self.fan_coordinator.data.get("fan_timer_remaining") != remaining:
+            self._publish_fan_timer(self._fan_timer_end, remaining)
+
+    @callback
+    def _fan_timer_expired(self, _now: datetime) -> None:
+        self._cancel_fan_timer()
+        self._fan_timer_end = None
+        self._publish_fan_timer(None, None)
+
+    def _publish_fan_timer(self, end: datetime | None, remaining: int | None) -> None:
+        self.fan_coordinator.async_set_updated_data(
+            {
+                **self.fan_coordinator.data,
+                "fan_timer_end": end.isoformat() if end is not None else None,
+                "fan_timer_remaining": remaining,
+            }
+        )
 
     def _powerup_handler(self, payload: Code) -> None:
         """Fan powerup payload, we use it for fan discovery.

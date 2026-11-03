@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -40,6 +41,7 @@ def make_entry_handlers(
     entry.runtime_data = SimpleNamespace(
         co2_coordinator=SimpleNamespace(data={}),
         fan_coordinator=SimpleNamespace(data={}),
+        cleanup=[],
     )
     return entry, DataHandlers(hass, entry)
 
@@ -173,6 +175,7 @@ def make_recording_handlers(hass: HomeAssistant) -> DataHandlers:
         runtime_data=SimpleNamespace(
             co2_coordinator=RecordingCoordinator(),
             fan_coordinator=RecordingCoordinator(),
+            cleanup=[],
         )
     )
     return DataHandlers(hass, entry)
@@ -282,3 +285,73 @@ def test_vent_demand_handler_stores_percentage_and_signal(
         "co2_signal_strength": -45,
         "discovered_co2_id": FAN_ID,
     }
+
+
+def make_fan_command(
+    preset: str | None, minutes: int | None, length: int = 3
+) -> SimpleNamespace:
+    """Build the decoded values of a 22F1 or 22F3 command."""
+    return SimpleNamespace(
+        values={"fan_mode": preset, "timer_minutes": minutes},
+        packet=SimpleNamespace(length=length),
+    )
+
+
+def test_fan_command_starts_a_countdown(hass: HomeAssistant) -> None:
+    """A timed preset publishes when it ends and how long is left."""
+    handlers = make_recording_handlers(hass)
+
+    handlers._fan_command_handler(make_fan_command("high_15m", 15))
+
+    assert handlers.fan_coordinator.data["fan_timer_remaining"] == 15
+    end = handlers.fan_coordinator.data["fan_timer_end"]
+    assert isinstance(end, str)
+    assert datetime.fromisoformat(end) > datetime.now().astimezone()
+    assert handlers._fan_timer_unsub is not None
+    assert handlers._fan_timer_tick_unsub is not None
+    handlers.cleanup()
+
+
+def test_a_new_fan_command_resets_the_countdown(hass: HomeAssistant) -> None:
+    """Every 22F1/22F3 replaces the previous timer, including a plain mode."""
+    handlers = make_recording_handlers(hass)
+    handlers._fan_command_handler(make_fan_command("high_15m", 15))
+    first_end = handlers.fan_coordinator.data["fan_timer_end"]
+
+    handlers._fan_command_handler(make_fan_command("high_60m", 60))
+
+    assert handlers.fan_coordinator.data["fan_timer_remaining"] == 60
+    assert handlers.fan_coordinator.data["fan_timer_end"] != first_end
+
+    handlers._fan_command_handler(make_fan_command("low", None))
+
+    assert handlers.fan_coordinator.data["fan_timer_end"] is None
+    assert handlers.fan_coordinator.data["fan_timer_remaining"] is None
+
+
+def test_fan_timer_counts_down_and_expires(hass: HomeAssistant) -> None:
+    """The remaining minutes update while the timed mode runs, then clear."""
+    handlers = make_recording_handlers(hass)
+    handlers._fan_command_handler(make_fan_command("high_15m", 15))
+    end = datetime.fromisoformat(handlers.fan_coordinator.data["fan_timer_end"])
+
+    handlers._fan_timer_tick(end - timedelta(minutes=5))
+
+    assert handlers.fan_coordinator.data["fan_timer_remaining"] == 5
+
+    handlers._fan_timer_expired(end)
+
+    assert handlers.fan_coordinator.data["fan_timer_end"] is None
+    assert handlers.fan_coordinator.data["fan_timer_remaining"] is None
+    handlers.cleanup()
+
+
+def test_a_fan_request_echo_keeps_the_countdown(hass: HomeAssistant) -> None:
+    """A 1-byte 22F1/22F3 request carries no mode and leaves the timer alone."""
+    handlers = make_recording_handlers(hass)
+    handlers._fan_command_handler(make_fan_command("high_15m", 15))
+
+    handlers._fan_command_handler(make_fan_command(None, None, length=1))
+
+    assert handlers.fan_coordinator.data["fan_timer_remaining"] == 15
+    handlers.cleanup()

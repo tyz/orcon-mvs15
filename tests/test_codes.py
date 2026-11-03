@@ -192,6 +192,14 @@ def test_timed_fan_mode_decodes_preset() -> None:
     )
 
     assert Code22f3(packet).values["fan_mode"] == "high_15m"
+    assert Code22f3(packet).values["timer_minutes"] == 15
+
+
+def test_plain_fan_mode_has_no_timer() -> None:
+    """A plain 22F1 command clears any timed-mode countdown."""
+    packet = received("081  I --- 29:123456 29:654321 --:------ 22F1 003 000104")
+
+    assert Code22f1(packet).values["timer_minutes"] is None
 
 
 def test_timed_fan_mode_is_not_requestable() -> None:

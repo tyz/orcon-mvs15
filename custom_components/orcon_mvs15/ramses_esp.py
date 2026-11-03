@@ -383,10 +383,14 @@ class RamsesESP:
         )
         if self.fan_id and fan_responded:
             self._fan_responded()
-        if (
-            packet.signal_strength == 0 and packet.code != "042F"
-        ):  # 042F is for testing only, when I publish it myself (ss == 0)
-            """Don't call handler function on something we send ourselves (TODO: needed w/ timed fan with 22F3)"""
+        # 042F is for testing only, when I publish it myself (ss == 0).
+        if packet.signal_strength == 0 and packet.code not in {"042F", "22F1", "22F3"}:
+            """Ignore the gateway echo of our own requests.
+
+            22F1 and 22F3 are the exception: their echo is the only proof that
+            a locally sent mode command reached the stick, and a timed preset
+            needs it to start its countdown.
+            """
             return
         if (q_packet := self._send_queue.get(packet)) is not None:
             self._send_queue.remove(q_packet)
