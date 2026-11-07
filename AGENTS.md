@@ -159,6 +159,9 @@ The rules in this file still apply, and a skill never overrides them.
   it when preparing or publishing a release.
 * `ha-translations` — translation key sync, adding or removing keys, placeholders
   and entity translation keys. Load it when a user-visible string changes.
+* `context7` — library documentation lookup and Context7 admin work (teamspaces,
+  libraries, Docs7 and Ask sites). Load it before a library API question or any
+  Context7 admin operation.
 
 ## Testing
 
@@ -276,7 +279,7 @@ The rules in this file still apply, and a skill never overrides them.
 
 ## Your Environment
 
-* Linux, Python 3.14.6. You run in an OCI container; only `/project` and
+* Linux, Python 3.14. You run in an OCI container; only `/project` and
   `/project/.opencode` survive a restart. Use `/tmp/opencode` for scratch files.
 * Home Assistant is not preinstalled. Install the approved test pin before
   meaningful type checking or tests, and install it into the persistent user
