@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 
@@ -13,7 +12,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from homeassistant.components.mqtt import ReceiveMessage
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceRegistry
@@ -27,7 +25,11 @@ from custom_components.orcon_mvs15.const import (
     CONF_REMOTE_ID,
     DOMAIN,
 )
-from custom_components.orcon_mvs15.mqtt import MQTTException
+from custom_components.orcon_mvs15.ramses.transport import (
+    TransportError,
+    TransportNotReady,
+)
+from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
 from custom_components.orcon_mvs15.ramses_esp import RamsesESP
 from custom_components.orcon_mvs15.ramses.protocol import RamsesID, RamsesPacket
 
@@ -50,7 +52,7 @@ def make_session(
     """Build a session without an MQTT connection."""
     return RamsesESP(
         hass=hass,
-        mqtt=Mock(),
+        transport=LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID)),
         remote_id=RamsesID(REMOTE_ID),
         fan_id=RamsesID(fan_id),
         co2_id=RamsesID(co2_id),
@@ -60,15 +62,15 @@ def make_session(
     )
 
 
-class RecordingMQTT:
-    """Record whether a packet was already queued when it was published."""
+class RecordingTransport:
+    """Record whether a packet was already queued when it was sent."""
 
     def __init__(self, session: RamsesESP) -> None:
         self.session = session
         self.published: list[RamsesPacket] = []
         self.queued_at_publish: list[bool] = []
 
-    async def publish(self, packet: RamsesPacket) -> None:
+    async def send(self, packet: RamsesPacket) -> None:
         self.queued_at_publish.append(packet in self.session._send_queue)
         self.published.append(packet)
 
@@ -87,16 +89,8 @@ async def test_version_message_updates_the_gateway_device(
         identifiers={(DOMAIN, GATEWAY_ID)},
     )
     session = make_session(hass, entry.entry_id)
-    msg = ReceiveMessage(
-        topic=f"{MQTT_TOPIC}/{GATEWAY_ID}/info/version",
-        payload=b"2026.10.1",
-        qos=0,
-        retain=False,
-        subscribed_topic=f"{MQTT_TOPIC}/{GATEWAY_ID}/info/version",
-        timestamp=0.0,
-    )
 
-    await session.handle_ramses_mqtt_version_message(msg)
+    session._handle_version("2026.10.1")
 
     updated = device_registry.async_get(device.id)
     assert updated is not None
@@ -112,8 +106,8 @@ async def test_packet_is_queued_before_it_is_published(
         ramses_esp_module, "async_call_later", Mock(return_value=cancel_retry)
     )
     session = make_session(hass)
-    mqtt = RecordingMQTT(session)
-    session.mqtt = mqtt  # pytest stub, duck typed on purpose
+    mqtt = RecordingTransport(session)
+    session.transport = mqtt  # pytest stub, duck typed on purpose
     packet = Code12a0.get(RamsesID(GATEWAY_ID), RamsesID(FAN_ID))
 
     await session.publish(packet)
@@ -137,8 +131,8 @@ async def test_retry_callback_accepts_the_scheduled_time(
         lambda hass_, delay, action: scheduled.append(action),
     )
     session = make_session(hass)
-    mqtt = RecordingMQTT(session)
-    session.mqtt = mqtt  # pytest stub, duck typed on purpose
+    mqtt = RecordingTransport(session)
+    session.transport = mqtt  # pytest stub, duck typed on purpose
     packet = Code12a0.get(RamsesID(GATEWAY_ID), RamsesID(FAN_ID))
 
     await session.publish(packet)
@@ -215,11 +209,11 @@ async def test_set_preset_mode_reports_a_publish_failure(hass: HomeAssistant) ->
     """A failed command must reach the caller so Home Assistant can report it."""
     session = make_session(hass)
 
-    class FailingMQTT:
-        async def publish(self, packet: RamsesPacket) -> None:
-            raise MQTTException("broker is offline")
+    class FailingTransport:
+        async def send(self, packet: RamsesPacket) -> None:
+            raise TransportError("broker is offline")
 
-    session.mqtt = FailingMQTT()  # pytest stub, duck typed on purpose
+    session.transport = FailingTransport()  # pytest stub, duck typed on purpose
 
     with pytest.raises(HomeAssistantError) as err:
         await session.set_preset_mode("low")
@@ -246,15 +240,13 @@ async def test_session_logs_that_no_devices_are_known(
 
 
 async def test_setup_raises_when_mqtt_is_not_available(
-    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    hass: HomeAssistant,
 ) -> None:
     """No MQTT client means a retryable setup failure."""
-    monkeypatch.setattr(
-        ramses_esp_module.mqtt_client,
-        "async_wait_for_mqtt_client",
-        AsyncMock(return_value=False),
-    )
     session = make_session(hass)
+    session.transport.start = AsyncMock(
+        side_effect=TransportNotReady("MQTT is not available")
+    )
 
     with pytest.raises(ConfigEntryNotReady) as err:
         await session.setup()
@@ -267,42 +259,30 @@ async def test_setup_subscribes_and_initialises_known_devices(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """After a restart the session waits for the stick and then fetches state."""
-    monkeypatch.setattr(
-        ramses_esp_module.mqtt_client,
-        "async_wait_for_mqtt_client",
-        AsyncMock(return_value=True),
-    )
     sleep = AsyncMock()
     monkeypatch.setattr(ramses_esp_module.asyncio, "sleep", sleep)
     session = make_session(hass, co2_id=CO2_ID)
-    session.mqtt = Mock()
-    session.mqtt.setup = AsyncMock()
+    session.transport.start = AsyncMock()
     session.init_fan = AsyncMock()
     session.init_co2 = AsyncMock()
 
     await session.setup(event=Mock())
 
     sleep.assert_awaited_once_with(2)
-    session.mqtt.setup.assert_awaited_once_with(
-        session.handle_ramses_mqtt_message,
-        session.handle_ramses_mqtt_version_message,
+    session.transport.start.assert_awaited_once_with(
+        session._handle_envelope,
+        session._handle_version,
     )
     session.init_fan.assert_awaited_once_with()
     session.init_co2.assert_awaited_once_with()
 
 
 async def test_setup_without_devices_only_subscribes(
-    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    hass: HomeAssistant,
 ) -> None:
     """With neither device known the session waits for broadcasts."""
-    monkeypatch.setattr(
-        ramses_esp_module.mqtt_client,
-        "async_wait_for_mqtt_client",
-        AsyncMock(return_value=True),
-    )
     session = make_session(hass, fan_id="", co2_id="")
-    session.mqtt = Mock()
-    session.mqtt.setup = AsyncMock()
+    session.transport.start = AsyncMock()
     session.init_fan = AsyncMock()
     session.init_co2 = AsyncMock()
 
@@ -337,27 +317,24 @@ async def test_req_humidity_publishes_a_12a0_request(hass: HomeAssistant) -> Non
     assert packet.dst_id == FAN_ID
 
 
-async def test_handle_ramses_mqtt_message_logs_a_bad_envelope(
+async def test_a_failing_handler_is_logged_without_killing_the_subscription(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A malformed MQTT payload is reported instead of killing the subscription."""
+    """One bad envelope is reported instead of killing the subscription."""
     session = make_session(hass)
-    msg = ReceiveMessage(
-        topic=f"{MQTT_TOPIC}/{GATEWAY_ID}/rx",
-        payload=b"not json",
-        qos=0,
-        retain=False,
-        subscribed_topic=f"{MQTT_TOPIC}/{GATEWAY_ID}/rx",
-        timestamp=0.0,
-    )
+    session._handle_ramses_packet = AsyncMock(side_effect=RuntimeError("boom"))
+    envelope = {
+        "ts": TIMESTAMP,
+        "msg": f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 000004",
+    }
 
     with caplog.at_level(logging.ERROR):
-        await session.handle_ramses_mqtt_message(msg)
+        await session._handle_envelope(envelope)
 
     assert "Failed to process Ramses-ESP MQTT message" in caplog.text
 
 
-async def test_handle_ramses_mqtt_message_processes_and_logs_the_packet(
+async def test_handle_envelope_processes_and_logs_the_packet(
     hass: HomeAssistant,
 ) -> None:
     """A valid envelope is parsed and appended to the packet log."""
@@ -368,16 +345,8 @@ async def test_handle_ramses_mqtt_message_processes_and_logs_the_packet(
         "ts": TIMESTAMP,
         "msg": f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 000004",
     }
-    msg = ReceiveMessage(
-        topic=f"{MQTT_TOPIC}/{GATEWAY_ID}/rx",
-        payload=json.dumps(envelope).encode(),
-        qos=0,
-        retain=False,
-        subscribed_topic=f"{MQTT_TOPIC}/{GATEWAY_ID}/rx",
-        timestamp=0.0,
-    )
 
-    await session.handle_ramses_mqtt_message(msg)
+    await session._handle_envelope(envelope)
 
     session._handle_ramses_packet.assert_awaited_once_with(envelope)
     session.packet_log.assert_awaited_once_with(envelope)
@@ -392,16 +361,8 @@ async def test_packet_log_is_off_by_default(hass: HomeAssistant) -> None:
         "ts": TIMESTAMP,
         "msg": f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 000004",
     }
-    msg = ReceiveMessage(
-        topic=f"{MQTT_TOPIC}/{GATEWAY_ID}/rx",
-        payload=json.dumps(envelope).encode(),
-        qos=0,
-        retain=False,
-        subscribed_topic=f"{MQTT_TOPIC}/{GATEWAY_ID}/rx",
-        timestamp=0.0,
-    )
 
-    await session.handle_ramses_mqtt_message(msg)
+    await session._handle_envelope(envelope)
 
     session._handle_ramses_packet.assert_awaited_once_with(envelope)
     session.packet_log.assert_not_awaited()
@@ -549,8 +510,8 @@ async def test_a_response_cancels_a_retry_that_already_fired(
         lambda hass_, delay, action: scheduled.append(action),
     )
     session = make_session(hass)
-    mqtt = RecordingMQTT(session)
-    session.mqtt = mqtt  # pytest stub, duck typed on purpose
+    mqtt = RecordingTransport(session)
+    session.transport = mqtt  # pytest stub, duck typed on purpose
     handler = Mock()
     session.add_handler("12A0", handler)
     packet = Code12a0.get(RamsesID(GATEWAY_ID), RamsesID(FAN_ID))
@@ -597,8 +558,8 @@ async def test_cleanup_drops_pending_retries(
         lambda hass_, delay, action: scheduled.append(action),
     )
     session = make_session(hass)
-    mqtt = RecordingMQTT(session)
-    session.mqtt = mqtt  # pytest stub, duck typed on purpose
+    mqtt = RecordingTransport(session)
+    session.transport = mqtt  # pytest stub, duck typed on purpose
     packet = Code12a0.get(RamsesID(GATEWAY_ID), RamsesID(FAN_ID))
     await session.publish(packet)
     assert session.pending_packets == 1
@@ -621,8 +582,8 @@ async def test_a_closed_session_ignores_late_initialisation(
     monkeypatch.setattr(ramses_esp_module, "async_call_later", call_later)
     session = make_session(hass)
     session.publish = AsyncMock()
-    session.mqtt = Mock()
-    session.mqtt.setup = AsyncMock()
+    session.transport = Mock()
+    session.transport.setup = AsyncMock()
     session.cleanup()
 
     await session.setup()
@@ -630,7 +591,7 @@ async def test_a_closed_session_ignores_late_initialisation(
     await session.init_co2(discovered_co2_id=RamsesID(CO2_ID))
     await session.req_humidity()
 
-    session.mqtt.setup.assert_not_awaited()
+    session.transport.setup.assert_not_awaited()
     session.publish.assert_not_awaited()
     track.assert_not_called()
     call_later.assert_not_called()

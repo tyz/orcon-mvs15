@@ -18,6 +18,7 @@ from custom_components.orcon_mvs15.issues import (
 )
 from custom_components.orcon_mvs15.ramses_esp import FAN_RESPONSE_TIMEOUT, RamsesESP
 from custom_components.orcon_mvs15.ramses.protocol import RamsesID
+from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
 
 GATEWAY_ID = "18:149960"
 FAN_ID = "29:224547"
@@ -38,7 +39,7 @@ def make_session(hass: HomeAssistant, *, fan_id: str = FAN_ID) -> RamsesESP:
     """Build a session without an MQTT connection."""
     return RamsesESP(
         hass=hass,
-        mqtt=Mock(),
+        transport=LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID)),
         remote_id=RamsesID(REMOTE_ID),
         fan_id=RamsesID(fan_id),
         co2_id=RamsesID(),

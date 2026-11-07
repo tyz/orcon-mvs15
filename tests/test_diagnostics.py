@@ -27,11 +27,12 @@ from custom_components.orcon_mvs15.models import (
     OrconMVS15Config,
     OrconMVS15RuntimeData,
 )
-from custom_components.orcon_mvs15.ramses_esp import RamsesESP
 from custom_components.orcon_mvs15.ramses.protocol import (
     RamsesID,
     RamsesPacketDatetime,
 )
+from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
+from custom_components.orcon_mvs15.ramses_esp import RamsesESP
 
 REMOTE_ID = "29:163058"
 FAN_ID = "29:224547"
@@ -69,7 +70,7 @@ async def test_diagnostics_report_entry_session_and_coordinators(
 
     session = RamsesESP(
         hass=hass,
-        mqtt=Mock(),
+        transport=LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID)),
         remote_id=RamsesID(REMOTE_ID),
         fan_id=RamsesID(FAN_ID),
         co2_id=RamsesID(),

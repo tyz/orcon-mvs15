@@ -21,6 +21,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.orcon_mvs15.ramses.protocol import CODE_REGISTRY
 from custom_components.orcon_mvs15.const import DOMAIN
 from custom_components.orcon_mvs15.handlers import DataHandlers
+from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
 from custom_components.orcon_mvs15.ramses_esp import RamsesESP
 from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 
@@ -47,7 +48,7 @@ def make_session(hass: HomeAssistant, co2_id: str = CO2_ID) -> RamsesESP:
     """Build a session for the recorded installation."""
     return RamsesESP(
         hass=hass,
-        mqtt=Mock(),
+        transport=LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID)),
         remote_id=RamsesID(REMOTE_ID),
         fan_id=RamsesID(FAN_ID),
         co2_id=RamsesID(co2_id),
@@ -56,13 +57,23 @@ def make_session(hass: HomeAssistant, co2_id: str = CO2_ID) -> RamsesESP:
     )
 
 
+class RecordingCoordinator:
+    """Coordinator stand-in that keeps the latest pushed data."""
+
+    def __init__(self) -> None:
+        self.data: dict[str, object] = {}
+
+    def async_set_updated_data(self, data: dict[str, object]) -> None:
+        self.data = data
+
+
 def make_handlers(hass: HomeAssistant) -> tuple[MockConfigEntry, DataHandlers]:
     """Build handlers for an entry that can own devices."""
     entry = MockConfigEntry(domain=DOMAIN, data={})
     entry.add_to_hass(hass)
     entry.runtime_data = SimpleNamespace(
-        co2_coordinator=SimpleNamespace(data={}),
-        fan_coordinator=SimpleNamespace(data={}),
+        co2_coordinator=RecordingCoordinator(),
+        fan_coordinator=RecordingCoordinator(),
         cleanup=[],
     )
     return entry, DataHandlers(hass, entry)
@@ -276,6 +287,36 @@ async def test_recorded_device_info_updates_the_fan_device(
     assert updated is not None
     assert updated.sw_version == "13"
     assert updated.model_id == "VMC-15RP01"
+
+
+async def test_the_recorded_restart_replays_through_the_transport(
+    hass: HomeAssistant,
+) -> None:
+    """A captured restart reaches the handlers without any MQTT code."""
+    entry, handlers = make_handlers(hass)
+    transport = LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID))
+    session = RamsesESP(
+        hass=hass,
+        transport=transport,
+        remote_id=RamsesID(REMOTE_ID),
+        fan_id=RamsesID(FAN_ID),
+        co2_id=RamsesID(CO2_ID),
+        gateway_id=RamsesID(GATEWAY_ID),
+        config_entry_id=entry.entry_id,
+    )
+    for code, func in handlers.pointers.items():
+        session.add_handler(code, func)
+
+    await transport.start(session._handle_envelope, session._handle_version)
+    for item in envelopes("startup.log"):
+        await transport.receive(item)
+
+    data = entry.runtime_data.fan_coordinator.data
+    assert data["fan_mode"] == "auto"
+    assert data["fan_fault"] is False
+    assert data["fan_signal_strength"] == -39
+    assert data["discovered_fan_id"] == FAN_ID
+    assert data["relative_humidity"] == 59
 
 
 async def test_the_recorded_restart_reaches_the_handlers(hass: HomeAssistant) -> None:
