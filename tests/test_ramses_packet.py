@@ -6,7 +6,7 @@ from datetime import datetime
 
 import pytest
 
-from custom_components.orcon_mvs15.ramses_packet import (
+from custom_components.orcon_mvs15.ramses.protocol import (
     RamsesID,
     RamsesPacket,
     RamsesPacketData,
@@ -84,6 +84,23 @@ def test_unknown_signal_strength_becomes_minus_one() -> None:
     )
 
     assert packet.signal_strength == -1
+
+
+def test_structured_packet_keeps_timestamp_and_signal_strength() -> None:
+    """A JSON transport can build a packet without synthesising a frame."""
+    packet = RamsesPacket(
+        src_id=RamsesID(FAN_ID),
+        dst_id=RamsesID(GATEWAY_ID),
+        type="I",
+        code="31D9",
+        data="000004",
+        timestamp=TIMESTAMP,
+        signal_strength=44,
+    )
+
+    assert packet.signal_strength == 44
+    assert repr(packet.timestamp) == TIMESTAMP
+    assert packet.ramses_esp_envelope()["msg"].endswith("31D9 003 000004")
 
 
 def test_published_envelope_has_no_signal_strength() -> None:

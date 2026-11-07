@@ -18,7 +18,7 @@ from homeassistant.helpers.device_registry import (
 )
 
 from .const import DOMAIN
-from .ramses_packet import RamsesID
+from .ramses.protocol import RamsesID
 
 _LOGGER = logging.getLogger(__name__)
 

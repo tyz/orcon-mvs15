@@ -21,7 +21,7 @@ from custom_components.orcon_mvs15.coordinator import (
 )
 from custom_components.orcon_mvs15.fan import OrconFan
 from custom_components.orcon_mvs15.models import OrconMVS15Config
-from custom_components.orcon_mvs15.ramses_packet import RamsesID
+from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 from custom_components.orcon_mvs15.sensor import (
     Co2Sensor,
     HumiditySensor,

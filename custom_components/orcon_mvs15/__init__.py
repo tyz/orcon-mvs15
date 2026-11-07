@@ -23,7 +23,7 @@ from .coordinator import OrconMVS15DataUpdateCoordinator
 from .mqtt import MQTT
 from .ramses_esp import RamsesESP
 from .handlers import DataHandlers
-from .ramses_packet import RamsesID
+from .ramses.protocol import RamsesID
 from .const import (
     CONF_CO2_ID,
     CONF_FAN_ID,

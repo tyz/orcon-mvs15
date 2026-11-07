@@ -6,12 +6,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from custom_components.orcon_mvs15.ramses_packet import (
+from custom_components.orcon_mvs15.ramses.protocol import (
     RamsesID,
     RamsesPacket,
     RamsesPacketResponse,
 )
-from custom_components.orcon_mvs15.ramses_packet_queue import RamsesPacketQueue
+from custom_components.orcon_mvs15.ramses.protocol import RamsesPacketQueue
 
 TIMESTAMP = "2026-09-11T17:29:09.534250+02:00"
 FAN_ID = "29:224547"

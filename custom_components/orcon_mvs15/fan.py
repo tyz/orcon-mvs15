@@ -11,11 +11,11 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .device import attached_device_info
 from .models import OrconMVS15Config, OrconMVS15ConfigEntry
-from .ramses_packet import RamsesPacketDatetime, RamsesID
+from .ramses.protocol import RamsesPacketDatetime, RamsesID
 from .ramses_esp import RamsesESP
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .discover_entity import DiscoverEntity
-from .codes import Code22f1
+from .ramses.protocol import Code22f1
 
 _LOGGER = logging.getLogger(__name__)
 

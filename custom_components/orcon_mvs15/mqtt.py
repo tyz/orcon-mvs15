@@ -11,7 +11,7 @@ from homeassistant.components import mqtt
 from homeassistant.components.mqtt import ReceiveMessage
 from homeassistant.core import callback, HomeAssistant
 
-from .ramses_packet import RamsesPacket, RamsesID
+from .ramses.protocol import RamsesPacket, RamsesID
 
 _LOGGER = logging.getLogger(__name__)
 

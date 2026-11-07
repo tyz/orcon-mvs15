@@ -18,11 +18,11 @@ from homeassistant.helpers.device_registry import DeviceRegistry
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.orcon_mvs15.codes import CODE_REGISTRY
+from custom_components.orcon_mvs15.ramses.protocol import CODE_REGISTRY
 from custom_components.orcon_mvs15.const import DOMAIN
 from custom_components.orcon_mvs15.handlers import DataHandlers
 from custom_components.orcon_mvs15.ramses_esp import RamsesESP
-from custom_components.orcon_mvs15.ramses_packet import RamsesID
+from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 
 from recorded_frames import (
     FIXTURES,

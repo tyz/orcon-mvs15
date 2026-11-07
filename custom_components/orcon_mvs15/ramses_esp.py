@@ -23,10 +23,10 @@ from .issues import (
     async_create_fan_not_responding_issue,
     async_delete_fan_not_responding_issue,
 )
-from .ramses_packet import RamsesPacket, RamsesID
-from .ramses_packet_queue import RamsesPacketQueue
+from .ramses.protocol import RamsesPacket, RamsesID
+from .ramses.protocol import RamsesPacketQueue
 from .mqtt import MQTT, MQTTException
-from .codes import (
+from .ramses.protocol import (
     CODE_REGISTRY,
     Code,
     Code10e0,

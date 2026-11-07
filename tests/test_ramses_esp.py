@@ -21,7 +21,7 @@ from homeassistant.helpers.device_registry import DeviceRegistry
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.orcon_mvs15 import ramses_esp as ramses_esp_module
-from custom_components.orcon_mvs15.codes import Code12a0
+from custom_components.orcon_mvs15.ramses.protocol import Code12a0
 from custom_components.orcon_mvs15.const import (
     CONF_MQTT_TOPIC,
     CONF_REMOTE_ID,
@@ -29,7 +29,7 @@ from custom_components.orcon_mvs15.const import (
 )
 from custom_components.orcon_mvs15.mqtt import MQTTException
 from custom_components.orcon_mvs15.ramses_esp import RamsesESP
-from custom_components.orcon_mvs15.ramses_packet import RamsesID, RamsesPacket
+from custom_components.orcon_mvs15.ramses.protocol import RamsesID, RamsesPacket
 
 GATEWAY_ID = "18:149960"
 FAN_ID = "29:224547"

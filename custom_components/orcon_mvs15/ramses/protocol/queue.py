@@ -1,13 +1,12 @@
+"""Outgoing packets waiting for their expected response."""
+
 from __future__ import annotations
 
 import logging
 
 from collections.abc import Iterator
 
-try:
-    from .ramses_packet import RamsesPacket
-except ImportError:
-    pass  # for __main__
+from .frame import RamsesPacket
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,64 +88,3 @@ class RamsesPacketQueue:
     def clear(self) -> None:
         for packet_id in list(self._queue):
             del self._queue[packet_id]
-
-
-if __name__ == "__main__":
-    import sys
-    from ramses_packet import RamsesPacket, RamsesPacketResponse, RamsesID  # type: ignore[no-redef]
-
-    _LOGGER = logging.getLogger()
-    _LOGGER.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
-    _LOGGER.addHandler(handler)
-
-    q = RamsesPacketQueue()
-
-    raw_response = {
-        "ts": "2025-06-01T17:10:49.271376+02:00",
-        "msg": "044 RP --- 29:224547 18:149960 --:------ 12A0 002 002F",
-    }
-    raw_response_other = {
-        "ts": "2025-06-01T17:10:50.271376+02:00",
-        "msg": "044 RP --- 29:224547 18:149960 --:------ 1298 003 0001CD",
-    }
-    rx = RamsesPacket(envelope=raw_response)
-    rx_other = RamsesPacket(envelope=raw_response_other)
-
-    tx = RamsesPacket(
-        src_id=RamsesID("18:149960"),
-        dst_id=RamsesID("29:224547"),
-        type="RQ",
-        code="12A0",
-        data="00",
-    )
-    tx.expected_response = RamsesPacketResponse(
-        src_id=RamsesID("29:224547"),
-        dst_id=RamsesID("18:149960"),
-        type="RP",
-        code="12A0",
-    )
-
-    print("=== add (__contains__, __setitem__)")
-    q.add(tx)
-    q.add(tx)
-    assert len(q) == 1, f"len after add is {len(q)}"
-
-    print("=== get/del (__iter__, __getitem__, __delitem__)")
-    p = q.get(rx_other)
-    assert p is None, (
-        "matched where it should not for {rx_other_other.type} {rx_other.code} {rx_other.src_id} {rx_other.dst_id} in {q._queue}"
-    )
-    p = q.get(rx)
-    assert p is not None, (
-        f"no match where it should for {rx.type} {rx.code} {rx.src_id} {rx.dst_id} in {q._queue}"
-    )
-    q.remove(p)
-    assert len(q) == 0, f"len after del is {len(q)}"
-
-    print("=== clear")
-    q.clear()
-    assert len(q) == 0, f"len after clear is {len(q)}"
-
-    print("=== Done!")

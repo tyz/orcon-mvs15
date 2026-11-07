@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from custom_components.orcon_mvs15.codes import CODE_REGISTRY, Code
-from custom_components.orcon_mvs15.ramses_packet import RamsesPacket
+from custom_components.orcon_mvs15.ramses.protocol import CODE_REGISTRY, Code
+from custom_components.orcon_mvs15.ramses.protocol import RamsesPacket
 
 FIXTURES = Path(__file__).parent / "fixtures"
 FIRST_TIMESTAMP = datetime(2026, 9, 11, 11, 47, 55, tzinfo=UTC)

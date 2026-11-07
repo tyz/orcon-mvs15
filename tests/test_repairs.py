@@ -17,7 +17,7 @@ from custom_components.orcon_mvs15.issues import (
     fan_not_responding_issue_id,
 )
 from custom_components.orcon_mvs15.ramses_esp import FAN_RESPONSE_TIMEOUT, RamsesESP
-from custom_components.orcon_mvs15.ramses_packet import RamsesID
+from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 
 GATEWAY_ID = "18:149960"
 FAN_ID = "29:224547"

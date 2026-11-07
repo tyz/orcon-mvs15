@@ -29,7 +29,7 @@ from custom_components.orcon_mvs15.const import (
     DOMAIN,
 )
 from custom_components.orcon_mvs15.mqtt import MQTTException
-from custom_components.orcon_mvs15.ramses_packet import RamsesID
+from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 
 REMOTE_ID = "29:163058"
 FAN_ID = "29:224547"

@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.util import dt as dt_util
 
-from .codes import Code
+from .ramses.protocol import Code
 from .device import update_device_info
 from .models import OrconMVS15ConfigEntry
 

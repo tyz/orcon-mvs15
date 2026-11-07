@@ -28,7 +28,7 @@ from custom_components.orcon_mvs15.models import (
     OrconMVS15RuntimeData,
 )
 from custom_components.orcon_mvs15.ramses_esp import RamsesESP
-from custom_components.orcon_mvs15.ramses_packet import (
+from custom_components.orcon_mvs15.ramses.protocol import (
     RamsesID,
     RamsesPacketDatetime,
 )

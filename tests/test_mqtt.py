@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant
 
 from custom_components.orcon_mvs15 import mqtt as mqtt_module
 from custom_components.orcon_mvs15.mqtt import MQTT, MQTTException
-from custom_components.orcon_mvs15.ramses_packet import RamsesID, RamsesPacket
+from custom_components.orcon_mvs15.ramses.protocol import RamsesID, RamsesPacket
 
 GATEWAY_ID = "18:149960"
 FAN_ID = "29:224547"

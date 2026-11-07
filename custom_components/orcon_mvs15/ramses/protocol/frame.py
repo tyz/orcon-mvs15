@@ -84,9 +84,19 @@ class RamsesPacket:
         type: str = "",
         code: str = "",
         data: str = "",
+        *,
+        timestamp: RamsesPacketDatetime | datetime | str | None = None,
+        signal_strength: int | None = None,
     ) -> None:
-        self._timestamp = RamsesPacketDatetime(datetime.now())
-        self.signal_strength = -1
+        self._timestamp = (
+            timestamp
+            if isinstance(timestamp, RamsesPacketDatetime)
+            else RamsesPacketDatetime(timestamp)
+            if timestamp is not None
+            else RamsesPacketDatetime(datetime.now())
+        )
+        self.timestamp = self._timestamp
+        self.signal_strength = -1 if signal_strength is None else signal_strength
         self.type = type
         self.src_id = src_id
         self.dst_id = dst_id
@@ -132,6 +142,7 @@ class RamsesPacket:
         fields = self._envelope["msg"].split()
         assert fields[2] == "---", "Missing dashes"
         self.timestamp = RamsesPacketDatetime(self._envelope["ts"])
+        self._timestamp = self.timestamp
         try:
             self.signal_strength = int(fields[0])
         except ValueError:
