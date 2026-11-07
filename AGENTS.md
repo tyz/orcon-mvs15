@@ -150,26 +150,17 @@ a truthful `quality_scale.yaml` that meets Gold and Platinum.
 
 ## Skills
 
-On-demand detail lives in `.agents/skills/`; load a skill when its task matches.
-The rules in this file still apply, and a skill never overrides them.
-
-* `testing` — test harness, fixtures, stubs, regression tests and the coverage
-  gate. Load it before writing or changing tests.
-* `release` — version bump, full gate, release PR, tag and GitHub release. Load
-  it when preparing or publishing a release.
-* `ha-translations` — translation key sync, adding or removing keys, placeholders
-  and entity translation keys. Load it when a user-visible string changes.
-* `context7` — library documentation lookup and Context7 admin work (teamspaces,
-  libraries, Docs7 and Ask sites). Load it before a library API question or any
-  Context7 admin operation.
+Skills are mounted at `.agents/skills/` and are not tracked in this repository:
+generic skills at the root, project-specific skills under
+`.agents/skills/<project>/`. Load the generic skill and the matching project
+skill together; each skill's frontmatter description says when it applies. The
+rules in this file still apply, and a skill never overrides them.
 
 ## Testing
 
 * Every bug fix needs a test that fails against the previous code. Verify that it
   does before claiming the fix works.
 * Never weaken an assertion to make a test pass.
-* Load the `testing` skill before writing or changing tests; it covers the
-  harness, fixtures, stubs and the coverage gate.
 
 ## Platform and Protocol Gotchas
 
