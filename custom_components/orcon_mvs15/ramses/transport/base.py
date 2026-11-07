@@ -45,12 +45,12 @@ class Transport(Protocol):
         self, handle_packet: PacketHandler, handle_version: VersionHandler
     ) -> None:
         """Subscribe to the gateway and start delivering frames."""
-        ...
+        ...  # pragma: no cover
 
     async def stop(self) -> None:
         """Stop delivering frames and release the subscriptions."""
-        ...
+        ...  # pragma: no cover
 
     async def send(self, packet: RamsesPacket) -> None:
         """Publish one packet to the gateway."""
-        ...
+        ...  # pragma: no cover

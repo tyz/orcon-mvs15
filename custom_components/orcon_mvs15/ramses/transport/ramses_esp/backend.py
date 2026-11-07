@@ -21,26 +21,26 @@ class MqttBackend(Protocol):
 
     async def start(self) -> None:
         """Wait until the MQTT client is usable."""
-        ...
+        ...  # pragma: no cover
 
     async def stop(self) -> None:
         """Release the client."""
-        ...
+        ...  # pragma: no cover
 
     async def subscribe(
         self, topic: str, handler: MessageHandler
     ) -> Callable[[], None]:
         """Subscribe to a topic and return its unsubscribe callable."""
-        ...
+        ...  # pragma: no cover
 
     async def publish(self, topic: str, payload: str) -> None:
         """Publish one payload."""
-        ...
+        ...  # pragma: no cover
 
     def subscribe_connection(self, handler: ConnectionHandler) -> Callable[[], None]:
         """Subscribe to connection state changes."""
-        ...
+        ...  # pragma: no cover
 
     def is_connected(self) -> bool:
         """Return whether the client is currently connected."""
-        ...
+        ...  # pragma: no cover

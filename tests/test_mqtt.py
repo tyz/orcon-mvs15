@@ -17,6 +17,7 @@ from custom_components.orcon_mvs15 import mqtt as mqtt_module
 from custom_components.orcon_mvs15.mqtt import HassMqttBackend
 from custom_components.orcon_mvs15.ramses.protocol import RamsesID, RamsesPacket
 from custom_components.orcon_mvs15.ramses.transport import (
+    ConnectionState,
     TransportError,
     TransportNotReady,
 )
@@ -273,3 +274,64 @@ async def test_backend_reports_a_missing_mqtt_client(
 
     with pytest.raises(TransportNotReady):
         await backend.start()
+
+
+def test_transport_starts_disconnected(hass: HomeAssistant) -> None:
+    """No connection has been observed until the transport starts."""
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+
+    assert transport.connection_state is ConnectionState.DISCONNECTED
+
+
+async def test_send_wraps_an_unexpected_backend_failure(
+    hass: HomeAssistant,
+) -> None:
+    """A backend that is not the Home Assistant adapter is still contained."""
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    await transport.init()
+    transport._backend.publish = AsyncMock(side_effect=RuntimeError("broker down"))
+
+    with pytest.raises(TransportError, match="Failed to publish payload"):
+        await transport.send(make_packet())
+
+
+async def test_received_messages_reach_the_handlers(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The transport hands decoded envelopes and version strings to the session."""
+    monkeypatch.setattr(
+        mqtt_module.mqtt, "async_wait_for_mqtt_client", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        mqtt_module.mqtt, "async_subscribe", AsyncMock(return_value=Mock())
+    )
+    monkeypatch.setattr(
+        mqtt_module.mqtt,
+        "async_subscribe_connection_status",
+        Mock(return_value=Mock()),
+    )
+    monkeypatch.setattr(mqtt_module.mqtt, "is_connected", lambda hass_: True)
+    packet_handler = AsyncMock()
+    version_handler = Mock()
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    await transport.init()
+    await transport.start(packet_handler, version_handler)
+    envelope = {"ts": "2026-09-11T17:29:09+00:00", "msg": "081  I --- --:------"}
+
+    await transport._handle_packet_message(
+        f"{MQTT_TOPIC}/{GATEWAY_ID}/rx", json.dumps(envelope).encode()
+    )
+    await transport._handle_version_message(
+        f"{MQTT_TOPIC}/{GATEWAY_ID}/info/version", b"2026.10.1"
+    )
+    await transport._handle_version_message(
+        f"{MQTT_TOPIC}/{GATEWAY_ID}/info/version", "2026.10.1"
+    )
+
+    packet_handler.assert_awaited_once_with(envelope)
+    assert [call.args[0] for call in version_handler.call_args_list] == [
+        "2026.10.1",
+        "2026.10.1",
+    ]
+
+    await transport.stop()
