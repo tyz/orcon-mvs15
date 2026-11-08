@@ -6,8 +6,8 @@ rules:
   appropriate-polling:
     status: done
     comment: |
-      Updates are pushed over MQTT. The humidity sensor (12A0) is polled every
-      5 minutes because that packet is not broadcast.
+      Updates are pushed over MQTT or the USB serial port. The humidity sensor
+      (12A0) is polled every 5 minutes because that packet is not broadcast.
   brands:
     status: done
     comment: |
@@ -22,13 +22,14 @@ rules:
   config-flow-test-coverage:
     status: done
     comment: |
-      The user, discovery-info, reconfigure and options steps are covered,
-      including the duplicate-topic abort.
+      The transport menu, MQTT and USB steps, discovery-info, reconfigure and
+      options steps are covered, including the duplicate-topic and
+      duplicate-port aborts.
   dependency-transparency:
     status: done
     comment: |
-      There are no third-party runtime dependencies; MQTT is provided by Home
-      Assistant.
+      There are no requirements of our own; MQTT and the USB serial support
+      (serialx) are provided by Home Assistant components.
   docs-actions:
     status: exempt
     comment: The integration does not register any actions.
@@ -52,15 +53,16 @@ rules:
   test-before-configure:
     status: exempt
     comment: |
-      The flow only stores the remote ID and MQTT topic. The gateway is
-      discovered and verified during setup, which raises ConfigEntryNotReady
-      when MQTT is unavailable.
+      The USB step verifies the gateway by deriving its ID from the port's
+      serial number. The MQTT step stores the topic; that gateway is discovered
+      and verified during setup, which raises ConfigEntryNotReady when MQTT is
+      unavailable.
   test-before-setup: done
   unique-config-entry:
     status: done
     comment: |
       The user and reconfigure flows abort when another entry already uses the
-      same MQTT topic.
+      same MQTT topic or USB serial port.
 
   # Silver
   action-exceptions:
@@ -72,21 +74,21 @@ rules:
   docs-configuration-parameters:
     status: done
     comment: |
-      README.md documents the remote ID, MQTT topic and the packet-log
-      option. The connection settings use the reconfigure flow; the packet
-      log uses the options flow.
+      README.md documents the remote ID, MQTT topic, USB serial port and the
+      packet-log option. The connection settings use the reconfigure flow; the
+      packet log uses the options flow.
   docs-installation-parameters: done
   entity-unavailable:
     status: done
     comment: |
       Entities are unavailable until their first packet and while the MQTT
-      connection is down.
+      connection is down or the USB port is closed.
   integration-owner: done
   log-when-unavailable:
     status: done
     comment: |
-      A lost and restored MQTT connection is logged once at info level, and
-      the coordinators mark their entities unavailable in between.
+      A lost and restored MQTT or USB connection is logged once, and the
+      coordinators mark their entities unavailable in between.
   parallel-updates: done
   reauthentication-flow:
     status: exempt
@@ -104,9 +106,10 @@ rules:
     status: exempt
     comment: |
       The fan is an RF device; the only network-facing part is the Ramses ESP
-      gateway, which is configured by MQTT topic and publishes no discovery
-      payload. The fan and CO2 remote are discovered from Ramses packets after
-      setup.
+      gateway, which is configured by MQTT topic or USB serial port. Its USB
+      descriptor is shared by every ESP32-S3, so a USB matcher would prompt
+      unrelated boards. The fan and CO2 remote are discovered from Ramses
+      packets after setup.
   discovery-update-info:
     status: exempt
     comment: |
@@ -156,8 +159,8 @@ rules:
     comment: |
       A configured fan that sends no packet for 30 minutes raises a translated
       repair issue with the steps to check. The issue is deleted when the fan is
-      heard again, when the entry unloads, and its timer pauses while MQTT is
-      down.
+      heard again, when the entry unloads, and its timer pauses while the
+      gateway is unreachable.
   stale-devices:
     status: done
     comment: |
@@ -169,8 +172,9 @@ rules:
   async-dependency:
     status: exempt
     comment: |
-      There is no third-party library; the integration uses Home Assistant's
-      async MQTT client.
+      There is no third-party library of our own; the integration uses Home
+      Assistant's async MQTT client and the serialx package that the usb
+      component installs.
   inject-websession:
     status: exempt
     comment: The integration does not use a web session.

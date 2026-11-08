@@ -3,7 +3,7 @@
   "name": "Orcon MVS-15",
   "codeowners": ["@tyz"],
   "config_flow": true,
-  "dependencies": ["mqtt"],
+  "dependencies": ["mqtt", "usb"],
   "documentation": "https://github.com/tyz/orcon-mvs15",
   "integration_type": "hub",
   "iot_class": "local_push",

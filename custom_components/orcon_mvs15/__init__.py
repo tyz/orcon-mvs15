@@ -26,11 +26,14 @@ from .ramses.protocol import RamsesID
 from .ramses.session import RamsesSession
 from .ramses.transport import Transport, TransportNotReady
 from .ramses.transport.ramses_esp import RamsesESP
+from .ramses.transport.ramses_esp.serial import RamsesESPSerial
+from .serial_backend import SerialxBackend
 from .const import (
     CONF_GATEWAY_ID,
     CONF_PACKET_LOG,
     DEFAULT_PACKET_LOG,
     DOMAIN,
+    TRANSPORT_USB,
 )
 
 PLATFORMS = [Platform.FAN, Platform.SENSOR, Platform.BINARY_SENSOR]
@@ -52,17 +55,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
     fan_coordinator = await _setup_coordinator(hass, entry)
     co2_coordinator = await _setup_coordinator(hass, entry)
 
+    is_usb = config.transport == TRANSPORT_USB
+    setup_failure_key = "usb_setup_failed" if is_usb else "mqtt_setup_failed"
     try:
-        transport: Transport = RamsesESP(
-            HassMqttBackend(hass),
-            base_topic=config.mqtt_topic,
-            gateway_id=config.gateway_id,
-        )
+        transport: Transport
+        if is_usb:
+            transport = RamsesESPSerial(
+                SerialxBackend(config.usb_port), gateway_id=config.gateway_id
+            )
+        else:
+            transport = RamsesESP(
+                HassMqttBackend(hass),
+                base_topic=config.mqtt_topic,
+                gateway_id=config.gateway_id,
+            )
         await transport.init()
     except Exception as e:
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
-            translation_key="mqtt_setup_failed",
+            translation_key=setup_failure_key,
             translation_placeholders={"error": str(e)},
         ) from e
 
@@ -134,7 +145,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
         except TransportNotReady as err:
             raise ConfigEntryNotReady(
                 translation_domain=DOMAIN,
-                translation_key="mqtt_not_available",
+                translation_key="usb_not_available" if is_usb else "mqtt_not_available",
             ) from err
 
     if hass.state == CoreState.running:

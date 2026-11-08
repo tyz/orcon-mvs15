@@ -3,7 +3,15 @@
     "step": {
       "user": {
         "title": "Configure Orcon MVS-15",
-        "description": "Enter the settings for your Orcon MVS-15 ventilation unit.",
+        "description": "Choose how the Ramses ESP gateway is connected.",
+        "menu_options": {
+          "mqtt_connection": "MQTT broker",
+          "usb_connection": "USB serial port"
+        }
+      },
+      "mqtt_connection": {
+        "title": "MQTT connection",
+        "description": "Enter the 15RF remote and the MQTT base topic of the gateway.",
         "data": {
           "remote_id": "Remote ID (e.g., 29:123456)",
           "mqtt_topic": "MQTT Topic Prefix (e.g., RAMSES/GATEWAY)"
@@ -11,6 +19,18 @@
         "data_description": {
           "remote_id": "The Ramses ID of the 15RF wireless remote, for example 29:163058.",
           "mqtt_topic": "The base topic of the Ramses ESP gateway, for example RAMSES/GATEWAY."
+        }
+      },
+      "usb_connection": {
+        "title": "USB connection",
+        "description": "Select the serial port of the Ramses ESP. Use interface 0 when the stick exposes two ports.",
+        "data": {
+          "remote_id": "Remote ID (e.g., 29:123456)",
+          "usb_port": "Serial port"
+        },
+        "data_description": {
+          "remote_id": "The Ramses ID of the 15RF wireless remote, for example 29:163058.",
+          "usb_port": "The USB serial port of the Ramses ESP, for example /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_...-if00."
         }
       },
       "fan_discovery": {
@@ -19,24 +39,22 @@
       },
       "reconfigure": {
         "title": "Reconfigure Orcon MVS-15",
-        "description": "Update the remote ID or the MQTT topic prefix.",
-        "data": {
-          "remote_id": "Remote ID (e.g., 29:123456)",
-          "mqtt_topic": "MQTT Topic Prefix (e.g., RAMSES/GATEWAY)"
-        },
-        "data_description": {
-          "remote_id": "The Ramses ID of the 15RF wireless remote, for example 29:163058.",
-          "mqtt_topic": "The base topic of the Ramses ESP gateway, for example RAMSES/GATEWAY."
+        "description": "Choose which connection to change.",
+        "menu_options": {
+          "mqtt_connection": "MQTT broker",
+          "usb_connection": "USB serial port"
         }
       }
     },
     "error": {
       "mqtt_topic_required": "Enter the base MQTT topic of the gateway.",
       "mqtt_topic_whitespace": "The base MQTT topic cannot start or end with a space.",
-      "mqtt_topic_wildcard": "The base MQTT topic cannot contain the wildcards + or #."
+      "mqtt_topic_wildcard": "The base MQTT topic cannot contain the wildcards + or #.",
+      "usb_port_required": "Select the USB serial port of the gateway.",
+      "gateway_id_unavailable": "Could not derive the gateway ID from the USB serial number. Check that the correct port is selected."
     },
     "abort": {
-      "already_configured": "This MQTT topic is already configured."
+      "already_configured": "This gateway is already configured."
     }
   },
   "options": {
@@ -62,6 +80,12 @@
     },
     "mqtt_not_available": {
       "message": "The MQTT integration is not available."
+    },
+    "usb_setup_failed": {
+      "message": "Could not start the USB transport: {error}"
+    },
+    "usb_not_available": {
+      "message": "The USB gateway is not available."
     },
     "unknown_preset_mode": {
       "message": "Unknown fan preset mode: {mode}"

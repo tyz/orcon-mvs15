@@ -9,8 +9,9 @@ Home Assistant integration for the [Orcon MVS-15 fan](https://orcon.nl/mechanisc
 the (optional) wired `CO2 ruimtesensor 15RF` with its CO₂ sensor and the
 (optional) `Afstandsbediening 15RF` wireless remote.
 
-Uses MQTT and a [Ramses ESP stick](https://indalo-tech.onlineweb.shop/product/ramses-esp)
-to communicate with the fan.
+Uses MQTT or a USB serial connection and a
+[Ramses ESP stick](https://indalo-tech.onlineweb.shop/product/ramses-esp) to
+communicate with the fan.
 
 I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://github.com/zxdavb/ramses_protocol/wiki) for some code/inspiration/help.
 
@@ -35,12 +36,11 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
   product ID `5F`)
 - Orcon `CO2 ruimtesensor 15RF` wired CO₂ sensor (product ID `51`)
 - Orcon `Afstandsbediening 15RF` wireless remote
-- Ramses ESP gateway running the Ramses II firmware over MQTT
+- Ramses ESP gateway running the Ramses II firmware over MQTT or USB
 
 ## TODO
 
 - Set up a fake remote and pair it with the fan
-- Ramses ESP stick via USB (currently only supports MQTT)
 
 ## Install
 
@@ -50,15 +50,24 @@ configuration under `Custom repositories`. Then install it in HACS, and add the
 
 ## Installation parameters
 
-The setup form asks for two values:
+The setup form first asks how the Ramses ESP is connected, then for the remote
+ID and the transport settings:
 
 - **Remote ID** — the Ramses ID of the 15RF wireless remote that sends commands
   to the fan, for example `29:163058`. If you do not know it yet, use a fake ID
   and follow [Fan ID](#fan-id).
-- **MQTT topic prefix** — the base topic of the Ramses ESP gateway, for
-  example `RAMSES/GATEWAY`. The integration discovers the gateway on
-  `<prefix>/+` and then exchanges packets on `<prefix>/<gateway>/rx` and
+- **MQTT topic prefix** (MQTT connection) — the base topic of the Ramses ESP
+  gateway, for example `RAMSES/GATEWAY`. The integration discovers the gateway
+  on `<prefix>/+` and then exchanges packets on `<prefix>/<gateway>/rx` and
   `<prefix>/<gateway>/tx`.
+- **Serial port** (USB connection) — the port of the Ramses ESP, picked from the
+  ports Home Assistant knows. The stick exposes two interfaces; use interface
+  `0`, the one whose description ends in `-if00`. The integration reads the
+  board's USB serial number to derive the gateway ID, so there is nothing else
+  to enter.
+
+The USB descriptor is shared by every ESP32-S3 board, so Home Assistant cannot
+discover the stick reliably. USB setup is a manual port choice instead.
 
 ## Fan ID
 
@@ -84,9 +93,11 @@ The remote's ID in this example is `29:123456`.
 
 ## Reconfiguring
 
-If the remote ID or MQTT topic prefix is wrong, open the integration's menu in
-`Settings > Devices & services` and choose **Reconfigure**. The other discovered
-IDs are kept and the entry reloads after the change.
+If the remote ID, MQTT topic prefix or serial port is wrong, open the
+integration's menu in `Settings > Devices & services` and choose
+**Reconfigure**. Choose the connection you want to change; the other discovered
+IDs are kept and the entry reloads after the change. Switching between MQTT and
+USB replaces the gateway ID, because the two gateways are different devices.
 
 ## Options
 
@@ -186,10 +197,10 @@ integration reacts to them. The fan state (`31D9`) and vent demand (`31E0`) are
 broadcast every 5 minutes, and device info (`10E0`) every 24 hours. The fan's
 humidity sensor (`12A0`) is not broadcast, so it is polled every 5 minutes.
 Entities are unavailable until the packet they read has arrived. If the MQTT
-connection is lost, all entities become unavailable and the loss is logged once;
-they recover when the connection returns. A configured fan that sends no packet
-for 30 minutes raises a repair issue; every packet from the fan restarts the
-window.
+connection is lost or the USB cable is unplugged, all entities become unavailable
+and the loss is logged once; they recover when the connection returns. A
+configured fan that sends no packet for 30 minutes raises a repair issue; every
+packet from the fan restarts the window.
 
 ## Known limitations
 
@@ -200,7 +211,8 @@ window.
 - A `042F` power-up message is accepted from any source while the fan ID is
   unknown. A neighbouring Orcon unit that powers up while this fan is still
   being discovered could be adopted as this fan.
-- Only MQTT transport is supported; USB is on the TODO list.
+- A USB gateway that is unplugged or reset is not reopened automatically; reload
+  the integration or restart Home Assistant once the stick is back.
 - The optional `/config/packet.log` (rolled over at 10 MB) is a debugging aid.
   It is not a stable interface.
 
@@ -215,9 +227,9 @@ window.
 
 ## Protocol
 
-The integration speaks the Ramses II protocol over MQTT. The frame format,
-supported codes, discovery flows and retry behaviour are documented in
-[docs/protocol.md](docs/protocol.md).
+The integration speaks the Ramses II protocol over MQTT or a USB serial
+connection. The frame format, supported codes, discovery flows and retry
+behaviour are documented in [docs/protocol.md](docs/protocol.md).
 
 ## Troubleshooting
 
@@ -229,8 +241,8 @@ minutes, Home Assistant shows a repair issue under **Settings > System >
 Repairs**. The issue is deleted automatically as soon as the fan is heard again.
 Check that the fan has power and that the Ramses ESP gateway is within RF range,
 then power-cycle the fan so it announces itself. The watchdog pauses while the
-MQTT connection is down, because an unreachable gateway says nothing about the
-RF link.
+MQTT connection is down or the USB port is closed, because an unreachable
+gateway says nothing about the RF link.
 
 ### Debug logging
 

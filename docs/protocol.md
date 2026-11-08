@@ -1,7 +1,7 @@
 # Ramses II protocol notes
 
-This document describes the Ramses II subset used by `orcon_mvs15`: the MQTT
-envelope, the frame layout, the supported codes and the discovery/retry
+This document describes the Ramses II subset used by `orcon_mvs15`: the gateway
+transports, the frame layout, the supported codes and the discovery/retry
 behaviour. It is not a complete Ramses II specification. For the wider protocol,
 see [ramses_rf](https://github.com/zxdavb/ramses_rf) and the
 [Ramses protocol wiki](https://github.com/zxdavb/ramses_protocol/wiki).
@@ -46,6 +46,32 @@ Publish payload:
 
 The timestamp is added by the gateway. The integration does not add a `ts` field
 when publishing.
+
+## USB serial transport
+
+The RAMSES ESP also exposes an HGI80/evofw3-style text console over its USB
+serial port at 115200 baud.
+
+- **Receive** — the firmware prints each frame as one line, terminated by `\r\n`:
+  `044 RP --- 29:224547 18:149960 --:------ 31D9 003 000001`. The integration
+  timestamps each line when it arrives, so the session sees the same envelope as
+  with MQTT.
+- **Transmit** — the integration writes the frame without the signal-strength
+  field, terminated by `\r`:
+  `RQ --- 18:149960 29:224547 --:------ 12A0 001 00`. The firmware replaces the
+  source with its own gateway ID before transmitting.
+- **Console output** — lines starting with `#` are firmware messages, not
+  frames. The boot banner (`# ramses_esp <version>`) supplies the firmware
+  version that MQTT publishes on the `info/version` topic.
+- **Gateway ID** — the firmware derives its ID from the last three bytes of the
+  factory MAC: `18:` followed by those bytes masked to 18 bits. That MAC is the
+  USB serial number, so the integration derives the gateway ID before opening
+  the port. Example: `34:85:18:AA:B7:C8` becomes `18:178120`. A port without a
+  MAC-shaped serial number is rejected rather than guessed at.
+- **Port choice** — the Espressif USB descriptor (`303A:1001`) is shared by every
+  ESP32-S3, so the integration does not register a USB discovery matcher. The
+  config flow offers the serial ports Home Assistant knows; the stick's console
+  is interface `0` (`...-if00`).
 
 ## Frame layout
 

@@ -17,7 +17,10 @@ from .const import (
     CONF_FAN_ID,
     CONF_CO2_ID,
     CONF_MQTT_TOPIC,
+    CONF_TRANSPORT,
+    CONF_USB_PORT,
     DEFAULT_MQTT_TOPIC,
+    DEFAULT_TRANSPORT,
 )
 
 
@@ -28,6 +31,8 @@ class OrconMVS15Config:
     fan_id: RamsesID = RamsesID()
     co2_id: RamsesID = RamsesID()
     mqtt_topic: str = DEFAULT_MQTT_TOPIC
+    transport: str = DEFAULT_TRANSPORT
+    usb_port: str = ""
 
     @classmethod
     def from_data(cls, data: MappingProxyType[str, str]) -> OrconMVS15Config:
@@ -36,7 +41,9 @@ class OrconMVS15Config:
             remote_id=RamsesID(data.get(CONF_REMOTE_ID)),
             fan_id=RamsesID(data.get(CONF_FAN_ID)),
             co2_id=RamsesID(data.get(CONF_CO2_ID)),
-            mqtt_topic=data[CONF_MQTT_TOPIC],
+            mqtt_topic=data.get(CONF_MQTT_TOPIC, DEFAULT_MQTT_TOPIC),
+            transport=data.get(CONF_TRANSPORT, DEFAULT_TRANSPORT),
+            usb_port=data.get(CONF_USB_PORT, ""),
         )
 
 
