@@ -83,7 +83,6 @@ EXCEPTION_PLACEHOLDERS: dict[str, dict[str, str] | None] = {
     "set_preset_failed": {"mode": "low", "error": "offline"},
     "firmware_update_unsupported": None,
     "firmware_update_in_progress": None,
-    "firmware_latest_unknown": None,
     "firmware_version_invalid": {"version": "bad tag"},
     "firmware_update_failed": {"error": "broker offline"},
     "firmware_update_timeout": {"version": "0.6.0"},

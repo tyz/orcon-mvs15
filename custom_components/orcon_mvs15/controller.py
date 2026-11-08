@@ -82,6 +82,18 @@ def _versions_match(reported: str, target: str) -> bool:
     return reported.removeprefix("v") == target.removeprefix("v")
 
 
+def _release_tag(version: str) -> str:
+    """Return the value the firmware needs in its download URL.
+
+    The gateway reports the version stored in the image (`0.5.3`) while the
+    releases are tagged with a leading `v` (`v0.5.3`).
+    """
+    if version == "latest" or version.startswith("v"):
+        return version
+
+    return f"v{version}"
+
+
 class OrconMVS15Controller:
     """Apply the Orcon policy on top of a generic RAMSES session."""
 
@@ -407,28 +419,32 @@ class OrconMVS15Controller:
         """Ask the gateway to install firmware and wait for its new version.
 
         The gateway downloads the image itself; this only sends the console
-        command and waits for the rebooted firmware to report its version.
+        command and waits for the rebooted firmware to report its version. A
+        versionless install asks for the release the OTA URL follows as
+        `latest`, so it also works before `info/latest` has been reported.
         """
         if self.config.transport != TRANSPORT_MQTT:
             raise self._gateway_error("firmware_update_unsupported")
         if self._firmware_update_future is not None:
             raise self._gateway_error("firmware_update_in_progress")
-        target = version.strip() if version is not None else None
-        if target is not None and not FIRMWARE_VERSION_RE.match(target):
-            raise self._gateway_error("firmware_version_invalid", version=version or "")
-        if target is None:
+        if version is None:
             latest = self.gateway_coordinator.data.get("latest_firmware_version")
-            if not isinstance(latest, str) or not latest:
-                raise self._gateway_error("firmware_latest_unknown")
-            target = latest
+            target = latest if isinstance(latest, str) and latest else "latest"
+            command_version = "latest"
+        else:
+            target = version.strip()
+            if not FIRMWARE_VERSION_RE.match(target):
+                raise self._gateway_error(
+                    "firmware_version_invalid", version=version or ""
+                )
+            command_version = _release_tag(target)
         previous = self.gateway_coordinator.data.get("firmware_version")
         future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
         self._firmware_update_future = future
         self._firmware_update_target = target
         try:
             try:
-                if version is not None:
-                    await self.session.send_command(f"ota version {target}")
+                await self.session.send_command(f"ota version {command_version}")
                 await self.session.send_command("ota start")
             except TransportError as err:
                 raise self._gateway_error(

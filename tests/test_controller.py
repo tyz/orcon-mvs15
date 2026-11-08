@@ -516,7 +516,7 @@ async def test_a_reboot_during_a_firmware_update_is_refused(
         await harness.controller.async_reboot_gateway()
 
     assert err.value.translation_key == "reboot_during_update"
-    assert harness.transport.commands == ["ota start"]
+    assert harness.transport.commands == ["ota version latest", "ota start"]
 
     harness.transport.receive_version("0.6.0")
     await settle()
@@ -576,7 +576,7 @@ async def test_the_latest_version_topic_updates_the_gateway_coordinator(
 async def test_installing_the_latest_firmware_waits_for_the_new_version(
     make: Callable[..., Harness],
 ) -> None:
-    """ota start is sent, and the call returns once the new version arrives."""
+    """The latest release is requested explicitly, then ota start is sent."""
     harness = make(firmware_update_timeout=1)
     await harness.controller.start()
     harness.gateway.data = {
@@ -587,7 +587,7 @@ async def test_installing_the_latest_firmware_waits_for_the_new_version(
     task = asyncio.create_task(harness.controller.async_install_firmware())
     await settle()
 
-    assert harness.transport.commands == ["ota start"]
+    assert harness.transport.commands == ["ota version latest", "ota start"]
 
     harness.transport.receive_version("0.6.0")
     await settle()
@@ -596,10 +596,10 @@ async def test_installing_the_latest_firmware_waits_for_the_new_version(
     assert harness.gateway.data["firmware_version"] == "0.6.0"
 
 
-async def test_installing_a_specific_version_selects_it_first(
+async def test_installing_a_specific_version_selects_its_tag_first(
     make: Callable[..., Harness],
 ) -> None:
-    """The firmware needs the version command before ota start."""
+    """The download URL is built from the release tag, not the image version."""
     harness = make(firmware_update_timeout=1)
     await harness.controller.start()
     harness.gateway.data = {"firmware_version": "0.5.3"}
@@ -607,9 +607,45 @@ async def test_installing_a_specific_version_selects_it_first(
     task = asyncio.create_task(harness.controller.async_install_firmware("0.5.2"))
     await settle()
 
-    assert harness.transport.commands == ["ota version 0.5.2", "ota start"]
+    assert harness.transport.commands == ["ota version v0.5.2", "ota start"]
 
     harness.transport.receive_version("0.5.2")
+    await settle()
+    await task
+
+
+async def test_an_already_tagged_version_is_not_tagged_twice(
+    make: Callable[..., Harness],
+) -> None:
+    """A caller may pass the tag exactly as it appears in the release URL."""
+    harness = make(firmware_update_timeout=1)
+    await harness.controller.start()
+    harness.gateway.data = {"firmware_version": "0.5.3"}
+
+    task = asyncio.create_task(harness.controller.async_install_firmware("v0.5.2"))
+    await settle()
+
+    assert harness.transport.commands == ["ota version v0.5.2", "ota start"]
+
+    harness.transport.receive_version("0.5.2")
+    await settle()
+    await task
+
+
+async def test_the_latest_keyword_is_not_tagged(
+    make: Callable[..., Harness],
+) -> None:
+    """`latest` is an OTA URL segment, not a release tag."""
+    harness = make(firmware_update_timeout=1)
+    await harness.controller.start()
+    harness.gateway.data = {"firmware_version": "0.5.3"}
+
+    task = asyncio.create_task(harness.controller.async_install_firmware("latest"))
+    await settle()
+
+    assert harness.transport.commands == ["ota version latest", "ota start"]
+
+    harness.transport.receive_version("0.6.0")
     await settle()
     await task
 
@@ -683,18 +719,22 @@ async def test_installing_is_refused_over_usb(make: Callable[..., Harness]) -> N
     assert harness.transport.commands == []
 
 
-async def test_installing_the_latest_needs_a_known_latest(
+async def test_installing_the_latest_does_not_need_a_known_latest(
     make: Callable[..., Harness],
 ) -> None:
-    """Without a version check there is nothing to install."""
-    harness = make()
+    """Firmware without info/latest can still follow the OTA URL's latest."""
+    harness = make(firmware_update_timeout=1)
     await harness.controller.start()
+    harness.gateway.data = {"firmware_version": "0.4.9"}
 
-    with pytest.raises(HomeAssistantError) as err:
-        await harness.controller.async_install_firmware()
+    task = asyncio.create_task(harness.controller.async_install_firmware())
+    await settle()
 
-    assert err.value.translation_key == "firmware_latest_unknown"
-    assert harness.transport.commands == []
+    assert harness.transport.commands == ["ota version latest", "ota start"]
+
+    harness.transport.receive_version("0.5.3")
+    await settle()
+    await task
 
 
 @pytest.mark.parametrize("version", ["", "bad/tag", "bad tag", "a" * 32])
