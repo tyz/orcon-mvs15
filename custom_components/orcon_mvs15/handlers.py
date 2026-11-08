@@ -127,6 +127,8 @@ class DataHandlers:
 
     def _relative_humidity_handler(self, payload: Code) -> None:
         """Update relative humidity attribute"""
+        if payload.packet.length == 1:
+            return  # A request carries no level; keep the last measurement.
         _LOGGER.info(
             f"Current humidity level: {payload.values['level']}%, "
             f"signal strength: {payload.values['signal_strength']} dBm"
@@ -170,6 +172,8 @@ class DataHandlers:
 
     def _device_info_handler(self, payload: Code) -> None:
         """Update device info"""
+        if payload.packet.length == 1:
+            return  # A request carries no device info fields.
         if payload.values["manufacturer_sub_id"] != "C8":
             _LOGGER.warning(f"This doesn't look like an Orcon device: {payload.values}")
             return

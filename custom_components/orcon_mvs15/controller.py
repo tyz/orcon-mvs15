@@ -168,6 +168,7 @@ class OrconMVS15Controller:
             return True
         if (
             not self.co2_id
+            and self.fan_id
             and packet.type == "I"
             and packet.code == "31E0"
             and packet.length == 8

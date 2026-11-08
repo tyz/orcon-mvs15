@@ -393,6 +393,18 @@ def test_device_info_description_is_split_on_bytes_not_hex_pairs() -> None:
     assert values["description"] == "P\x01Orcon MVS-15"
 
 
+def test_device_info_non_utf8_description_is_replaced() -> None:
+    """A corrupt description must not discard the rest of the device info."""
+    header = "000001C8262101010000050107E9020107E9"
+    description = b"Orcon\xffMVS-15"
+    packet = made("10E0", header + description.hex() + "00")
+
+    values = Code10e0(packet).values
+
+    assert values["description"] == "Orcon\ufffdMVS-15"
+    assert values["product_id"] == "26"
+
+
 def test_device_info_invalid_date_is_not_a_date() -> None:
     """A firmware date out of range is dropped instead of failing the decode."""
     data = (

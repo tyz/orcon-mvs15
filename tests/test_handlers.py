@@ -53,7 +53,7 @@ def device_info_payload(**values: object) -> SimpleNamespace:
             "signal_strength": -50,
             **values,
         },
-        packet=SimpleNamespace(src_id=FAN_ID),
+        packet=SimpleNamespace(src_id=FAN_ID, length=37),
     )
 
 
@@ -63,7 +63,7 @@ async def test_unsupported_device_info_logs_the_values(
     """A warning about an unknown device must show what was received."""
     payload = SimpleNamespace(
         values={"manufacturer_sub_id": "AA", "product_id": "26"},
-        packet=SimpleNamespace(src_id="29:123456"),
+        packet=SimpleNamespace(src_id="29:123456", length=37),
     )
 
     with caplog.at_level(logging.WARNING):
@@ -202,7 +202,7 @@ def test_humidity_handler_stores_level_and_signal(hass: HomeAssistant) -> None:
     handlers = make_recording_handlers(hass)
     payload = SimpleNamespace(
         values={"level": 47, "signal_strength": -44},
-        packet=SimpleNamespace(src_id=FAN_ID),
+        packet=SimpleNamespace(src_id=FAN_ID, length=2),
     )
 
     handlers._relative_humidity_handler(payload)
