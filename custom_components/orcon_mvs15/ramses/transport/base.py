@@ -42,6 +42,10 @@ class Transport(Protocol):
     @property
     def connection_state(self) -> ConnectionState: ...
 
+    async def init(self) -> None:
+        """Discover the gateway before start() subscribes to its topics."""
+        ...  # pragma: no cover
+
     async def start(self, handle_packet: PacketHandler) -> None:
         """Subscribe to the gateway and start delivering frames."""
         ...  # pragma: no cover

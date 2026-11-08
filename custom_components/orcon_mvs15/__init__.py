@@ -24,7 +24,7 @@ from .coordinator import OrconMVS15DataUpdateCoordinator
 from .mqtt import HassMqttBackend
 from .ramses.protocol import RamsesID
 from .ramses.session import RamsesSession
-from .ramses.transport import TransportNotReady
+from .ramses.transport import Transport, TransportNotReady
 from .ramses.transport.ramses_esp import RamsesESP
 from .const import (
     CONF_GATEWAY_ID,
@@ -53,7 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
     co2_coordinator = await _setup_coordinator(hass, entry)
 
     try:
-        transport = RamsesESP(
+        transport: Transport = RamsesESP(
             HassMqttBackend(hass),
             base_topic=config.mqtt_topic,
             gateway_id=config.gateway_id,
