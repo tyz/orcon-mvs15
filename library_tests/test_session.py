@@ -325,7 +325,7 @@ async def test_a_malformed_frame_is_logged_and_still_reaches_the_raw_tap(
         await settle()
 
     assert raw == ["not a frame"]
-    assert "Error parsing MQTT message" in caplog.text
+    assert "Error parsing a received frame" in caplog.text
     await session.stop()
 
 

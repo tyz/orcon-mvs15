@@ -225,7 +225,7 @@ class RamsesSession:
         try:
             packet = RamsesPacket(envelope=envelope)
         except Exception:
-            _LOGGER.error("Error parsing MQTT message %s", envelope, exc_info=True)
+            _LOGGER.error("Error parsing a received frame %s", envelope, exc_info=True)
             return
         if (code_class := CODE_REGISTRY.get(packet.code)) is None:
             _LOGGER.warning(

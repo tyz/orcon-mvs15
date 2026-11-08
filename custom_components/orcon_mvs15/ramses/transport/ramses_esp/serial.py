@@ -194,12 +194,20 @@ class RamsesESPSerial:
             return
         if not text:
             return
-        if text.startswith("#"):
-            self._handle_console_line(text)
-            return
-        if not _FRAME_RE.match(text):
-            _LOGGER.debug("Ignoring a non-frame serial line: %s", text)
-            return
+        # The firmware echoes a written frame as a `#` console line, which can
+        # be glued to the end of a received frame without a line break. A `#`
+        # cannot occur inside a frame, so it separates the two.
+        head, *console = text.split("#")
+        head = head.strip()
+        if head:
+            if _FRAME_RE.match(head):
+                self._enqueue_frame(head)
+            else:
+                _LOGGER.debug("Ignoring a non-frame serial line: %s", head)
+        for chunk in console:
+            self._handle_console_line(f"#{chunk}")
+
+    def _enqueue_frame(self, text: str) -> None:
         envelope: Envelope = {"ts": datetime.now(UTC).isoformat(), "msg": text}
         try:
             self._frames.put_nowait(envelope)

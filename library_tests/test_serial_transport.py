@@ -231,6 +231,45 @@ async def test_the_boot_banner_reports_the_version() -> None:
     assert versions == ["0.5.0"]
 
 
+async def test_a_console_echo_glued_to_a_frame_is_split() -> None:
+    """The firmware echo of a written frame may share the received frame's line."""
+    backend = FakeSerialBackend()
+    transport = RamsesESPSerial(backend, gateway_id=RamsesID(GATEWAY_ID))
+    received: list[dict[str, str]] = []
+    frame = "074  I --- 32:093949 29:223489 32:093949 31E0 008 0000000001001E"
+
+    async def handle(envelope: dict[str, str]) -> None:
+        received.append(envelope)
+
+    await transport.start(handle)
+    try:
+        backend.feed(
+            f"{frame}# RQ --- 18:149960 29:224547 --:------ 10E0 001 00\n".encode()
+        )
+        await settle()
+    finally:
+        await transport.stop()
+
+    assert [envelope["msg"] for envelope in received] == [frame]
+
+
+async def test_a_console_line_glued_to_a_frame_is_still_read() -> None:
+    """A console line after the echo separator is not lost with the frame."""
+    backend = FakeSerialBackend()
+    transport = RamsesESPSerial(backend, gateway_id=RamsesID(GATEWAY_ID))
+    versions: list[str] = []
+    transport.subscribe_version(versions.append)
+
+    await transport.start(AsyncMock())
+    try:
+        backend.feed(f"{FRAME}# ramses_esp 0.5.4\n".encode())
+        await settle()
+    finally:
+        await transport.stop()
+
+    assert versions == ["0.5.4"]
+
+
 async def test_console_and_debug_lines_are_ignored() -> None:
     """Only HGI80 frame lines reach the session."""
     backend = FakeSerialBackend()
