@@ -30,7 +30,9 @@ The integration uses a base topic, `RAMSES/GATEWAY` by default.
 | `<base>/+` | subscribe | Gateway discovery. The last topic segment is treated as the gateway Ramses ID. |
 | `<base>/<gateway>/rx` | subscribe | Frames received by the gateway. |
 | `<base>/<gateway>/tx` | publish | Frames the gateway should transmit. |
-| `<base>/<gateway>/info/version` | subscribe | Gateway firmware version. |
+| `<base>/<gateway>/info/version` | subscribe | Firmware version the gateway is running. |
+| `<base>/<gateway>/info/latest` | subscribe | Newest firmware version found by the last OTA check. |
+| `<base>/<gateway>/cmd/cmd` | publish | Firmware console command, for example `ota start`. |
 
 Receive payload:
 
@@ -47,6 +49,15 @@ Publish payload:
 The timestamp is added by the gateway. The integration does not add a `ts` field
 when publishing.
 
+### Firmware commands
+
+The firmware also accepts plain console commands on `<base>/<gateway>/cmd/cmd`.
+`ota start` installs the latest release; `ota version <tag>` selects a release
+and must be followed by `ota start`. The stick downloads the image over WiFi,
+verifies it and reboots. `ota check` refreshes `info/latest`. The JSON on
+`cmd/result` only says whether the command line was accepted, not whether the
+download succeeded; a failed download leaves the old firmware running.
+
 ## USB serial transport
 
 The RAMSES ESP also exposes an HGI80/evofw3-style text console over its USB
@@ -62,7 +73,12 @@ serial port at 115200 baud.
   source with its own gateway ID before transmitting.
 - **Console output** — lines starting with `#` are firmware messages, not
   frames. The boot banner (`# ramses_esp <version>`) supplies the firmware
-  version that MQTT publishes on the `info/version` topic.
+  version that MQTT publishes on the `info/version` topic. The OTA check prints
+  `# Latest firmware version: <version>`, the serial counterpart of
+  `info/latest`.
+- **Console commands** — firmware commands are written as plain lines
+  terminated by `\r`, for example `ota start`, the same text MQTT publishes on
+  `cmd/cmd`.
 - **Gateway ID** — the firmware derives its ID from the last three bytes of the
   factory MAC: `18:` followed by those bytes masked to 18 bits. That MAC is the
   USB serial number, so the integration derives the gateway ID before opening
@@ -396,4 +412,6 @@ This is a manual debugging path, not part of the integration’s normal transpor
   `31D9` state remains the source of truth for the preset.
 * Packet logging is off by default and writes to `/config/packet.log` when
   enabled in the options flow.
+* Firmware installation is offered over MQTT only. The USB transport can send
+  the commands, but it does not reopen the port after the gateway reboots.
 * The `FFFFFF` device ID conversion is unverified.

@@ -36,7 +36,12 @@ from .const import (
     TRANSPORT_USB,
 )
 
-PLATFORMS = [Platform.FAN, Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS = [
+    Platform.FAN,
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.UPDATE,
+]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,6 +59,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
 
     fan_coordinator = await _setup_coordinator(hass, entry)
     co2_coordinator = await _setup_coordinator(hass, entry)
+    gateway_coordinator = await _setup_coordinator(hass, entry)
 
     is_usb = config.transport == TRANSPORT_USB
     setup_failure_key = "usb_setup_failed" if is_usb else "mqtt_setup_failed"
@@ -111,6 +117,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
             discovery,
             fan_coordinator,
             co2_coordinator,
+            gateway_coordinator,
             entry_id=entry.entry_id,
             packet_log=entry.options.get(CONF_PACKET_LOG, DEFAULT_PACKET_LOG),
             packet_log_path=hass.config.path("packet.log"),
@@ -128,6 +135,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
         config=config,
         fan_coordinator=fan_coordinator,
         co2_coordinator=co2_coordinator,
+        gateway_coordinator=gateway_coordinator,
         session=session,
         controller=controller,
         discovery=discovery,

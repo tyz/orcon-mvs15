@@ -270,6 +270,62 @@ async def test_a_console_line_glued_to_a_frame_is_still_read() -> None:
     assert versions == ["0.5.4"]
 
 
+async def test_the_latest_version_line_is_reported() -> None:
+    """The OTA check prints the newest version on the console."""
+    backend = FakeSerialBackend()
+    transport = RamsesESPSerial(backend, gateway_id=RamsesID(GATEWAY_ID))
+    versions: list[str] = []
+    latest: list[str] = []
+    transport.subscribe_version(versions.append)
+    transport.subscribe_latest(latest.append)
+
+    await transport.start(AsyncMock())
+    try:
+        backend.feed(b"# ramses_esp 0.5.3\n")
+        backend.feed(b"# Latest firmware version: 0.6.0\n")
+    finally:
+        await transport.stop()
+
+    assert versions == ["0.5.3"]
+    assert latest == ["0.6.0"]
+
+
+async def test_send_command_writes_the_console_line() -> None:
+    """A firmware command is a plain console line, not an HGI80 frame."""
+    backend = FakeSerialBackend()
+    transport = RamsesESPSerial(backend, gateway_id=RamsesID(GATEWAY_ID))
+    await transport.start(AsyncMock())
+
+    try:
+        await transport.send_command("ota start")
+    finally:
+        await transport.stop()
+
+    assert backend.writes == [b"ota start\r"]
+
+
+async def test_send_command_before_start_raises() -> None:
+    """An unopened port cannot send a firmware command."""
+    transport = RamsesESPSerial(FakeSerialBackend(), gateway_id=RamsesID(GATEWAY_ID))
+
+    with pytest.raises(TransportError, match="not connected"):
+        await transport.send_command("ota start")
+
+
+async def test_a_command_write_failure_is_a_transport_error() -> None:
+    """A vanished port is reported as a failed firmware command."""
+    backend = FakeSerialBackend()
+    backend.fail_write = True
+    transport = RamsesESPSerial(backend, gateway_id=RamsesID(GATEWAY_ID))
+    await transport.start(AsyncMock())
+
+    try:
+        with pytest.raises(TransportError, match="Failed to send serial command"):
+            await transport.send_command("ota start")
+    finally:
+        await transport.stop()
+
+
 async def test_console_and_debug_lines_are_ignored() -> None:
     """Only HGI80 frame lines reach the session."""
     backend = FakeSerialBackend()
@@ -385,19 +441,24 @@ async def test_subscriptions_can_be_removed() -> None:
     backend = FakeSerialBackend()
     transport = RamsesESPSerial(backend, gateway_id=RamsesID(GATEWAY_ID))
     version_handler: Callable[[str], None] = Mock()
+    latest_handler: Callable[[str], None] = Mock()
     connection_handler: Callable[[ConnectionState], None] = Mock()
     unsub_version = transport.subscribe_version(version_handler)
+    unsub_latest = transport.subscribe_latest(latest_handler)
     unsub_connection = transport.subscribe_connection(connection_handler)
 
     unsub_version()
+    unsub_latest()
     unsub_connection()
     await transport.start(AsyncMock())
     try:
         backend.feed(b"# ramses_esp 0.5.0\n")
+        backend.feed(b"# Latest firmware version: 0.6.0\n")
     finally:
         await transport.stop()
 
     version_handler.assert_not_called()
+    latest_handler.assert_not_called()
     connection_handler.assert_not_called()
 
 

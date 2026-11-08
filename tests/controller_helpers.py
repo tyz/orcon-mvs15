@@ -15,7 +15,11 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.orcon_mvs15.controller as controller_module
-from custom_components.orcon_mvs15.const import CONF_MQTT_TOPIC, DOMAIN
+from custom_components.orcon_mvs15.const import (
+    CONF_MQTT_TOPIC,
+    DOMAIN,
+    TRANSPORT_MQTT,
+)
 from custom_components.orcon_mvs15.controller import OrconMVS15Controller
 from custom_components.orcon_mvs15.discovery import DiscoveryManager
 from custom_components.orcon_mvs15.models import OrconMVS15Config
@@ -86,6 +90,7 @@ class Harness:
     entry: MockConfigEntry
     fan: RecordingCoordinator
     co2: RecordingCoordinator
+    gateway: RecordingCoordinator
     timers: Timers
     config: OrconMVS15Config
     devices: list[tuple[str, RamsesID]] = field(default_factory=list)
@@ -99,6 +104,8 @@ def make_controller(
     co2_id: str = "",
     packet_log: bool = False,
     packet_log_path: str | None = None,
+    transport: str = TRANSPORT_MQTT,
+    firmware_update_timeout: float = 300.0,
 ) -> Harness:
     """Build a controller with fake coordinators and captured timers."""
     timers = Timers()
@@ -121,11 +128,13 @@ def make_controller(
         fan_id=RamsesID(fan_id),
         co2_id=RamsesID(co2_id),
         mqtt_topic=MQTT_TOPIC,
+        transport=transport,
     )
-    transport = LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID))
-    session = RamsesSession(transport)
+    loopback = LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID))
+    session = RamsesSession(loopback)
     fan = RecordingCoordinator()
     co2 = RecordingCoordinator()
+    gateway = RecordingCoordinator()
     controller = OrconMVS15Controller(
         hass,
         config,
@@ -133,18 +142,21 @@ def make_controller(
         discovery,
         fan,  # test stub, duck typed on purpose
         co2,  # test stub, duck typed on purpose
+        gateway,  # test stub, duck typed on purpose
         entry_id=entry.entry_id,
         packet_log=packet_log,
         packet_log_path=packet_log_path,
+        firmware_update_timeout=firmware_update_timeout,
     )
     return Harness(
         controller=controller,
         session=session,
-        transport=transport,
+        transport=loopback,
         discovery=discovery,
         entry=entry,
         fan=fan,
         co2=co2,
+        gateway=gateway,
         timers=timers,
         config=config,
         devices=devices,

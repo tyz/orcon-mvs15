@@ -24,6 +24,7 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
 - Auto-detects the wired `CO2 ruimtesensor 15RF` and creates an HA sensor
 - Auto-detects the fan's humidity sensor and creates an HA sensor
 - Creates a binary sensor that triggers when the fan reports a fault
+- Reports the Ramses ESP firmware version and offers firmware updates over MQTT
 - The fan reported mode is used to update the fan's current preset in HA, so it
   will immediately notice when the mode was changed by a 15RF wireless remote, for example
 
@@ -202,6 +203,24 @@ and the loss is logged once; they recover when the connection returns. A
 configured fan that sends no packet for 30 minutes raises a repair issue; every
 packet from the fan restarts the window.
 
+## Firmware updates
+
+The gateway reports the firmware it is running on
+`<prefix>/<gateway>/info/version` and the newest release it found on
+`<prefix>/<gateway>/info/latest`. Both appear on an update entity on the Ramses
+ESP device. Home Assistant can ask the stick to install the latest release, or a
+specific release tag, and waits up to five minutes for the rebooted firmware to
+report its version.
+
+The stick downloads the image itself from its configured OTA URL, so it needs
+WiFi and internet access. The integration does not transfer the firmware and
+cannot show a download percentage or take a backup. The newest version is
+whatever the gateway last checked; it checks at boot and every 24 hours.
+
+Firmware installation is offered over MQTT only. The USB transport does not
+reopen the port after an unexpected close, so a USB update would leave the
+entities unavailable until the integration is reloaded.
+
 ## Known limitations
 
 - A working 15RF wireless remote is required to send commands. Pairing a fake remote is
@@ -213,6 +232,8 @@ packet from the fan restarts the window.
   being discovered could be adopted as this fan.
 - A USB gateway that is unplugged or reset is not reopened automatically; reload
   the integration or restart Home Assistant once the stick is back.
+- Firmware installation is MQTT-only, reports no download progress, and the
+  offered version can be up to 24 hours old.
 - The optional `/config/packet.log` (rolled over at 10 MB) is a debugging aid.
   It is not a stable interface.
 

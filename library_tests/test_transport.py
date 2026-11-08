@@ -63,19 +63,23 @@ async def test_loopback_delivers_frames_and_versions() -> None:
     transport = LoopbackTransport()
     packet_handler = AsyncMock()
     version_handler = Mock()
+    latest_handler = Mock()
     connection_handler = Mock()
 
     transport.subscribe_version(version_handler)
+    transport.subscribe_latest(latest_handler)
     transport.subscribe_connection(connection_handler)
     await transport.start(packet_handler)
     await transport.receive_frame("081  I --- --:------", TIMESTAMP)
     transport.receive_version("2026.10.1")
+    transport.receive_latest("2026.11.0")
     transport.set_connection_state(ConnectionState.DISCONNECTED)
 
     packet_handler.assert_awaited_once_with(
         {"ts": TIMESTAMP, "msg": "081  I --- --:------"}
     )
     version_handler.assert_called_once_with("2026.10.1")
+    latest_handler.assert_called_once_with("2026.11.0")
     connection_handler.assert_called_once_with(ConnectionState.DISCONNECTED)
     assert transport.started is True
 
@@ -83,6 +87,16 @@ async def test_loopback_delivers_frames_and_versions() -> None:
 
     assert transport.started is False
     assert transport.stopped is True
+
+
+async def test_loopback_records_firmware_commands() -> None:
+    """Offline tools can inspect the console commands the integration sends."""
+    transport = LoopbackTransport()
+
+    await transport.send_command("ota start")
+    await transport.send_command("ota version 0.6.0")
+
+    assert transport.commands == ["ota start", "ota version 0.6.0"]
 
 
 async def test_loopback_only_reports_a_changed_connection_state() -> None:
@@ -102,17 +116,22 @@ async def test_loopback_unsubscribes() -> None:
     """Every subscription has its own unsubscribe callable."""
     transport = LoopbackTransport()
     version_handler = Mock()
+    latest_handler = Mock()
     connection_handler = Mock()
     unsub_version = transport.subscribe_version(version_handler)
+    unsub_latest = transport.subscribe_latest(latest_handler)
     unsub_connection = transport.subscribe_connection(connection_handler)
 
     unsub_version()
+    unsub_latest()
     unsub_connection()
     await transport.start(AsyncMock())
     transport.receive_version("2026.10.1")
+    transport.receive_latest("2026.11.0")
     transport.set_connection_state(ConnectionState.DISCONNECTED)
 
     version_handler.assert_not_called()
+    latest_handler.assert_not_called()
     connection_handler.assert_not_called()
 
 
@@ -125,3 +144,6 @@ async def test_loopback_refuses_to_deliver_before_start() -> None:
 
     with pytest.raises(RuntimeError, match="has not been called"):
         transport.receive_version("2026.10.1")
+
+    with pytest.raises(RuntimeError, match="has not been called"):
+        transport.receive_latest("2026.11.0")

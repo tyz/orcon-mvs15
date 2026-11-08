@@ -92,6 +92,24 @@
     },
     "set_preset_failed": {
       "message": "Kon de stand {mode} van de ventilator niet instellen: {error}"
+    },
+    "firmware_update_unsupported": {
+      "message": "Firmware-updates zijn alleen beschikbaar via MQTT; de USB-verbinding kan niet herstellen van de herstart van de gateway."
+    },
+    "firmware_update_in_progress": {
+      "message": "Er is al een firmware-update bezig."
+    },
+    "firmware_latest_unknown": {
+      "message": "De gateway heeft de nieuwste firmwareversie nog niet gemeld."
+    },
+    "firmware_version_invalid": {
+      "message": "Ongeldige firmwareversie: {version}. Gebruik een releasetag zoals 0.5.3."
+    },
+    "firmware_update_failed": {
+      "message": "Kon de firmware-update niet starten: {error}"
+    },
+    "firmware_update_timeout": {
+      "message": "De gateway heeft na de update geen firmware {version} gemeld. Controleer of de stick met wifi is verbonden en bekijk het logboek van Home Assistant."
     }
   },
   "issues": {
@@ -134,6 +152,11 @@
     "binary_sensor": {
       "fault": {
         "name": "Storing"
+      }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
       }
     }
   }

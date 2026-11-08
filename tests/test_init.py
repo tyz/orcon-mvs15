@@ -193,6 +193,40 @@ async def test_setup_builds_the_runtime_data_and_unloads(
     assert transport.cleaned
 
 
+async def test_setup_creates_a_firmware_update_entity(
+    hass: HomeAssistant, device_registry: DeviceRegistry
+) -> None:
+    """The gateway gets one update entity with the same stable identity."""
+    entry = make_entry(
+        **{
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        }
+    )
+    entry.add_to_hass(hass)
+
+    with patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    updates = hass.states.async_all("update")
+    assert len(updates) == 1
+    update = updates[0]
+    assert update.name == f"Indalo-Tech RAMSES_ESP ({GATEWAY_ID}) Firmware"
+    assert update.attributes["device_class"] == "firmware"
+    assert update.attributes["supported_features"] == 3
+
+    device = device_registry.async_get_device_by_identifier(
+        (DOMAIN, GATEWAY_ID), entry.entry_id
+    )
+    assert device is not None
+    entity_registry = er.async_get(hass)
+    update_entry = entity_registry.async_get(update.entity_id)
+    assert update_entry is not None
+    assert update_entry.device_id == device.id
+
+
 async def test_setup_passes_the_packet_log_option_to_the_controller(
     hass: HomeAssistant,
 ) -> None:
@@ -606,6 +640,10 @@ async def test_usb_setup_uses_the_selected_serial_port(
     assert FakeSerialBackend.last_port == "/dev/serial/by-id/ramses-esp-if00"
     assert FakeSerialTransport.last_instance is not None
     assert entry.data[CONF_GATEWAY_ID] == GATEWAY_ID
+
+    updates = hass.states.async_all("update")
+    assert len(updates) == 1
+    assert updates[0].attributes["supported_features"] == 0
 
     assert await hass.config_entries.async_unload(entry.entry_id)
 

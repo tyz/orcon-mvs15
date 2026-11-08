@@ -80,6 +80,7 @@ class RamsesSession:
         self._raw_handlers: list[RawHandler] = []
         self._connection_handlers: list[ConnectionHandler] = []
         self._version_handlers: list[VersionHandler] = []
+        self._latest_handlers: list[VersionHandler] = []
         self._pending: dict[str, PendingRequest] = {}
         self._unsubs: list[Callable[[], None]] = []
         self._consumer: asyncio.Task[None] | None = None
@@ -111,6 +112,7 @@ class RamsesSession:
             return
         await self._transport.start(self._enqueue_frame)
         self._unsubs.append(self._transport.subscribe_version(self._version_received))
+        self._unsubs.append(self._transport.subscribe_latest(self._latest_received))
         self._unsubs.append(
             self._transport.subscribe_connection(self._connection_changed)
         )
@@ -139,6 +141,12 @@ class RamsesSession:
         if self._closed:
             raise TransportError("The RAMSES session is closed")
         await self._transport.send(packet)
+
+    async def send_command(self, command: str) -> None:
+        """Send a firmware console command to the gateway."""
+        if self._closed:
+            raise TransportError("The RAMSES session is closed")
+        await self._transport.send_command(command)
 
     async def request(self, packet: RamsesPacket) -> None:
         """Publish a packet and retry it until its response arrives."""
@@ -196,6 +204,16 @@ class RamsesSession:
         def _unsubscribe() -> None:
             if handler in self._version_handlers:
                 self._version_handlers.remove(handler)
+
+        return _unsubscribe
+
+    def subscribe_latest(self, handler: VersionHandler) -> Callable[[], None]:
+        """Subscribe to the newest firmware version the gateway found."""
+        self._latest_handlers.append(handler)
+
+        def _unsubscribe() -> None:
+            if handler in self._latest_handlers:
+                self._latest_handlers.remove(handler)
 
         return _unsubscribe
 
@@ -352,6 +370,12 @@ class RamsesSession:
         """Forward a gateway version to the subscribers."""
         asyncio.get_running_loop().create_task(
             self._dispatch_version(self._version_handlers, version)
+        )
+
+    def _latest_received(self, version: str) -> None:
+        """Forward the newest firmware version to the subscribers."""
+        asyncio.get_running_loop().create_task(
+            self._dispatch_version(self._latest_handlers, version)
         )
 
     def _connection_changed(self, state: ConnectionState) -> None:

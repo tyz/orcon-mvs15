@@ -7,8 +7,10 @@ the packet log is written.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import re
 import threading
 
 from collections.abc import Awaitable, Callable
@@ -19,7 +21,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 
-from .const import DOMAIN
+from .const import DOMAIN, TRANSPORT_MQTT
 from .device import update_gateway_version
 from .discovery import DiscoveryManager
 from .handlers import DataHandlers
@@ -56,6 +58,12 @@ FAN_RESPONSE_TIMEOUT = timedelta(minutes=30)
 
 PACKET_LOG_MAX_SIZE = 10_000_000
 
+# The gateway downloads and flashes the image itself, so the wait covers the
+# download, the reboot and the retained version message on reconnect.
+FIRMWARE_UPDATE_TIMEOUT = 300.0
+# The firmware stores the tag in a 32-byte buffer and uses it in a URL path.
+FIRMWARE_VERSION_RE = re.compile(r"^[A-Za-z0-9._-]{1,31}$")
+
 
 def packet_fan_id(packet: RamsesPacket) -> RamsesID:
     """Return the fan a packet came from.
@@ -69,6 +77,11 @@ def packet_fan_id(packet: RamsesPacket) -> RamsesID:
     return packet.src_id
 
 
+def _versions_match(reported: str, target: str) -> bool:
+    """Treat a release tag and the firmware's version string as the same version."""
+    return reported.removeprefix("v") == target.removeprefix("v")
+
+
 class OrconMVS15Controller:
     """Apply the Orcon policy on top of a generic RAMSES session."""
 
@@ -80,10 +93,12 @@ class OrconMVS15Controller:
         discovery: DiscoveryManager,
         fan_coordinator: OrconMVS15DataUpdateCoordinator,
         co2_coordinator: OrconMVS15DataUpdateCoordinator,
+        gateway_coordinator: OrconMVS15DataUpdateCoordinator,
         *,
         entry_id: str,
         packet_log: bool = False,
         packet_log_path: str | None = None,
+        firmware_update_timeout: float = FIRMWARE_UPDATE_TIMEOUT,
     ) -> None:
         self.hass = hass
         self.config = config
@@ -91,7 +106,11 @@ class OrconMVS15Controller:
         self.discovery = discovery
         self.fan_coordinator = fan_coordinator
         self.co2_coordinator = co2_coordinator
+        self.gateway_coordinator = gateway_coordinator
         self.entry_id = entry_id
+        self.firmware_update_timeout = firmware_update_timeout
+        self._firmware_update_future: asyncio.Future[str] | None = None
+        self._firmware_update_target: str | None = None
         self.packet_log_enabled = packet_log
         self.packet_log_path = packet_log_path or hass.config.path("packet.log")
         self.handlers = DataHandlers(
@@ -137,6 +156,11 @@ class OrconMVS15Controller:
         self.handlers.cleanup()
         if self.fan_id:
             async_delete_fan_not_responding_issue(self.hass, self.fan_id)
+        if (
+            self._firmware_update_future is not None
+            and not self._firmware_update_future.done()
+        ):
+            self._firmware_update_future.cancel()
         await self.session.stop()
         await self.hass.async_add_executor_job(self._close_packet_log)
 
@@ -149,6 +173,7 @@ class OrconMVS15Controller:
         self._unsubs.append(self.session.subscribe_raw(self._log_packet))
         self._unsubs.append(self.session.subscribe_connection(self._connection_changed))
         self._unsubs.append(self.session.subscribe_version(self._version_received))
+        self._unsubs.append(self.session.subscribe_latest(self._latest_received))
 
     def _policy(self, handler: Callable[[Code], None]) -> Callable[[Code], None]:
         """Wrap a data handler with the device and echo filters."""
@@ -321,7 +346,11 @@ class OrconMVS15Controller:
     @callback
     def async_set_connected(self, connected: bool) -> None:
         """Pause the watchdog and mark the entities unavailable on an outage."""
-        for coordinator in (self.fan_coordinator, self.co2_coordinator):
+        for coordinator in (
+            self.fan_coordinator,
+            self.co2_coordinator,
+            self.gateway_coordinator,
+        ):
             coordinator.async_set_available(connected)
         if connected:
             self.start_fan_watchdog()
@@ -333,9 +362,87 @@ class OrconMVS15Controller:
         self.async_set_connected(state is ConnectionState.CONNECTED)
 
     def _version_received(self, version: str) -> None:
-        """Store the gateway firmware version on its device."""
+        """Store the gateway firmware version and release a waiting update."""
+        previous = self.gateway_coordinator.data.get("firmware_version")
+        self.gateway_coordinator.async_set_updated_data(
+            {**self.gateway_coordinator.data, "firmware_version": version}
+        )
         update_gateway_version(
             self.hass, self.entry_id, self.config.gateway_id, version
+        )
+        future = self._firmware_update_future
+        target = self._firmware_update_target
+        if (
+            future is not None
+            and not future.done()
+            and (
+                version != previous
+                or target is None
+                or _versions_match(version, target)
+            )
+        ):
+            future.set_result(version)
+
+    def _latest_received(self, version: str) -> None:
+        """Store the newest firmware version the gateway found."""
+        self.gateway_coordinator.async_set_updated_data(
+            {**self.gateway_coordinator.data, "latest_firmware_version": version}
+        )
+
+    async def async_install_firmware(self, version: str | None = None) -> None:
+        """Ask the gateway to install firmware and wait for its new version.
+
+        The gateway downloads the image itself; this only sends the console
+        command and waits for the rebooted firmware to report its version.
+        """
+        if self.config.transport != TRANSPORT_MQTT:
+            raise self._firmware_error("firmware_update_unsupported")
+        if self._firmware_update_future is not None:
+            raise self._firmware_error("firmware_update_in_progress")
+        target = version.strip() if version is not None else None
+        if target is not None and not FIRMWARE_VERSION_RE.match(target):
+            raise self._firmware_error(
+                "firmware_version_invalid", version=version or ""
+            )
+        if target is None:
+            latest = self.gateway_coordinator.data.get("latest_firmware_version")
+            if not isinstance(latest, str) or not latest:
+                raise self._firmware_error("firmware_latest_unknown")
+            target = latest
+        previous = self.gateway_coordinator.data.get("firmware_version")
+        future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+        self._firmware_update_future = future
+        self._firmware_update_target = target
+        try:
+            try:
+                if version is not None:
+                    await self.session.send_command(f"ota version {target}")
+                await self.session.send_command("ota start")
+            except TransportError as err:
+                raise self._firmware_error(
+                    "firmware_update_failed", error=str(err)
+                ) from err
+            try:
+                async with asyncio.timeout(self.firmware_update_timeout):
+                    reported = await future
+            except TimeoutError as err:
+                raise self._firmware_error(
+                    "firmware_update_timeout", version=target
+                ) from err
+        finally:
+            self._firmware_update_future = None
+            self._firmware_update_target = None
+        _LOGGER.info(
+            "Gateway firmware reported %s (installed was %s)", reported, previous
+        )
+
+    @staticmethod
+    def _firmware_error(key: str, **placeholders: str) -> HomeAssistantError:
+        """Build a translated firmware-update error."""
+        return HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key=key,
+            translation_placeholders=placeholders,
         )
 
     async def set_preset_mode(self, mode: str) -> None:
