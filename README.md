@@ -8,7 +8,7 @@ the (optional) wired `CO2 ruimtesensor 15RF` with its CO₂ sensor and the
 (optional) `Afstandsbediening 15RF` wireless remote.
 
 Uses MQTT or a USB serial connection and a
-[Ramses ESP stick](https://indalo-tech.onlineweb.shop/product/ramses-esp) to
+[Ramses ESP stick](https://indalotech.co.uk/products/ramses_esp) to
 communicate with the fan.
 
 I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://github.com/zxdavb/ramses_protocol/wiki) for some code/inspiration/help.
