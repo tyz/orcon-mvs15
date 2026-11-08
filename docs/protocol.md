@@ -32,7 +32,7 @@ The integration uses a base topic, `RAMSES/GATEWAY` by default.
 | `<base>/<gateway>/rx` | subscribe | Frames received by the gateway. |
 | `<base>/<gateway>/tx` | publish | Frames the gateway should transmit. |
 | `<base>/<gateway>/info/version` | subscribe | Firmware version the gateway is running. |
-| `<base>/<gateway>/info/latest` | subscribe | Newest firmware version found by the last OTA check. |
+| `<base>/<gateway>/info/latest` | subscribe | Newest firmware version found by the last OTA check (firmware 0.5.3+). |
 | `<base>/<gateway>/cmd/cmd` | publish | Firmware console command, for example `ota start`. |
 
 Receive payload:
@@ -53,12 +53,17 @@ when publishing.
 ### Firmware commands
 
 The firmware also accepts plain console commands on `<base>/<gateway>/cmd/cmd`.
-`reset` restarts the stick (`esp_restart()`); `ota start` installs the latest
-release; `ota version <tag>` selects a release and must be followed by
-`ota start`. The stick downloads the image over WiFi, verifies it and reboots.
-`ota check` refreshes `info/latest`. The JSON on `cmd/result` only says whether
-the command line was accepted, not whether the download succeeded; a failed
-download leaves the old firmware running.
+`reset` restarts the stick (`esp_restart()`); `ota start` installs the release
+selected by `ota version <tag>`, which must be followed by `ota start`. The tag
+is pasted into the download URL, so it is the release tag (`v0.5.3`), not the
+image version (`0.5.3`); `latest` selects the `/releases/latest/download/` path.
+The stick downloads the image over WiFi, verifies it and reboots.
+
+`ota check` and `info/latest` were added in firmware 0.5.3. Older firmware
+prints the OTA subcommand list for `ota check` and still returns 0, so
+`cmd/result` looks successful even though no check ran. That JSON only says
+whether the command line was accepted, not whether the download succeeded; a
+failed download leaves the old firmware running.
 
 ## USB serial transport
 

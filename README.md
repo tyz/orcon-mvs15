@@ -218,6 +218,15 @@ ESP device. Home Assistant can ask the stick to install the latest release, or a
 specific release tag, and waits up to five minutes for the rebooted firmware to
 report its version.
 
+The update entity needs gateway firmware 0.5.3 or newer: that release added
+`info/latest`. Older firmware never reports the newest release, so the entity
+stays `unknown`. Upgrade once with the `update.install` action. Without a
+version it tells the stick to follow the `latest` release in its configured OTA
+URL, which also works before `info/latest` exists. With a version it pins a
+release tag such as `v0.5.3`; a version without the leading `v` is treated as
+the tag `v0.5.3`. The call still waits for the rebooted firmware to report its
+version, and afterwards the entity works normally.
+
 The stick downloads the image itself from its configured OTA URL, so it needs
 WiFi and internet access. The integration does not transfer the firmware and
 cannot show a download percentage or take a backup. The newest version is
@@ -249,6 +258,8 @@ as the gateway is back instead of after the next broadcast.
   being discovered could be adopted as this fan.
 - Firmware installation is MQTT-only, reports no download progress, and the
   offered version can be up to 24 hours old.
+- The firmware update entity needs gateway firmware 0.5.3 or newer; older
+  firmware cannot report the latest release.
 - The optional `/config/packet.log` (rolled over at 10 MB) is a debugging aid.
   It is not a stable interface.
 

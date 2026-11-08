@@ -99,9 +99,6 @@
     "firmware_update_in_progress": {
       "message": "Er is al een firmware-update bezig."
     },
-    "firmware_latest_unknown": {
-      "message": "De gateway heeft de nieuwste firmwareversie nog niet gemeld."
-    },
     "firmware_version_invalid": {
       "message": "Ongeldige firmwareversie: {version}. Gebruik een releasetag zoals 0.5.3."
     },
