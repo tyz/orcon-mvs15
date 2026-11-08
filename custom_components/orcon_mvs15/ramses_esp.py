@@ -381,13 +381,16 @@ class RamsesESP:
         )
         if self.fan_id and fan_responded:
             self._fan_responded()
-        # 042F is for testing only, when I publish it myself (ss == 0).
+        # 042F arrives from the fan at power-up and drives discovery. Keeping
+        # it lets a manually published frame (ss == 0) test that path without
+        # power-cycling the fan.
         if packet.signal_strength == 0 and packet.code not in {"042F", "22F1", "22F3"}:
             """Ignore the gateway echo of our own requests.
 
-            22F1 and 22F3 are the exception: their echo is the only proof that
-            a locally sent mode command reached the stick, and a timed preset
-            needs it to start its countdown.
+            042F, 22F1 and 22F3 are the exceptions: a manually published 042F
+            still exercises discovery, and the echo of a locally sent mode
+            command is the only proof that it reached the stick, which a timed
+            preset needs to start its countdown.
             """
             return
         if (q_packet := self._send_queue.get(packet)) is not None:
