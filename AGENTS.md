@@ -38,15 +38,20 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
   reformat. The project Ruff rule set is pinned in `ruff.toml`.
 * Type checking: `mypy custom_components/` — only meaningful with Home Assistant
   installed; without it, HA imports are silently ignored.
-* Tests: `pytest -v tests/`. Pytest configuration lives in `pyproject.toml`;
-  `tests/conftest.py` loads `pytest-homeassistant-custom-component` and enables
-  custom integrations.
+* Tests: `python -m pytest -v tests/` for the integration and
+  `python -m pytest -v library_tests/` for the Home Assistant-free core. Pytest
+  configuration lives in `pyproject.toml`; `tests/conftest.py` loads
+  `pytest-homeassistant-custom-component` and enables custom integrations.
+* Library: `pip install --user -e ".[test]"` installs the `ramses` package and
+  its test dependencies. It needs Python `>=3.12` and no Home Assistant.
 * Compile check: `python -m compileall -q custom_components/orcon_mvs15`.
 * Approved test environment: `pip install --user -r requirements-test.txt`,
   which pins `pytest-homeassistant-custom-component==0.13.375` and therefore
   `homeassistant==2026.10.4`; it requires Python `>=3.14`.
 * CI: `.github/workflows/ci.yml` runs `pre-commit`, `mypy` against the
-  installed Home Assistant version, `pytest`, the compile check and hassfest.
+  installed Home Assistant version, `pytest` over both test trees, the compile
+  check and hassfest, plus the library tests on Python 3.12 without Home
+  Assistant.
 
 ## How To Change Code
 
@@ -134,6 +139,10 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 * `ramses/session.py` — `RamsesSession`: the frame queue and consumer, codec
   dispatch, per-code and raw subscriptions, and retried expected-response
   requests. It knows nothing about Home Assistant.
+* `pyproject.toml` — maps the `ramses` package onto
+  `custom_components/orcon_mvs15/ramses/`, so the core installs as
+  `ramses-mvs15` on Python `>=3.12`; `library_tests/` runs it without Home
+  Assistant.
 * `controller.py` — `OrconMVS15Controller`: device ownership, echoes, the `31E0`
   CO₂ discovery heuristic, `042F` fan discovery, the fan watchdog and repair
   issue, humidity polling, packet logging and the init and preset commands.
@@ -171,6 +180,9 @@ rules in this file still apply, and a skill never overrides them.
 * Every bug fix needs a test that fails against the previous code. Verify that it
   does before claiming the fix works.
 * Never weaken an assertion to make a test pass.
+* `library_tests/` imports the top-level `ramses` package and must not import
+  `homeassistant` or `custom_components`. `tests/` holds the integration tests
+  and may use Home Assistant; they feed the per-module coverage gate.
 
 ## Platform and Protocol Gotchas
 

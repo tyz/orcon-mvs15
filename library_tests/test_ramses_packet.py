@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from custom_components.orcon_mvs15.ramses.protocol import (
+from ramses.protocol import (
     RamsesID,
     RamsesPacket,
     RamsesPacketData,

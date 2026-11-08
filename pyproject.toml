@@ -1,3 +1,23 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ramses-mvs15"
+version = "0.1.0"
+description = "Home Assistant-free RAMSES II protocol and transport for the Orcon MVS-15"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[tool.setuptools.packages.find]
+where = ["custom_components/orcon_mvs15"]
+include = ["ramses*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

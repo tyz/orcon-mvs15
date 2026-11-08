@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from custom_components.orcon_mvs15.ramses.protocol import RamsesID, RamsesPacket
-from custom_components.orcon_mvs15.ramses.transport import ConnectionState
-from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
+from ramses.protocol import RamsesID, RamsesPacket
+from ramses.transport import ConnectionState
+from ramses.transport.loopback import LoopbackTransport
 
 GATEWAY_ID = "18:149960"
 FAN_ID = "29:224547"
