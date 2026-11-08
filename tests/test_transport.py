@@ -49,25 +49,61 @@ async def test_loopback_records_sent_packets() -> None:
 
 
 async def test_loopback_delivers_frames_and_versions() -> None:
-    """A started loopback feeds the recorded callbacks and can be stopped."""
+    """A started loopback feeds the subscribed callbacks and can be stopped."""
     transport = LoopbackTransport()
     packet_handler = AsyncMock()
     version_handler = Mock()
+    connection_handler = Mock()
 
-    await transport.start(packet_handler, version_handler)
+    transport.subscribe_version(version_handler)
+    transport.subscribe_connection(connection_handler)
+    await transport.start(packet_handler)
     await transport.receive_frame("081  I --- --:------", TIMESTAMP)
     transport.receive_version("2026.10.1")
+    transport.set_connection_state(ConnectionState.DISCONNECTED)
 
     packet_handler.assert_awaited_once_with(
         {"ts": TIMESTAMP, "msg": "081  I --- --:------"}
     )
     version_handler.assert_called_once_with("2026.10.1")
+    connection_handler.assert_called_once_with(ConnectionState.DISCONNECTED)
     assert transport.started is True
 
     await transport.stop()
 
     assert transport.started is False
     assert transport.stopped is True
+
+
+async def test_loopback_only_reports_a_changed_connection_state() -> None:
+    """Repeating the current state is not a transition."""
+    transport = LoopbackTransport(connection_state=ConnectionState.CONNECTED)
+    connection_handler = Mock()
+    transport.subscribe_connection(connection_handler)
+
+    transport.set_connection_state(ConnectionState.CONNECTED)
+    transport.set_connection_state(ConnectionState.DISCONNECTED)
+    transport.set_connection_state(ConnectionState.DISCONNECTED)
+
+    connection_handler.assert_called_once_with(ConnectionState.DISCONNECTED)
+
+
+async def test_loopback_unsubscribes() -> None:
+    """Every subscription has its own unsubscribe callable."""
+    transport = LoopbackTransport()
+    version_handler = Mock()
+    connection_handler = Mock()
+    unsub_version = transport.subscribe_version(version_handler)
+    unsub_connection = transport.subscribe_connection(connection_handler)
+
+    unsub_version()
+    unsub_connection()
+    await transport.start(AsyncMock())
+    transport.receive_version("2026.10.1")
+    transport.set_connection_state(ConnectionState.DISCONNECTED)
+
+    version_handler.assert_not_called()
+    connection_handler.assert_not_called()
 
 
 async def test_loopback_refuses_to_deliver_before_start() -> None:

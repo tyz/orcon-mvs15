@@ -123,9 +123,9 @@ Offsets below are zero-based indices into the **data hex string**, not bytes.
 * `data[6:10]` — second counter.
 * `data[0:2]` — unknown.
 * Not requestable; sent by the fan on power-up.
-* The session uses `ann_id` as the fan ID when it is present, and falls back to
-  the sender in `src_id` otherwise. This keeps discovery working for units that
-  do not fill in `ann_id`.
+* The controller uses `ann_id` as the fan ID when it is present, and falls back
+  to the sender in `src_id` otherwise. This keeps discovery working for units
+  that do not fill in `ann_id`.
 
 Example from `startup-emu.sh`:
 
@@ -269,7 +269,8 @@ when the payload length is 7.
 | `03` | `high` |
 | `04` | `auto` |
 
-The session sets `discovered_fan_id` from `src_id` when this packet is received.
+The controller sets `discovered_fan_id` from `src_id` when this packet is
+received.
 
 ### `31E0` — vent demand
 
@@ -300,13 +301,15 @@ Retry defaults:
 * `max_retries = 2`
 * `timeout = 2` seconds
 
-The session keeps outstanding packets in a queue and matches responses by
-type, code, source and destination. A packet must be queued **before** it is
-published; otherwise a response that arrives immediately can miss the queue and
+The session keeps outstanding requests pending and matches responses by type,
+code, source and destination. A request must be pending **before** it is
+published; otherwise a response that arrives immediately can be missed and
 trigger an unnecessary retry.
 
 Frames with signal strength `0` are treated as frames sent by this integration
-and are ignored, except for `042F`, which is used for local testing.
+and are ignored, except for `042F`, which is used for local testing, and the
+echoes of a locally sent `22F1` or `22F3` mode command, which prove the command
+reached the stick and start the timed-preset countdown.
 
 ## Discovery flows
 
@@ -322,9 +325,10 @@ makes Home Assistant retry entry setup instead of leaving it pending.
 ### Fan
 
 1. The fan broadcasts `042F` on power-up.
-2. The session takes `ann_id` as the fan ID, or `src_id` when the broadcast has
-   no `ann_id`.
-3. Entity creation calls `init_fan()`, which requests `10E0`, `12A0` and `31D9`.
+2. The controller takes `ann_id` as the fan ID, or `src_id` when the broadcast
+   has no `ann_id`.
+3. The controller calls `init_fan()` after setup and when `042F` discovers the
+   fan; it requests `10E0`, `12A0` and `31D9`.
 4. `31D9` updates the fan mode and fault state.
 
 The current filter accepts `042F` from any source, so a neighbouring Orcon can be
@@ -333,17 +337,18 @@ adopted. This is a known risk; ownership verification is an open design question
 ### Humidity sensor
 
 1. The fan replies to `12A0` with its humidity.
-2. The session uses `src_id` as the humidity device ID and creates the sensor on
-   the fan device.
-3. The session polls `12A0` every 5 minutes, starting when the fan ID is known,
-   so a lost first response does not stop later polls.
+2. The integration uses `src_id` as the humidity device ID and creates the
+   sensor on the fan device.
+3. The controller polls `12A0` every 5 minutes, starting when it initialises or
+   discovers the fan, so a lost first response does not stop later polls.
 
 ### Wired CO₂ room sensor
 
 1. The sensor sends `31E0` (vent demand) to the fan.
 2. If no CO₂ ID is configured and the packet is an 8-byte `I` frame addressed to
-   the fan, the session takes `src_id` as the CO₂ ID.
-3. Entity creation calls `init_co2()`, which requests `10E0`, `1298` and `31E0`.
+   the fan, the controller takes `src_id` as the CO₂ ID.
+3. The controller calls `init_co2()` when the sensor is known or discovered; it
+   requests `10E0`, `1298` and `31E0`.
 
 ## Local test injection
 

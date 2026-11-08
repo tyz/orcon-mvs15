@@ -14,22 +14,18 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.orcon_mvs15.const import DOMAIN
 from custom_components.orcon_mvs15.handlers import DataHandlers
-from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 
 FAN_ID = "29:224547"
 
 
 def make_handlers(hass: HomeAssistant) -> DataHandlers:
     """Build handlers with only the attributes they touch."""
-    entry = SimpleNamespace(
-        runtime_data=SimpleNamespace(
-            co2_coordinator=SimpleNamespace(data={}),
-            fan_coordinator=SimpleNamespace(data={}),
-            ramses_esp=SimpleNamespace(),
-            cleanup=[],
-        )
+    return DataHandlers(
+        hass,
+        SimpleNamespace(data={}),
+        SimpleNamespace(data={}),
+        entry_id="test_entry",
     )
-    return DataHandlers(hass, entry)
 
 
 def make_entry_handlers(
@@ -38,12 +34,12 @@ def make_entry_handlers(
     """Build handlers for an entry that can own devices."""
     entry = MockConfigEntry(domain=DOMAIN, data={})
     entry.add_to_hass(hass)
-    entry.runtime_data = SimpleNamespace(
-        co2_coordinator=SimpleNamespace(data={}),
-        fan_coordinator=SimpleNamespace(data={}),
-        cleanup=[],
+    return entry, DataHandlers(
+        hass,
+        SimpleNamespace(data={}),
+        SimpleNamespace(data={}),
+        entry_id=entry.entry_id,
     )
-    return entry, DataHandlers(hass, entry)
 
 
 def device_info_payload(**values: object) -> SimpleNamespace:
@@ -171,45 +167,12 @@ class RecordingCoordinator:
 
 def make_recording_handlers(hass: HomeAssistant) -> DataHandlers:
     """Build handlers whose coordinators record pushed data."""
-    entry = SimpleNamespace(
-        runtime_data=SimpleNamespace(
-            co2_coordinator=RecordingCoordinator(),
-            fan_coordinator=RecordingCoordinator(),
-            cleanup=[],
-        )
+    return DataHandlers(
+        hass,
+        RecordingCoordinator(),
+        RecordingCoordinator(),
+        entry_id="test_entry",
     )
-    return DataHandlers(hass, entry)
-
-
-def test_powerup_handler_stores_the_announced_fan(
-    hass: HomeAssistant,
-) -> None:
-    """042F announces the fan ID and the strength of the startup broadcast."""
-    handlers = make_recording_handlers(hass)
-    payload = SimpleNamespace(
-        values={"signal_strength": -61},
-        packet=SimpleNamespace(ann_id=FAN_ID),
-    )
-
-    handlers._powerup_handler(payload)
-
-    assert handlers.fan_coordinator.data == {
-        "discovered_fan_id": FAN_ID,
-        "fan_signal_strength": -61,
-    }
-
-
-def test_powerup_handler_falls_back_to_the_sender(hass: HomeAssistant) -> None:
-    """A 042F without an announced ID still names the fan as its sender."""
-    handlers = make_recording_handlers(hass)
-    payload = SimpleNamespace(
-        values={"signal_strength": -61},
-        packet=SimpleNamespace(ann_id=RamsesID(), src_id=RamsesID(FAN_ID)),
-    )
-
-    handlers._powerup_handler(payload)
-
-    assert handlers.fan_coordinator.data["discovered_fan_id"] == FAN_ID
 
 
 def test_fan_state_handler_stores_mode_fault_and_signal(

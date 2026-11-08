@@ -23,6 +23,7 @@ from custom_components.orcon_mvs15.coordinator import (
 from custom_components.orcon_mvs15.diagnostics import (
     async_get_config_entry_diagnostics,
 )
+from custom_components.orcon_mvs15.discovery import DiscoveryManager
 from custom_components.orcon_mvs15.models import (
     OrconMVS15Config,
     OrconMVS15RuntimeData,
@@ -31,8 +32,8 @@ from custom_components.orcon_mvs15.ramses.protocol import (
     RamsesID,
     RamsesPacketDatetime,
 )
+from custom_components.orcon_mvs15.ramses.session import RamsesSession
 from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
-from custom_components.orcon_mvs15.ramses_esp import RamsesESP
 
 REMOTE_ID = "29:163058"
 FAN_ID = "29:224547"
@@ -55,7 +56,7 @@ def make_coordinator(
 async def test_diagnostics_report_entry_session_and_coordinators(
     hass: HomeAssistant,
 ) -> None:
-    """Diagnostics show the IDs, handlers and decoded values, and serialise."""
+    """Diagnostics show the IDs, subscriptions and decoded values, and serialise."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="Orcon MVS-15",
@@ -68,16 +69,9 @@ async def test_diagnostics_report_entry_session_and_coordinators(
     )
     entry.add_to_hass(hass)
 
-    session = RamsesESP(
-        hass=hass,
-        transport=LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID)),
-        remote_id=RamsesID(REMOTE_ID),
-        fan_id=RamsesID(FAN_ID),
-        co2_id=RamsesID(),
-        gateway_id=RamsesID(GATEWAY_ID),
-        config_entry_id=entry.entry_id,
-    )
-    session.add_handler("31D9", Mock())
+    session = RamsesSession(LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID)))
+    session.subscribe("31D9", Mock())
+    discovery = DiscoveryManager(hass, entry, {"fan": RamsesID(FAN_ID)})
 
     entry.runtime_data = OrconMVS15RuntimeData(
         config=OrconMVS15Config(
@@ -96,8 +90,9 @@ async def test_diagnostics_report_entry_session_and_coordinators(
             },
         ),
         co2_coordinator=make_coordinator(hass, entry, {"co2": 812}),
-        rem_coordinator=make_coordinator(hass, entry, {"last_command": "low"}),
-        ramses_esp=session,
+        session=session,
+        controller=Mock(),
+        discovery=discovery,
     )
 
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
@@ -114,11 +109,14 @@ async def test_diagnostics_report_entry_session_and_coordinators(
     }
     assert diagnostics["session"] == {
         "gateway_id": GATEWAY_ID,
-        "remote_id": REMOTE_ID,
+        "connection_state": "connected",
+        "pending_requests": 0,
+        "subscribed_codes": ["31D9"],
+    }
+    assert diagnostics["devices"] == {
         "fan_id": FAN_ID,
         "co2_id": RamsesID.empty_address,
-        "pending_packets": 0,
-        "handled_codes": ["31D9"],
+        "remote_id": REMOTE_ID,
     }
     assert diagnostics["coordinators"]["fan"] == {
         "last_update_success": True,
@@ -129,6 +127,5 @@ async def test_diagnostics_report_entry_session_and_coordinators(
         },
     }
     assert diagnostics["coordinators"]["co2"]["data"] == {"co2": 812}
-    assert diagnostics["coordinators"]["remote"]["data"] == {"last_command": "low"}
 
     json.dumps(diagnostics)

@@ -6,9 +6,11 @@ from types import MappingProxyType
 
 from homeassistant.config_entries import ConfigEntry
 
+from .controller import OrconMVS15Controller
 from .coordinator import OrconMVS15DataUpdateCoordinator
+from .discovery import DiscoveryManager
 from .ramses.protocol import RamsesID
-from .ramses_esp import RamsesESP
+from .ramses.session import RamsesSession
 from .const import (
     CONF_GATEWAY_ID,
     CONF_REMOTE_ID,
@@ -42,8 +44,9 @@ class OrconMVS15RuntimeData:
     config: OrconMVS15Config
     fan_coordinator: OrconMVS15DataUpdateCoordinator
     co2_coordinator: OrconMVS15DataUpdateCoordinator
-    rem_coordinator: OrconMVS15DataUpdateCoordinator
-    ramses_esp: RamsesESP
+    session: RamsesSession
+    controller: OrconMVS15Controller
+    discovery: DiscoveryManager
     cleanup: list[Callable[[], None]] = field(default_factory=list)
 
 

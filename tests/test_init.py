@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 
-from collections.abc import Callable
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -29,17 +28,24 @@ from custom_components.orcon_mvs15.const import (
     DOMAIN,
 )
 from custom_components.orcon_mvs15.ramses.protocol import RamsesID
-from custom_components.orcon_mvs15.ramses.transport import TransportError
+from custom_components.orcon_mvs15.ramses.transport import (
+    ConnectionState,
+    TransportError,
+)
+from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
 
 REMOTE_ID = "29:163058"
 FAN_ID = "29:224547"
 CO2_ID = "29:111111"
 GATEWAY_ID = "18:149960"
 MQTT_TOPIC = "RAMSES/GATEWAY"
+TIMESTAMP = "2026-09-11T17:29:09.534250+02:00"
+
+POWERUP = f"044 I --- --:------ --:------ {FAN_ID} 042F 006 00004C004C00"
 
 
-class FakeTransport:
-    """Stand-in for the gateway transport during entry setup."""
+class FakeTransport(LoopbackTransport):
+    """Stand-in for the MQTT transport during entry setup."""
 
     last_instance: FakeTransport | None = None
 
@@ -47,64 +53,40 @@ class FakeTransport:
         self,
         backend: object,
         base_topic: str,
-        gateway_id: RamsesID,
-        connection_callback: Callable[[bool], None] | None = None,
+        gateway_id: RamsesID = RamsesID(),
+        discovery_timeout: float = 10.0,
     ) -> None:
-        self.gateway_id = gateway_id
-        self.connection_callback = connection_callback
+        super().__init__(gateway_id=gateway_id)
+        self.backend = backend
+        self.base_topic = base_topic
         self.cleaned = False
         FakeTransport.last_instance = self
 
     async def init(self) -> None:
-        pass
+        """Discover the gateway the way the real transport does."""
+        if not self.gateway_id:
+            self._gateway_id = RamsesID(GATEWAY_ID)
 
     async def stop(self) -> None:
+        """Record that the transport was released."""
         self.cleaned = True
+        await super().stop()
 
 
-class FakeRamses:
-    """Stand-in for the protocol session during entry setup."""
-
-    def __init__(self, **kwargs: object) -> None:
-        self.kwargs = kwargs
-        self.handlers: dict[str, object] = {}
-        self.cleaned = False
-        self.started = False
-
-    def add_handler(self, code: str, func: object) -> None:
-        self.handlers[code] = func
-
-    async def init_fan(self, discovered_fan_id: RamsesID) -> None:
-        self.discovered_fan_id = discovered_fan_id
-
-    async def setup(self, event: object | None = None) -> None:
-        self.started = True
-
-    def async_set_mqtt_connected(self, connected: bool) -> None:
-        self.mqtt_connected = connected
-
-    def cleanup(self) -> None:
-        self.cleaned = True
-
-    async def async_cleanup(self) -> None:
-        self.cleaned = True
-        transport = self.kwargs.get("transport")
-        if transport is not None:
-            await transport.stop()
+def make_entry(**data: str) -> MockConfigEntry:
+    """Build a registered config entry with the MQTT topic filled in."""
+    return MockConfigEntry(domain=DOMAIN, data={CONF_MQTT_TOPIC: MQTT_TOPIC, **data})
 
 
 async def test_setup_retries_when_the_gateway_is_not_found(
     hass: HomeAssistant,
 ) -> None:
     """A missing gateway is a retryable setup failure, not a broken entry."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={CONF_REMOTE_ID: REMOTE_ID, CONF_MQTT_TOPIC: MQTT_TOPIC},
-    )
+    entry = make_entry(**{CONF_REMOTE_ID: REMOTE_ID, CONF_MQTT_TOPIC: MQTT_TOPIC})
     entry.add_to_hass(hass)
 
     with patch(
-        "custom_components.orcon_mvs15.RamsesEspTransport.init",
+        "custom_components.orcon_mvs15.RamsesESP.init",
         AsyncMock(side_effect=TransportError("No gateway message")),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id) is False
@@ -122,21 +104,17 @@ async def test_setup_builds_the_runtime_data_and_unloads(
     hass: HomeAssistant, device_registry: DeviceRegistry
 ) -> None:
     """A successful setup fills runtime data, then unload cleans it up."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
+    entry = make_entry(
+        **{
             CONF_REMOTE_ID: REMOTE_ID,
             CONF_FAN_ID: FAN_ID,
             CONF_GATEWAY_ID: GATEWAY_ID,
             CONF_MQTT_TOPIC: MQTT_TOPIC,
-        },
+        }
     )
     entry.add_to_hass(hass)
 
-    with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
-        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
-    ):
+    with patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -144,10 +122,10 @@ async def test_setup_builds_the_runtime_data_and_unloads(
     runtime = entry.runtime_data
     assert runtime.config.fan_id == FAN_ID
     assert runtime.config.gateway_id == GATEWAY_ID
-    assert runtime.ramses_esp.kwargs["fan_id"] == RamsesID(FAN_ID)
-    assert runtime.ramses_esp.kwargs["config_entry_id"] == entry.entry_id
-    assert runtime.ramses_esp.kwargs["packet_log"] is False
-    assert set(runtime.ramses_esp.handlers) == {
+    assert runtime.session.gateway_id == GATEWAY_ID
+    assert runtime.controller.fan_id == FAN_ID
+    assert runtime.discovery.get("fan") == FAN_ID
+    assert runtime.session.subscribed_codes == {
         "042F",
         "10E0",
         "1298",
@@ -157,18 +135,19 @@ async def test_setup_builds_the_runtime_data_and_unloads(
         "31D9",
         "31E0",
     }
-    assert runtime.ramses_esp.started
     assert FakeTransport.last_instance is not None
-    connection_callback = FakeTransport.last_instance.connection_callback
-    assert connection_callback is not None
-    connection_callback(False)
+    transport = FakeTransport.last_instance
+    assert transport.started
+
+    transport.set_connection_state(ConnectionState.DISCONNECTED)
+    await hass.async_block_till_done()
     assert runtime.fan_coordinator.last_update_success is False
     assert runtime.co2_coordinator.last_update_success is False
-    assert runtime.rem_coordinator.last_update_success is False
-    assert runtime.ramses_esp.mqtt_connected is False
-    connection_callback(True)
+
+    transport.set_connection_state(ConnectionState.CONNECTED)
+    await hass.async_block_till_done()
     assert runtime.fan_coordinator.last_update_success is True
-    assert runtime.ramses_esp.mqtt_connected is True
+
     fan_states = hass.states.async_all("fan")
     assert len(fan_states) == 1
     assert fan_states[0].name == "Orcon MVS-15 fan (29:224547) Fan"
@@ -181,13 +160,13 @@ async def test_setup_builds_the_runtime_data_and_unloads(
     await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.NOT_LOADED
-    assert runtime.ramses_esp.cleaned
+    assert transport.cleaned
 
 
-async def test_setup_passes_the_packet_log_option_to_the_session(
+async def test_setup_passes_the_packet_log_option_to_the_controller(
     hass: HomeAssistant,
 ) -> None:
-    """Enabling the option turns the debugging log on for the session."""
+    """Enabling the option turns the debugging log on for the controller."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -200,43 +179,29 @@ async def test_setup_passes_the_packet_log_option_to_the_session(
     )
     entry.add_to_hass(hass)
 
-    with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
-        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
-    ):
+    with patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-    assert entry.runtime_data.ramses_esp.kwargs["packet_log"] is True
+    assert entry.runtime_data.controller.packet_log_enabled is True
 
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 async def test_setup_stores_a_discovered_fan_id(hass: HomeAssistant) -> None:
     """The fan announced by 042F is remembered without reloading the entry."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_REMOTE_ID: REMOTE_ID,
-            CONF_GATEWAY_ID: GATEWAY_ID,
-            CONF_MQTT_TOPIC: MQTT_TOPIC,
-        },
-    )
+    entry = make_entry(**{CONF_REMOTE_ID: REMOTE_ID, CONF_GATEWAY_ID: GATEWAY_ID})
     entry.add_to_hass(hass)
 
-    with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
-        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
-    ):
+    with patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-    runtime = entry.runtime_data
-    assert runtime.fan_coordinator.data == {}
+    assert entry.runtime_data.fan_coordinator.data == {}
+    assert FakeTransport.last_instance is not None
 
-    runtime.fan_coordinator.async_set_updated_data(
-        {"discovered_fan_id": RamsesID(FAN_ID)}
-    )
+    await FakeTransport.last_instance.receive_frame(POWERUP, TIMESTAMP)
+    await hass.async_block_till_done()
 
     assert entry.data[CONF_FAN_ID] == FAN_ID
 
@@ -247,32 +212,24 @@ async def test_an_empty_discovered_fan_id_is_not_stored(
     hass: HomeAssistant,
 ) -> None:
     """A 042F without a sender must not stop discovery for the real fan."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_REMOTE_ID: REMOTE_ID,
-            CONF_GATEWAY_ID: GATEWAY_ID,
-            CONF_MQTT_TOPIC: MQTT_TOPIC,
-        },
-    )
+    entry = make_entry(**{CONF_REMOTE_ID: REMOTE_ID, CONF_GATEWAY_ID: GATEWAY_ID})
     entry.add_to_hass(hass)
 
-    with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
-        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
-    ):
+    with patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-    runtime = entry.runtime_data
+    assert FakeTransport.last_instance is not None
 
-    runtime.fan_coordinator.async_set_updated_data({"discovered_fan_id": RamsesID()})
+    await FakeTransport.last_instance.receive_frame(
+        "044 I --- --:------ --:------ --:------ 042F 006 00004C004C00", TIMESTAMP
+    )
+    await hass.async_block_till_done()
 
     assert CONF_FAN_ID not in entry.data
 
-    runtime.fan_coordinator.async_set_updated_data(
-        {"discovered_fan_id": RamsesID(FAN_ID)}
-    )
+    await FakeTransport.last_instance.receive_frame(POWERUP, TIMESTAMP)
+    await hass.async_block_till_done()
 
     assert entry.data[CONF_FAN_ID] == FAN_ID
 
@@ -283,21 +240,19 @@ async def test_setup_creates_the_configured_devices(
     hass: HomeAssistant, device_registry: DeviceRegistry
 ) -> None:
     """The fan and CO2 devices exist before any entity is added."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
+    entry = make_entry(
+        **{
             CONF_REMOTE_ID: REMOTE_ID,
             CONF_FAN_ID: FAN_ID,
             CONF_CO2_ID: CO2_ID,
             CONF_GATEWAY_ID: GATEWAY_ID,
             CONF_MQTT_TOPIC: MQTT_TOPIC,
-        },
+        }
     )
     entry.add_to_hass(hass)
 
     with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
-        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport),
         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
@@ -328,28 +283,19 @@ async def test_a_discovered_fan_creates_its_device(
     hass: HomeAssistant, device_registry: DeviceRegistry
 ) -> None:
     """Discovery registers the device even when no entity is added yet."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_REMOTE_ID: REMOTE_ID,
-            CONF_GATEWAY_ID: GATEWAY_ID,
-            CONF_MQTT_TOPIC: MQTT_TOPIC,
-        },
-    )
+    entry = make_entry(**{CONF_REMOTE_ID: REMOTE_ID, CONF_GATEWAY_ID: GATEWAY_ID})
     entry.add_to_hass(hass)
 
     with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
-        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport),
         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-    runtime = entry.runtime_data
-    runtime.fan_coordinator.async_set_updated_data(
-        {"discovered_fan_id": RamsesID(FAN_ID)}
-    )
+    assert FakeTransport.last_instance is not None
+    await FakeTransport.last_instance.receive_frame(POWERUP, TIMESTAMP)
+    await hass.async_block_till_done()
 
     fan = device_registry.async_get_device_by_identifier(
         (DOMAIN, FAN_ID), entry.entry_id
@@ -364,24 +310,10 @@ async def test_a_discovered_fan_creates_its_device(
 
 async def test_setup_stores_a_discovered_gateway_id(hass: HomeAssistant) -> None:
     """A wildcard-discovered gateway is remembered in the entry data."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={CONF_REMOTE_ID: REMOTE_ID, CONF_MQTT_TOPIC: MQTT_TOPIC},
-    )
+    entry = make_entry(**{CONF_REMOTE_ID: REMOTE_ID, CONF_MQTT_TOPIC: MQTT_TOPIC})
     entry.add_to_hass(hass)
 
-    class DiscoveringFakeTransport(FakeTransport):
-        """Transport that discovers a gateway during init."""
-
-        async def init(self) -> None:
-            self.gateway_id = RamsesID(GATEWAY_ID)
-
-    with (
-        patch(
-            "custom_components.orcon_mvs15.RamsesEspTransport", DiscoveringFakeTransport
-        ),
-        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
-    ):
+    with patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -395,20 +327,13 @@ async def test_setup_retries_when_the_session_cannot_be_built(
     hass: HomeAssistant,
 ) -> None:
     """A session construction error is retryable, not a permanent failure."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_REMOTE_ID: REMOTE_ID,
-            CONF_GATEWAY_ID: GATEWAY_ID,
-            CONF_MQTT_TOPIC: MQTT_TOPIC,
-        },
-    )
+    entry = make_entry(**{CONF_REMOTE_ID: REMOTE_ID, CONF_GATEWAY_ID: GATEWAY_ID})
     entry.add_to_hass(hass)
 
     with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport),
         patch(
-            "custom_components.orcon_mvs15.RamsesESP",
+            "custom_components.orcon_mvs15.RamsesSession",
             side_effect=RuntimeError("bad configuration"),
         ),
     ):
@@ -423,20 +348,13 @@ async def test_setup_retries_when_the_session_cannot_be_built(
 
 async def test_setup_keeps_a_retryable_session_error(hass: HomeAssistant) -> None:
     """ConfigEntryNotReady from the session is not wrapped a second time."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_REMOTE_ID: REMOTE_ID,
-            CONF_GATEWAY_ID: GATEWAY_ID,
-            CONF_MQTT_TOPIC: MQTT_TOPIC,
-        },
-    )
+    entry = make_entry(**{CONF_REMOTE_ID: REMOTE_ID, CONF_GATEWAY_ID: GATEWAY_ID})
     entry.add_to_hass(hass)
 
     with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport),
         patch(
-            "custom_components.orcon_mvs15.RamsesESP",
+            "custom_components.orcon_mvs15.RamsesSession",
             side_effect=ConfigEntryNotReady("MQTT is not ready"),
         ),
     ):
@@ -448,61 +366,62 @@ async def test_setup_keeps_a_retryable_session_error(hass: HomeAssistant) -> Non
 
 async def test_setup_waits_for_home_assistant_to_start(hass: HomeAssistant) -> None:
     """During a restart the session starts with Home Assistant, not before."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
+    entry = make_entry(
+        **{
             CONF_REMOTE_ID: REMOTE_ID,
             CONF_FAN_ID: FAN_ID,
             CONF_GATEWAY_ID: GATEWAY_ID,
             CONF_MQTT_TOPIC: MQTT_TOPIC,
-        },
+        }
     )
     entry.add_to_hass(hass)
     hass.set_state(CoreState.not_running)
 
     with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
-        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport),
+        patch("custom_components.orcon_mvs15.asyncio.sleep", AsyncMock()),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-    runtime = entry.runtime_data
-    assert runtime.ramses_esp.started is False
+        runtime = entry.runtime_data
+        assert FakeTransport.last_instance is not None
+        assert FakeTransport.last_instance.started is False
 
-    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
-    await hass.async_block_till_done()
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+        await hass.async_block_till_done()
 
-    assert runtime.ramses_esp.started is True
+    assert FakeTransport.last_instance.started is True
+    assert runtime.session.subscribed_codes
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 async def test_a_failed_session_start_retries_the_entry(
     hass: HomeAssistant,
 ) -> None:
     """A broker that is not ready must send the entry back to SETUP_RETRY."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
+    entry = make_entry(
+        **{
             CONF_REMOTE_ID: REMOTE_ID,
             CONF_FAN_ID: FAN_ID,
             CONF_GATEWAY_ID: GATEWAY_ID,
             CONF_MQTT_TOPIC: MQTT_TOPIC,
-        },
+        }
     )
     entry.add_to_hass(hass)
 
-    class MqttNotReady(FakeRamses):
-        """Session that finds no MQTT client."""
-
-        async def setup(self, event: object | None = None) -> None:
-            raise ConfigEntryNotReady(
-                translation_domain=DOMAIN,
-                translation_key="mqtt_not_available",
-            )
-
     with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
-        patch("custom_components.orcon_mvs15.RamsesESP", MqttNotReady),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport),
+        patch(
+            "custom_components.orcon_mvs15.RamsesSession.start",
+            AsyncMock(
+                side_effect=ConfigEntryNotReady(
+                    translation_domain=DOMAIN,
+                    translation_key="mqtt_not_available",
+                )
+            ),
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id) is False
 
@@ -517,26 +436,22 @@ async def test_an_unexpected_session_start_failure_is_retryable(
     hass: HomeAssistant,
 ) -> None:
     """A broken session becomes a translated retryable failure."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
+    entry = make_entry(
+        **{
             CONF_REMOTE_ID: REMOTE_ID,
             CONF_FAN_ID: FAN_ID,
             CONF_GATEWAY_ID: GATEWAY_ID,
             CONF_MQTT_TOPIC: MQTT_TOPIC,
-        },
+        }
     )
     entry.add_to_hass(hass)
 
-    class BrokenSession(FakeRamses):
-        """Session that cannot subscribe."""
-
-        async def setup(self, event: object | None = None) -> None:
-            raise RuntimeError("the stick is unplugged")
-
     with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
-        patch("custom_components.orcon_mvs15.RamsesESP", BrokenSession),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport),
+        patch(
+            "custom_components.orcon_mvs15.RamsesSession.start",
+            AsyncMock(side_effect=RuntimeError("the stick is unplugged")),
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id) is False
 
@@ -553,30 +468,29 @@ async def test_a_failed_start_after_restart_schedules_a_reload(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
     """The deferred start has no caller to raise to, so it reloads instead."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
+    entry = make_entry(
+        **{
             CONF_REMOTE_ID: REMOTE_ID,
             CONF_FAN_ID: FAN_ID,
             CONF_GATEWAY_ID: GATEWAY_ID,
             CONF_MQTT_TOPIC: MQTT_TOPIC,
-        },
+        }
     )
     entry.add_to_hass(hass)
     hass.set_state(CoreState.not_running)
 
-    class SlowMqtt(FakeRamses):
-        """Session whose start fails once."""
-
-        async def setup(self, event: object | None = None) -> None:
-            raise ConfigEntryNotReady(
-                translation_domain=DOMAIN,
-                translation_key="mqtt_not_available",
-            )
-
     with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
-        patch("custom_components.orcon_mvs15.RamsesESP", SlowMqtt),
+        patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport),
+        patch(
+            "custom_components.orcon_mvs15.RamsesSession.start",
+            AsyncMock(
+                side_effect=ConfigEntryNotReady(
+                    translation_domain=DOMAIN,
+                    translation_key="mqtt_not_available",
+                )
+            ),
+        ),
+        patch("custom_components.orcon_mvs15.asyncio.sleep", AsyncMock()),
         patch.object(hass.config_entries, "async_schedule_reload") as reload,
         caplog.at_level(logging.ERROR),
     ):
@@ -592,21 +506,17 @@ async def test_a_failed_start_after_restart_schedules_a_reload(
 
 async def test_signal_strength_is_disabled_by_default(hass: HomeAssistant) -> None:
     """A noisy diagnostic entity stays out of the history until enabled."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
+    entry = make_entry(
+        **{
             CONF_REMOTE_ID: REMOTE_ID,
             CONF_FAN_ID: FAN_ID,
             CONF_GATEWAY_ID: GATEWAY_ID,
             CONF_MQTT_TOPIC: MQTT_TOPIC,
-        },
+        }
     )
     entry.add_to_hass(hass)
 
-    with (
-        patch("custom_components.orcon_mvs15.RamsesEspTransport", FakeTransport),
-        patch("custom_components.orcon_mvs15.RamsesESP", FakeRamses),
-    ):
+    with patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -625,10 +535,7 @@ async def test_stale_device_removal_keeps_the_gateway(
     hass: HomeAssistant, device_registry: DeviceRegistry
 ) -> None:
     """A fan may be removed; the gateway stays while the entry exists."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={CONF_GATEWAY_ID: GATEWAY_ID, CONF_MQTT_TOPIC: MQTT_TOPIC},
-    )
+    entry = make_entry(**{CONF_GATEWAY_ID: GATEWAY_ID, CONF_MQTT_TOPIC: MQTT_TOPIC})
     entry.add_to_hass(hass)
     gateway = device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,

@@ -10,9 +10,9 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.util import dt as dt_util
 
+from .coordinator import OrconMVS15DataUpdateCoordinator
 from .ramses.protocol import Code
 from .device import update_device_info
-from .models import OrconMVS15ConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,16 +24,22 @@ class HandlerException(Exception):
 
 
 class DataHandlers:
-    def __init__(self, hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        fan_coordinator: OrconMVS15DataUpdateCoordinator,
+        co2_coordinator: OrconMVS15DataUpdateCoordinator,
+        *,
+        entry_id: str,
+    ) -> None:
         self.hass = hass
-        self.config_entry = entry
-        self.co2_coordinator = entry.runtime_data.co2_coordinator
-        self.fan_coordinator = entry.runtime_data.fan_coordinator
+        self.entry_id = entry_id
+        self.co2_coordinator = co2_coordinator
+        self.fan_coordinator = fan_coordinator
         self._fan_timer_end: datetime | None = None
         self._fan_timer_unsub: Callable[[], None] | None = None
         self._fan_timer_tick_unsub: Callable[[], None] | None = None
         self.pointers: dict[str, Callable[[Code], None]] = {
-            "042F": self._powerup_handler,
             "10E0": self._device_info_handler,
             "1298": self._co2_handler,
             "12A0": self._relative_humidity_handler,
@@ -42,7 +48,6 @@ class DataHandlers:
             "31D9": self._fan_state_handler,
             "31E0": self._vent_demand_handler,
         }
-        entry.runtime_data.cleanup.append(self.cleanup)
 
     def _fan_command_handler(self, payload: Code) -> None:
         """Start or clear the countdown for a fan command."""
@@ -103,24 +108,6 @@ class DataHandlers:
                 "fan_timer_remaining": remaining,
             }
         )
-
-    def _powerup_handler(self, payload: Code) -> None:
-        """Fan powerup payload, we use it for fan discovery.
-
-        Not every unit fills in ``ann_id``. When it is empty, fall back to the
-        sender so a broadcast that only names a source still discovers the fan.
-        """
-        fan_id = payload.packet.ann_id or payload.packet.src_id
-        _LOGGER.info(
-            "Fan startup payload received, "
-            f"signal strength: {payload.values['signal_strength']} dBm"
-        )
-        new_data = {
-            **self.fan_coordinator.data,
-            "discovered_fan_id": fan_id,
-            "fan_signal_strength": payload.values["signal_strength"],
-        }
-        self.fan_coordinator.async_set_updated_data(new_data)
 
     def _fan_state_handler(self, payload: Code) -> None:
         """Update fan mode and fault state"""
@@ -201,7 +188,7 @@ class DataHandlers:
             return
         if update_device_info(
             self.hass,
-            self.config_entry.entry_id,
+            self.entry_id,
             ramses_id,
             software_ver_id,
             description,

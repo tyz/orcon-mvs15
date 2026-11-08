@@ -40,7 +40,8 @@ async def async_get_config_entry_diagnostics(
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
     runtime = entry.runtime_data
-    session = runtime.ramses_esp
+    session = runtime.session
+    discovery = runtime.discovery
 
     return {
         "entry": {
@@ -50,15 +51,17 @@ async def async_get_config_entry_diagnostics(
         },
         "session": {
             "gateway_id": str(session.gateway_id),
-            "remote_id": str(session.remote_id),
-            "fan_id": str(session.fan_id),
-            "co2_id": str(session.co2_id),
-            "pending_packets": session.pending_packets,
-            "handled_codes": sorted(session.handled_codes),
+            "connection_state": session.connection_state.value,
+            "pending_requests": len(session.pending_requests),
+            "subscribed_codes": sorted(session.subscribed_codes),
+        },
+        "devices": {
+            "fan_id": str(discovery.get("fan")),
+            "co2_id": str(discovery.get("co2")),
+            "remote_id": str(runtime.config.remote_id),
         },
         "coordinators": {
             "fan": _coordinator_diagnostics(runtime.fan_coordinator),
             "co2": _coordinator_diagnostics(runtime.co2_coordinator),
-            "remote": _coordinator_diagnostics(runtime.rem_coordinator),
         },
     }

@@ -9,10 +9,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .controller import OrconMVS15Controller
 from .coordinator import OrconMVS15DataUpdateCoordinator
+from .discovery import DiscoveryManager
 from .models import OrconMVS15Config
 from .ramses.protocol import RamsesID
-from .ramses_esp import RamsesESP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,13 +34,13 @@ class EntityFactory(Protocol):
         ramses_id: RamsesID,
         config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
-        ramses_esp: RamsesESP,
+        controller: OrconMVS15Controller,
         discovery_key: str,
     ) -> Entity: ...
 
 
 class DiscoverEntity:
-    """Create entities if the Ramses id is known, otherwise create them on device discovery"""
+    """Create entities if the Ramses id is known, otherwise create them on device discovery."""
 
     def __init__(
         self,
@@ -47,8 +48,10 @@ class DiscoverEntity:
         async_add_entities: AddConfigEntryEntitiesCallback,
         config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
-        ramses_esp: RamsesESP,
-        ramses_id: RamsesID,
+        controller: OrconMVS15Controller,
+        discovery: DiscoveryManager,
+        *,
+        device_kind: str,
         name: str,
         discovery_key: str,
         entities: list[EntityFactory],
@@ -56,25 +59,27 @@ class DiscoverEntity:
         self.hass = hass
         self.async_add_entities = async_add_entities
         self.config = config
-        self.ramses_esp = ramses_esp
-        self.ramses_id = ramses_id
+        self.controller = controller
+        self.discovery = discovery
+        self.device_kind = device_kind
+        self.ramses_id = discovery.get(device_kind)
         self.name = name
         self.entities = entities
         self.coordinator = coordinator
         self.discovery_key = discovery_key
-        self.full_discovery_key = f"discovered_{discovery_key}_id"
         self.entity_names_csv = ",".join([x.__name__ for x in entities])
         self._unsub: Callable[[], None] | None = None
-        if ramses_id:
+        if self.ramses_id:
             _LOGGER.debug(
                 f"Setting up previously discovered '{name}' entities {self.entity_names_csv}"
             )
             self._add_entities()
             return
         _LOGGER.debug(
-            f"Setting up '{name}' entity discovery for {self.entity_names_csv} on key '{self.full_discovery_key}'"
+            f"Setting up '{name}' entity discovery for {self.entity_names_csv} "
+            f"on '{device_kind}'"
         )
-        self._unsub = self.coordinator.async_add_listener(self._add_discovered_entities)
+        self._unsub = discovery.subscribe(device_kind, self._add_discovered_entities)
 
     def _add_entities(self) -> None:
         _LOGGER.debug(
@@ -86,23 +91,18 @@ class DiscoverEntity:
                 ramses_id=self.ramses_id,
                 config=self.config,
                 coordinator=self.coordinator,
-                ramses_esp=self.ramses_esp,
+                controller=self.controller,
                 discovery_key=self.discovery_key,
             )
             for x in self.entities
         ]
         self.async_add_entities(new_entities, True)
 
-    def _add_discovered_entities(self) -> None:
-        if self.ramses_id:
-            return
-        discovered_id = self.coordinator.data.get(self.full_discovery_key)
-        if not isinstance(discovered_id, str):
-            return
-        self.ramses_id = RamsesID(discovered_id)
+    def _add_discovered_entities(self, ramses_id: RamsesID) -> None:
+        self.ramses_id = ramses_id
         if not self.ramses_id:
             return
-        self.cleanup()  # got the data, unsubscribe from DataCoordinator
+        self.cleanup()  # got the data, unsubscribe from the discovery manager
         _LOGGER.debug(
             f"Discovered '{self.name}' ({self.ramses_id}) entities: '{self.entity_names_csv}'"
         )
@@ -113,5 +113,5 @@ class DiscoverEntity:
             self._unsub()
             self._unsub = None
             _LOGGER.debug(
-                f"Removed listener for '{self.full_discovery_key}' after creating {self.entity_names_csv}"
+                f"Removed listener for '{self.device_kind}' after creating {self.entity_names_csv}"
             )
