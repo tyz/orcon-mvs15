@@ -184,6 +184,9 @@ async def test_setup_passes_the_packet_log_option_to_the_controller(
         await hass.async_block_till_done()
 
     assert entry.runtime_data.controller.packet_log_enabled is True
+    assert entry.runtime_data.controller.packet_log_path == hass.config.path(
+        "packet.log"
+    )
 
     assert await hass.config_entries.async_unload(entry.entry_id)
 

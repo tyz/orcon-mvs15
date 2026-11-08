@@ -54,7 +54,6 @@ HUMIDITY_POLL_INTERVAL = timedelta(minutes=5)
 # broken. Keep the window wide enough to survive a missed broadcast.
 FAN_RESPONSE_TIMEOUT = timedelta(minutes=30)
 
-PACKET_LOG_PATH = "/config/packet.log"
 PACKET_LOG_MAX_SIZE = 10_000_000
 
 
@@ -72,6 +71,7 @@ class OrconMVS15Controller:
         *,
         entry_id: str,
         packet_log: bool = False,
+        packet_log_path: str | None = None,
     ) -> None:
         self.hass = hass
         self.config = config
@@ -81,6 +81,7 @@ class OrconMVS15Controller:
         self.co2_coordinator = co2_coordinator
         self.entry_id = entry_id
         self.packet_log_enabled = packet_log
+        self.packet_log_path = packet_log_path or hass.config.path("packet.log")
         self.handlers = DataHandlers(
             hass, fan_coordinator, co2_coordinator, entry_id=entry_id
         )
@@ -343,10 +344,11 @@ class OrconMVS15Controller:
     async def packet_log(
         self,
         envelope: Envelope,
-        path: str = PACKET_LOG_PATH,
+        path: str | None = None,
         max_size: int = PACKET_LOG_MAX_SIZE,
     ) -> None:
         """Log raw packets to disk, rolling over, offloaded to an executor."""
+        target = path or self.packet_log_path
 
         def _sync_log() -> None:
             with self._log_lock:
@@ -354,30 +356,30 @@ class OrconMVS15Controller:
                     return
                 if self._log_f is None:
                     try:
-                        self._log_f = open(path, "a")
+                        self._log_f = open(target, "a")
                     except Exception as err:
-                        _LOGGER.error("Error opening %s: %s", path, err)
+                        _LOGGER.error("Error opening %s: %s", target, err)
                         return
 
                 print(f"{envelope['ts']} {envelope['msg']}", file=self._log_f)
                 self._log_f.flush()
 
-                if os.path.getsize(path) > max_size:
+                if os.path.getsize(target) > max_size:
                     try:
                         self._log_f.close()
                     except Exception:
                         pass
                     for i in range(10, 0, -1):  # keep up to 10 old log files
-                        src = f"{path}{'' if i == 1 else f'.{i - 1}'}"
-                        dst = f"{path}.{i}"
+                        src = f"{target}{'' if i == 1 else f'.{i - 1}'}"
+                        dst = f"{target}.{i}"
                         try:
                             os.replace(src, dst)
                         except FileNotFoundError:
                             continue
                     try:
-                        self._log_f = open(path, "a")
+                        self._log_f = open(target, "a")
                     except Exception as err:
-                        _LOGGER.error("Error reopening %s: %s", path, err)
+                        _LOGGER.error("Error reopening %s: %s", target, err)
 
         await self.hass.async_add_executor_job(_sync_log)
 
