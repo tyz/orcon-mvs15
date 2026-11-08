@@ -65,9 +65,10 @@ FIRMWARE_UPDATE_TIMEOUT = 300.0
 # The firmware stores the tag in a 32-byte buffer and uses it in a URL path.
 FIRMWARE_VERSION_RE = re.compile(r"^[A-Za-z0-9._-]{1,31}$")
 
-# The fan only answers a 1FC9 Offer while its pairing mode is active. Repeat
-# the Offer until the Accept arrives, so a lost RF packet is not fatal.
-PAIRING_TIMEOUT = 15.0
+# The fan answers a 1FC9 Offer only while the pairing mode it opens on power-up
+# is active. The attempt is short and repeats on the next power-up, so a missed
+# window never needs a manual trigger.
+PAIRING_TIMEOUT = 6.0
 PAIRING_OFFER_INTERVAL = 2.0
 
 
@@ -132,6 +133,8 @@ class OrconMVS15Controller:
         self._firmware_update_future: asyncio.Future[str] | None = None
         self._firmware_update_target: str | None = None
         self._pairing = False
+        self._remote_paired = False
+        self._pairing_task: asyncio.Task[None] | None = None
         self.packet_log_enabled = packet_log
         self.packet_log_path = packet_log_path or hass.config.path("packet.log")
         self.handlers = DataHandlers(
@@ -170,6 +173,13 @@ class OrconMVS15Controller:
         if self._closed:
             return
         self._closed = True
+        if self._pairing_task is not None:
+            self._pairing_task.cancel()
+            try:
+                await self._pairing_task
+            except asyncio.CancelledError:
+                pass
+            self._pairing_task = None
         while self._unsubs:
             self._unsubs.pop()()
         self._stop_humidity_polling()
@@ -269,6 +279,8 @@ class OrconMVS15Controller:
         if self.discovery.discover("fan", fan_id):
             _LOGGER.debug("Fetching device info for discovered fan (%s)", fan_id)
             self._start_init(self.init_fan)
+        if self.config.fake_remote and not self._remote_paired:
+            self._start_pairing()
         self.fan_coordinator.async_set_updated_data(
             {
                 **self.fan_coordinator.data,
@@ -276,6 +288,27 @@ class OrconMVS15Controller:
                 "fan_signal_strength": payload.values["signal_strength"],
             }
         )
+
+    def _start_pairing(self) -> None:
+        """Pair the fake remote while the fan's power-up window is open."""
+        if self._pairing or self._pairing_task is not None:
+            return
+
+        async def _run() -> None:
+            try:
+                self._remote_paired = await self.async_pair_remote()
+            except Exception:
+                _LOGGER.exception("The automatic pairing attempt failed")
+
+        task = self.hass.async_create_task(_run())
+        self._pairing_task = task
+        task.add_done_callback(self._pairing_finished)
+
+    @callback
+    def _pairing_finished(self, task: asyncio.Task[None]) -> None:
+        """Forget the attempt that just finished."""
+        if self._pairing_task is task:
+            self._pairing_task = None
 
     def _start_init(self, init: Callable[[], Awaitable[None]]) -> None:
         """Run a discovered-device init without losing a failed publish."""
@@ -492,20 +525,22 @@ class OrconMVS15Controller:
         except TransportError as err:
             raise self._gateway_error("reboot_failed", error=str(err)) from err
 
-    async def async_pair_remote(self) -> None:
+    async def async_pair_remote(self) -> bool:
         """Bind the configured fake remote to the fan with a 1FC9 handshake.
 
-        The fan must be in pairing mode. This device-side gesture is the same
-        one a real 15RF remote performs: Offer broadcast, Accept from the fan,
-        then a Confirm addressed to that fan.
+        The fan must be in pairing mode, which it opens when it powers up. This
+        is the same gesture a real 15RF remote performs: Offer broadcast,
+        Accept from the fan, then a Confirm addressed to that fan. Returns
+        whether the Confirm was sent, so a missed window can be retried on the
+        next power-up without surfacing an error.
         """
         if self._pairing:
-            raise self._gateway_error("remote_pairing_in_progress")
+            _LOGGER.debug("A pairing attempt is already running")
+            return False
         remote_id = self.config.remote_id
         if not remote_id:
-            raise self._gateway_error(
-                "remote_pairing_failed", error="no remote ID configured"
-            )
+            _LOGGER.error("Cannot pair the fake remote without a remote ID")
+            return False
 
         loop = asyncio.get_running_loop()
         accepted: asyncio.Future[RamsesPacket] = loop.create_future()
@@ -521,7 +556,7 @@ class OrconMVS15Controller:
             accepted.set_result(packet)
 
         offer = Code1fc9.bind_offer(remote_id)
-        _LOGGER.info("Pairing the fake remote %s with the fan", remote_id)
+        _LOGGER.debug("Pairing the fake remote %s with the fan", remote_id)
         self._pairing = True
         unsubscribe = self.session.subscribe("1FC9", _accept)
         try:
@@ -530,12 +565,14 @@ class OrconMVS15Controller:
                 try:
                     await self.session.send(offer)
                 except TransportError as err:
-                    raise self._gateway_error(
-                        "remote_pairing_failed", error=str(err)
-                    ) from err
+                    _LOGGER.warning("Could not send the pairing offer: %s", err)
+                    return False
                 remaining = deadline - loop.time()
                 if remaining <= 0:
-                    raise self._gateway_error("remote_pairing_timeout")
+                    _LOGGER.debug(
+                        "The fan did not answer the pairing offer for %s", remote_id
+                    )
+                    return False
                 try:
                     accept = await asyncio.wait_for(
                         asyncio.shield(accepted),
@@ -552,13 +589,22 @@ class OrconMVS15Controller:
                     )
                 )
             except TransportError as err:
-                raise self._gateway_error(
-                    "remote_pairing_failed", error=str(err)
-                ) from err
+                _LOGGER.warning("Could not send the pairing confirm: %s", err)
+                return False
         finally:
             unsubscribe()
             self._pairing = False
         _LOGGER.info("The fake remote %s is paired with %s", remote_id, accept.src_id)
+        return True
+
+    @callback
+    def async_arm_pairing(self) -> None:
+        """Pair the fake remote again on the next fan power-up."""
+        self._remote_paired = False
+        if self._pairing_task is not None:
+            self._pairing_task.cancel()
+            self._pairing_task = None
+        _LOGGER.info("The fake remote will be paired again when the fan powers up")
 
     async def set_preset_mode(self, mode: str) -> None:
         """Set the fan preset mode."""

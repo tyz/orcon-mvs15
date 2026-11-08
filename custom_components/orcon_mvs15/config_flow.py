@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from probatio import Required, Schema
+from probatio import Optional, Required, Schema
 
 from homeassistant.config_entries import (
     SOURCE_RECONFIGURE,
@@ -56,17 +56,24 @@ def _topic_error(topic: str) -> str | None:
 def _remote_id(current: dict[str, Any], user_input: dict[str, Any]) -> str:
     """Return the remote ID to store, generating one for a fake remote."""
     if not user_input[CONF_REMOTE_FAKE]:
-        return str(user_input[CONF_REMOTE_ID])
+        return str(user_input[CONF_REMOTE_ID]).strip()
     if current.get(CONF_REMOTE_FAKE) and current.get(CONF_REMOTE_ID):
         return str(current[CONF_REMOTE_ID])
     return _random_remote_id()
+
+
+def _remote_error(fake_remote: bool, remote_id: str) -> str | None:
+    """Return the translation key for a remote the fan cannot use."""
+    if not fake_remote and not remote_id.strip():
+        return "remote_id_required"
+    return None
 
 
 def _remote_schema(remote_id: str, fake_remote: bool) -> dict[Any, Any]:
     """Return the remote fields shared by both connection forms."""
     return {
         Required(CONF_REMOTE_FAKE, default=fake_remote): BooleanSelector(),
-        Required(CONF_REMOTE_ID, default=remote_id): str,
+        Optional(CONF_REMOTE_ID, default=remote_id): str,
     }
 
 
@@ -152,7 +159,11 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
             topic = user_input[CONF_MQTT_TOPIC]
             if error := _topic_error(topic):
                 errors[CONF_MQTT_TOPIC] = error
-            else:
+            if error := _remote_error(
+                user_input[CONF_REMOTE_FAKE], user_input[CONF_REMOTE_ID]
+            ):
+                errors[CONF_REMOTE_ID] = error
+            if not errors:
                 self._async_abort_duplicate(CONF_MQTT_TOPIC, topic, TRANSPORT_MQTT)
                 data: dict[str, Any] = {
                     CONF_REMOTE_FAKE: user_input[CONF_REMOTE_FAKE],
@@ -183,9 +194,13 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             port = user_input[CONF_USB_PORT].strip()
+            if error := _remote_error(
+                user_input[CONF_REMOTE_FAKE], user_input[CONF_REMOTE_ID]
+            ):
+                errors[CONF_REMOTE_ID] = error
             if not port:
                 errors[CONF_USB_PORT] = "usb_port_required"
-            else:
+            elif not errors:
                 self._async_abort_duplicate(CONF_USB_PORT, port, TRANSPORT_USB)
                 gateway_id = await self._async_usb_gateway_id(port)
                 if not gateway_id and current.get(CONF_TRANSPORT) == TRANSPORT_USB:

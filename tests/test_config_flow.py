@@ -67,6 +67,59 @@ async def test_the_remote_id_field_has_no_prefilled_example(
     assert remote_id.default() == ""
 
 
+@pytest.mark.parametrize("step", [STEP_MQTT, STEP_USB])
+async def test_a_real_remote_requires_an_id(hass: HomeAssistant, step: str) -> None:
+    """Saving a real-remote entry without an ID would send from 29:000000."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await _choose(hass, result, step)
+
+    user_input: dict[str, str] = {CONF_REMOTE_ID: "   "}
+    if step == STEP_MQTT:
+        user_input[CONF_MQTT_TOPIC] = "RAMSES/GATEWAY"
+    else:
+        user_input[CONF_USB_PORT] = USB_PORT
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input=user_input
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == step
+    assert result["errors"] == {CONF_REMOTE_ID: "remote_id_required"}
+
+
+@pytest.mark.parametrize("step", [STEP_MQTT, STEP_USB])
+async def test_a_fake_remote_needs_no_remote_id(
+    hass: HomeAssistant, step: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The generated ID replaces an empty or missing field."""
+    monkeypatch.setattr(
+        "custom_components.orcon_mvs15.config_flow._random_remote_id",
+        lambda: "29:424242",
+    )
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await _choose(hass, result, step)
+
+    user_input: dict[str, object] = {CONF_REMOTE_FAKE: True}
+    if step == STEP_MQTT:
+        user_input[CONF_MQTT_TOPIC] = "RAMSES/GATEWAY"
+    else:
+        user_input[CONF_USB_PORT] = USB_PORT
+    with patch(
+        "custom_components.orcon_mvs15.config_flow.async_serial_number",
+        AsyncMock(return_value=USB_MAC),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], user_input=user_input
+        )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "fan_discovery"
+
+
 async def test_mqtt_flow_creates_an_entry(hass: HomeAssistant) -> None:
     """The user data is stored after the discovery info step."""
     result = await hass.config_entries.flow.async_init(

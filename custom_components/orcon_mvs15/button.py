@@ -1,4 +1,4 @@
-"""Reboot the RAMSES ESP gateway."""
+"""Buttons for the gateway reboot and fake-remote pairing."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ async def async_setup_entry(
         True,
     )
     if runtime.config.fake_remote:
-        pair_remote = DiscoverEntity(
+        pair_again = DiscoverEntity(
             hass=hass,
             async_add_entities=async_add_entities,
             config=runtime.config,
@@ -48,9 +48,9 @@ async def async_setup_entry(
             device_kind="fan",
             name="Orcon MVS-15 fan",
             discovery_key="fan",
-            entities=[PairRemoteButton],
+            entities=[PairAgainButton],
         )
-        runtime.cleanup.append(pair_remote.cleanup)
+        runtime.cleanup.append(pair_again.cleanup)
 
 
 class GatewayRebootButton(
@@ -79,11 +79,11 @@ class GatewayRebootButton(
         await self.controller.async_reboot_gateway()
 
 
-class PairRemoteButton(CoordinatorEntity, ButtonEntity):
-    """Start the 1FC9 pairing handshake for the generated fake remote."""
+class PairAgainButton(CoordinatorEntity, ButtonEntity):
+    """Arm the generated fake remote for pairing on the next fan power-up."""
 
     _attr_has_entity_name = True
-    _attr_translation_key = "pair_remote"
+    _attr_translation_key = "pair_again"
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(
@@ -101,5 +101,5 @@ class PairRemoteButton(CoordinatorEntity, ButtonEntity):
         self._attr_device_info = attached_device_info(ramses_id)
 
     async def async_press(self) -> None:
-        """Run the pairing handshake while the fan is in pairing mode."""
-        await self.controller.async_pair_remote()
+        """Pair again the next time the fan powers up."""
+        self.controller.async_arm_pairing()

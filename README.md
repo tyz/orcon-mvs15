@@ -3,8 +3,6 @@
 [![CI](https://github.com/tyz/orcon-mvs15/actions/workflows/ci.yml/badge.svg)](https://github.com/tyz/orcon-mvs15/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/tyz/orcon-mvs15/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/tyz/orcon-mvs15/actions/workflows/github-code-scanning/codeql)
 
-(Work in progress, currently requires a working 15RF wireless remote until pairing a fake remote is implemented)
-
 Home Assistant integration for the [Orcon MVS-15 fan](https://orcon.nl/mechanische-ventilatie/),
 the (optional) wired `CO2 ruimtesensor 15RF` with its CO₂ sensor and the
 (optional) `Afstandsbediening 15RF` wireless remote.
@@ -55,8 +53,8 @@ ID and the transport settings:
 
 - **Use a generated fake remote** — generate a remote ID and pair it with the
   fan, so no working 15RF remote is needed. The **Remote ID** field is ignored
-  while this is enabled. Pair the fan after setup with the **Pair remote**
-  button; see [Fake remote](#fake-remote).
+  while this is enabled. The fan is paired automatically when it powers up; see
+  [Fake remote](#fake-remote).
 - **Remote ID** — the Ramses ID of the 15RF wireless remote that sends commands
   to the fan, for example `29:123456`. If you do not know it yet, follow
   [Fan ID](#fan-id).
@@ -94,16 +92,21 @@ during setup. The integration generates a remote ID and stores it, so the
 **Remote ID** field is ignored. A fake remote sends commands with that ID, but
 the fan only listens to it after a one-time pairing.
 
-After setup, the fan device has a **Pair remote** button. Put the fan in pairing
-mode according to its manual, then press the button within 15 seconds. The
-button sends the same `1FC9` offer, accept and confirm handshake a real remote
-uses, and Home Assistant reports a translated error if the fan does not answer.
-The binding survives restarts of Home Assistant and the gateway. Pair again
-after a fan factory reset or when the fan no longer responds to commands.
+Pairing happens automatically when the fan powers up. The fan opens its pairing
+window with the `042F` startup broadcast, so the integration answers it with the
+same `1FC9` offer, accept and confirm handshake a real remote uses. One
+successful handshake is enough: the binding survives restarts of Home Assistant,
+the gateway and the fan.
+
+If a fan factory reset or an unlucky first attempt leaves the fake remote
+unpaired, press **Pair again on next fan restart** on the fan device and then
+power-cycle the fan. The button does not send anything itself; it forgets the
+current pairing, so the next startup broadcast pairs again. The integration also
+retries automatically on every startup broadcast until a handshake succeeds.
 
 ## Auto-discovery
 
-1. Install and configure the integration. The `remote ID` it asks for is the 15RF wireless remote's ID, or enable the generated fake remote and pair it after setup.
+1. Install and configure the integration. The `remote ID` it asks for is the 15RF wireless remote's ID, or enable the generated fake remote to pair automatically on this power-up.
 1. Turn the fan off and on again
 1. The fan will be discovered by a startup message (042F) it sends out
 1. The state of the humidity sensor (part of the fan) will be requested (12A0), and will be set up in HA if it responds
@@ -117,8 +120,8 @@ integration's menu in `Settings > Devices & services` and choose
 IDs are kept and the entry reloads after the change. Switching between MQTT and
 USB replaces the gateway ID, because the two gateways are different devices.
 Reconfiguring a generated fake remote keeps its ID, so the fan stays paired;
-switching from a real remote to a fake one generates a new ID and needs a new
-pairing.
+switching from a real remote to a fake one generates a new ID and pairs it on
+the next fan power-up.
 
 ## Options
 
@@ -268,8 +271,9 @@ as the gateway is back instead of after the next broadcast.
 
 ## Known limitations
 
-- A generated fake remote must be paired with the fan once. The fan has to be
-  put in pairing mode by hand, and the pairing window is limited.
+- A generated fake remote is paired automatically on the fan's startup
+  broadcast. If an attempt is missed, power-cycle the fan again or press
+  **Pair again on next fan restart** first.
 - The timed-mode countdown is maintained by the integration; the fan's next
   reported state remains the source of truth for the preset.
 - A `042F` power-up message is accepted from any source while the fan ID is

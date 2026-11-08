@@ -262,10 +262,10 @@ async def test_setup_creates_a_gateway_reboot_button(
     assert button_entry.entity_category is EntityCategory.CONFIG
 
 
-async def test_a_fake_remote_adds_a_pairing_button_to_the_fan(
+async def test_a_fake_remote_adds_a_pair_again_button_to_the_fan(
     hass: HomeAssistant, device_registry: DeviceRegistry
 ) -> None:
-    """The generated remote cannot work until the fan is put in pairing mode."""
+    """A failed automatic pairing can be retried on the next fan power-up."""
     entry = make_entry(
         **{
             CONF_REMOTE_ID: "29:123456",
@@ -284,7 +284,7 @@ async def test_a_fake_remote_adds_a_pairing_button_to_the_fan(
     pair_button = next(
         state
         for state in hass.states.async_all("button")
-        if state.name.endswith("Pair remote")
+        if state.name.endswith("Pair again on next fan restart")
     )
     fan_device = device_registry.async_get_device_by_identifier(
         (DOMAIN, FAN_ID), entry.entry_id

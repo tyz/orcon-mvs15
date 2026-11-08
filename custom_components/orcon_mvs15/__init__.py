@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import Event, HomeAssistant, CoreState
+from homeassistant.const import Platform
+from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceEntry
+from homeassistant.helpers.start import async_at_started
 
 from .controller import OrconMVS15Controller
 from .device import (
@@ -143,10 +144,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
         cleanup=[],
     )
 
-    async def _start_session(event: Event | None = None) -> None:
+    async def _start_session(delay: bool = False) -> None:
         """Start the session, mapping a missing broker to a retry."""
         try:
-            if event is not None:
+            if delay:
                 # Home Assistant has just started; give MQTT or the stick a
                 # moment to come up after the restart.
                 await asyncio.sleep(2)
@@ -177,19 +178,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
     else:
         _LOGGER.info("Orcon MVS-15 integration has been loaded after restart")
 
-        async def _start_after_restart(event: Event) -> None:
+        async def _start_after_restart(_hass: HomeAssistant) -> None:
             """Start the session once Home Assistant is up, retrying on failure."""
             try:
-                await _start_session(event)
+                await _start_session(delay=True)
             except Exception as err:  # no caller left to raise to
                 _LOGGER.error("The Orcon MVS-15 session failed to start: %s", err)
                 hass.config_entries.async_schedule_reload(entry.entry_id)
 
-        entry.async_on_unload(
-            hass.bus.async_listen_once(
-                EVENT_HOMEASSISTANT_STARTED, _start_after_restart
-            )
-        )
+        entry.async_on_unload(async_at_started(hass, _start_after_restart))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
