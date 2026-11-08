@@ -341,6 +341,26 @@ async def test_a_later_neighbour_powerup_does_not_replace_the_fan(
     )
 
     assert harness.discovery.get("fan") == FAN_ID
+    assert harness.fan.data["discovered_fan_id"] == FAN_ID
+
+
+async def test_a_failed_discovery_init_still_starts_the_timers(
+    make: Callable[..., Harness], caplog: pytest.LogCaptureFixture
+) -> None:
+    """A failed publish for a discovered fan must not disable polling."""
+    harness = make(fan_id="")
+    await harness.controller.start()
+    harness.session.request = AsyncMock(  # type: ignore[method-assign]
+        side_effect=TransportError("broker is offline")
+    )
+
+    with caplog.at_level(logging.WARNING):
+        await feed(harness, POWERUP)
+        await settle()
+
+    assert harness.controller._humidity_poll_unsub is not None
+    assert harness.controller._fan_watchdog_unsub is not None
+    assert "Could not fetch the discovered device state" in caplog.text
 
 
 async def test_set_preset_mode_sends_the_command(
