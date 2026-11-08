@@ -8,3 +8,5 @@ CONF_CO2_ID: str = "co2_id"
 CONF_MQTT_TOPIC: str = "mqtt_topic"
 CONF_PACKET_LOG: str = "packet_log"
 DEFAULT_PACKET_LOG: bool = False
+DEFAULT_REMOTE_ID: str = "29:163058"
+DEFAULT_MQTT_TOPIC: str = "RAMSES/GATEWAY"
