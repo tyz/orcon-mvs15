@@ -9,7 +9,6 @@ commands.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -18,17 +17,17 @@ from homeassistant.helpers.device_registry import DeviceRegistry
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from controller_helpers import Harness, feed, make_controller, settle
 from custom_components.orcon_mvs15.ramses.protocol import CODE_REGISTRY
 from custom_components.orcon_mvs15.const import DOMAIN
 from custom_components.orcon_mvs15.handlers import DataHandlers
-from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
-from custom_components.orcon_mvs15.ramses_esp import RamsesESP
 from custom_components.orcon_mvs15.ramses.protocol import RamsesID
+from custom_components.orcon_mvs15.ramses.session import RamsesSession
+from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
 
 from recorded_frames import (
     FIXTURES,
     decode,
-    envelope,
     envelopes,
     frames,
     packet_from,
@@ -44,39 +43,39 @@ REMOTE_ID = "29:163058"
 FIXTURE_FILES = sorted(path.name for path in FIXTURES.glob("*.log"))
 
 
-def make_session(hass: HomeAssistant, co2_id: str = CO2_ID) -> RamsesESP:
-    """Build a session for the recorded installation."""
-    return RamsesESP(
-        hass=hass,
-        transport=LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID)),
-        remote_id=RamsesID(REMOTE_ID),
-        fan_id=RamsesID(FAN_ID),
-        co2_id=RamsesID(co2_id),
-        gateway_id=RamsesID(GATEWAY_ID),
-        config_entry_id="test_entry",
-    )
-
-
 class RecordingCoordinator:
     """Coordinator stand-in that keeps the latest pushed data."""
 
     def __init__(self) -> None:
         self.data: dict[str, object] = {}
+        self.available = True
 
     def async_set_updated_data(self, data: dict[str, object]) -> None:
         self.data = data
+
+    def async_set_available(self, available: bool) -> None:
+        self.available = available
 
 
 def make_handlers(hass: HomeAssistant) -> tuple[MockConfigEntry, DataHandlers]:
     """Build handlers for an entry that can own devices."""
     entry = MockConfigEntry(domain=DOMAIN, data={})
     entry.add_to_hass(hass)
-    entry.runtime_data = SimpleNamespace(
-        co2_coordinator=RecordingCoordinator(),
-        fan_coordinator=RecordingCoordinator(),
-        cleanup=[],
+    return entry, DataHandlers(
+        hass,
+        RecordingCoordinator(),
+        RecordingCoordinator(),
+        entry_id=entry.entry_id,
     )
-    return entry, DataHandlers(hass, entry)
+
+
+def build_controller(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch, **kwargs: object
+) -> Harness:
+    """Build a controller over the recorded installation."""
+    options: dict[str, object] = {"fan_id": FAN_ID, "co2_id": CO2_ID}
+    options.update(kwargs)
+    return make_controller(hass, monkeypatch, **options)  # type: ignore[arg-type]
 
 
 def test_the_fixtures_cover_the_codes_the_installation_sends() -> None:
@@ -289,29 +288,20 @@ async def test_recorded_device_info_updates_the_fan_device(
     assert updated.model_id == "VMC-15RP01"
 
 
-async def test_the_recorded_restart_replays_through_the_transport(
-    hass: HomeAssistant,
+async def test_the_recorded_restart_replays_through_the_controller(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A captured restart reaches the handlers without any MQTT code."""
-    entry, handlers = make_handlers(hass)
-    transport = LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID))
-    session = RamsesESP(
-        hass=hass,
-        transport=transport,
-        remote_id=RamsesID(REMOTE_ID),
-        fan_id=RamsesID(FAN_ID),
-        co2_id=RamsesID(CO2_ID),
-        gateway_id=RamsesID(GATEWAY_ID),
-        config_entry_id=entry.entry_id,
-    )
-    for code, func in handlers.pointers.items():
-        session.add_handler(code, func)
+    """A captured restart drives the entities through the real policy layer."""
+    harness = build_controller(hass, monkeypatch)
+    await harness.controller.start()
+    try:
+        for item in envelopes("startup.log"):
+            await harness.transport.receive(item)
+        await settle()
+    finally:
+        await harness.controller.stop()
 
-    await transport.start(session._handle_envelope, session._handle_version)
-    for item in envelopes("startup.log"):
-        await transport.receive(item)
-
-    data = entry.runtime_data.fan_coordinator.data
+    data = harness.fan.data
     assert data["fan_mode"] == "auto"
     assert data["fan_fault"] is False
     assert data["fan_signal_strength"] == -39
@@ -319,72 +309,100 @@ async def test_the_recorded_restart_replays_through_the_transport(
     assert data["relative_humidity"] == 59
 
 
-async def test_the_recorded_restart_reaches_the_handlers(hass: HomeAssistant) -> None:
-    """Every frame of the captured restart is accepted and dispatched."""
-    session = make_session(hass)
+async def test_the_recorded_restart_reaches_every_subscriber(
+    hass: HomeAssistant,
+) -> None:
+    """The session decodes every frame and leaves policy to its subscribers."""
+    transport = LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID))
+    session = RamsesSession(transport)
     seen: list[str] = []
     for code in ("042F", "10E0", "31D9", "12A0"):
-        session.add_handler(code, lambda payload: seen.append(payload.packet.code))
+        session.subscribe(code, lambda payload: seen.append(payload.packet.code))
+    await session.start()
+    try:
+        for item in envelopes("startup.log"):
+            await transport.receive(item)
+        await settle()
+    finally:
+        await session.stop()
 
-    for item in envelopes("startup.log"):
-        await session._handle_ramses_packet(item)
+    assert seen == [
+        "042F",
+        "10E0",
+        "10E0",
+        "10E0",
+        "31D9",
+        "12A0",
+        "12A0",
+        "31D9",
+        "31D9",
+    ]
 
-    # The gateway's own requests have signal strength 000 and are not dispatched.
-    assert seen == ["042F", "10E0", "10E0", "31D9", "12A0", "31D9"]
 
-
-async def test_the_recorded_power_up_ignores_the_neighbour(hass: HomeAssistant) -> None:
+async def test_the_recorded_power_up_ignores_the_neighbour(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A neighbouring fan's power-up does not replace the configured fan."""
-    session = make_session(hass)
-    handler = Mock()
-    session.add_handler("042F", handler)
+    harness = build_controller(hass, monkeypatch, fan_id="")
+    await harness.controller.start()
+    try:
+        for item in envelopes("power_up.log"):
+            await harness.transport.receive(item)
+        await settle()
+    finally:
+        await harness.controller.stop()
 
-    for item in envelopes("power_up.log"):
-        await session._handle_ramses_packet(item)
-
-    assert handler.call_count == 4
-    assert session.fan_id == FAN_ID
+    assert harness.discovery.get("fan") == FAN_ID
 
 
 async def test_the_recorded_command_echo_reaches_the_handler(
-    hass: HomeAssistant,
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The gateway echo of our own command drives the timed-mode countdown."""
-    session = make_session(hass)
+    harness = build_controller(hass, monkeypatch)
     handler = Mock()
-    session.add_handler("22F1", handler)
+    harness.controller.handlers.pointers["22F1"] = handler
+    harness.controller.handlers.pointers["22F3"] = handler
+    await harness.controller.start()
+    try:
+        echo = next(
+            frame
+            for frame in frames("fan_modes.log")
+            if frame.startswith("000 ") and frame.endswith("000204")
+        )
+        press = next(
+            frame
+            for frame in frames("fan_modes.log")
+            if frame.startswith("081 ") and frame.endswith("000404")
+        )
 
-    echo = next(
-        frame
-        for frame in frames("fan_modes.log")
-        if frame.startswith("000 ") and frame.endswith("000204")
-    )
-    press = next(
-        frame
-        for frame in frames("fan_modes.log")
-        if frame.startswith("081 ") and frame.endswith("000404")
-    )
+        await feed(harness, echo)
+        handler.assert_called_once()
 
-    await session._handle_ramses_packet(envelope(echo))
-    handler.assert_called_once()
-
-    await session._handle_ramses_packet(envelope(press))
-    assert handler.call_count == 2
-    assert handler.call_args.args[0].values["fan_mode"] == "auto"
+        await feed(harness, press)
+        assert handler.call_count == 2
+        assert handler.call_args.args[0].values["fan_mode"] == "auto"
+    finally:
+        await harness.controller.stop()
 
 
-async def test_the_recorded_request_echo_is_ignored(hass: HomeAssistant) -> None:
+async def test_the_recorded_request_echo_is_ignored(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The gateway echoes our status requests too, without dispatching them."""
-    session = make_session(hass)
+    harness = build_controller(hass, monkeypatch)
     handler = Mock()
-    session.add_handler("31D9", handler)
+    harness.controller.handlers.pointers["31D9"] = handler
+    await harness.controller.start()
+    try:
+        echo = next(
+            frame
+            for frame in frames("fan_state.log")
+            if frame.startswith("000 ") and " 31D9 " in frame
+        )
 
-    echo = next(
-        frame
-        for frame in frames("fan_state.log")
-        if frame.startswith("000 ") and " 31D9 " in frame
-    )
+        await feed(harness, echo)
 
-    await session._handle_ramses_packet(envelope(echo))
-
-    handler.assert_not_called()
+        handler.assert_not_called()
+    finally:
+        await harness.controller.stop()

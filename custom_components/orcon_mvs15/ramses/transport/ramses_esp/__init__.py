@@ -10,6 +10,7 @@ from collections.abc import Callable
 
 from ...protocol.frame import RamsesID, RamsesPacket
 from ..base import (
+    ConnectionHandler,
     ConnectionState,
     Envelope,
     PacketHandler,
@@ -20,10 +21,8 @@ from .backend import MqttBackend
 
 _LOGGER = logging.getLogger(__name__)
 
-type ConnectionCallback = Callable[[bool], None]
 
-
-class RamsesEspTransport:
+class RamsesESP:
     """Talk to a Ramses ESP stick over MQTT.
 
     The transport owns the topic layout and the receive envelope. The host
@@ -37,15 +36,14 @@ class RamsesEspTransport:
         base_topic: str,
         gateway_id: RamsesID = RamsesID(),
         discovery_timeout: float = 10.0,
-        connection_callback: ConnectionCallback | None = None,
     ) -> None:
         self._backend = backend
         self._base_topic = base_topic
         self._gateway_id = gateway_id
         self._discovery_timeout = discovery_timeout
-        self._connection_callback = connection_callback
         self._packet_handler: PacketHandler | None = None
-        self._version_handler: VersionHandler | None = None
+        self._version_handlers: list[VersionHandler] = []
+        self._connection_handlers: list[ConnectionHandler] = []
         self._unsubs: list[Callable[[], None]] = []
         self._discovery_event = asyncio.Event()
         self._connection_state = ConnectionState.DISCONNECTED
@@ -85,12 +83,10 @@ class RamsesEspTransport:
         self.pub_topic = f"{self._base_topic}/{self._gateway_id}/tx"
         self.version_topic = f"{self._base_topic}/{self._gateway_id}/info/version"
 
-    async def start(
-        self, handle_packet: PacketHandler, handle_version: VersionHandler
-    ) -> None:
+    async def start(self, handle_packet: PacketHandler) -> None:
+        """Subscribe to the configured topics and start delivering frames."""
         await self._backend.start()
         self._packet_handler = handle_packet
-        self._version_handler = handle_version
         self._unsubs.append(
             await self._backend.subscribe(self.sub_topic, self._handle_packet_message)
         )
@@ -111,6 +107,7 @@ class RamsesEspTransport:
         )
 
     async def stop(self) -> None:
+        """Release every MQTT subscription."""
         while self._unsubs:
             self._unsubs.pop()()
         await self._backend.stop()
@@ -132,6 +129,26 @@ class RamsesEspTransport:
                 f"Failed to publish payload {envelope} to {self.pub_topic}: {err}"
             ) from err
 
+    def subscribe_version(self, handler: VersionHandler) -> Callable[[], None]:
+        """Subscribe to the gateway firmware version."""
+        self._version_handlers.append(handler)
+
+        def _unsubscribe() -> None:
+            if handler in self._version_handlers:
+                self._version_handlers.remove(handler)
+
+        return _unsubscribe
+
+    def subscribe_connection(self, handler: ConnectionHandler) -> Callable[[], None]:
+        """Subscribe to connection state changes."""
+        self._connection_handlers.append(handler)
+
+        def _unsubscribe() -> None:
+            if handler in self._connection_handlers:
+                self._connection_handlers.remove(handler)
+
+        return _unsubscribe
+
     async def _handle_packet_message(
         self, topic: str, payload: str | bytes | bytearray
     ) -> None:
@@ -152,8 +169,8 @@ class RamsesEspTransport:
         version = (
             payload.decode() if isinstance(payload, (bytes, bytearray)) else payload
         )
-        if self._version_handler is not None:
-            self._version_handler(version)
+        for handler in tuple(self._version_handlers):
+            handler(version)
 
     async def _handle_online_message(
         self, topic: str, payload: str | bytes | bytearray
@@ -173,5 +190,5 @@ class RamsesEspTransport:
             _LOGGER.info("MQTT connection restored")
         else:
             _LOGGER.info("MQTT connection lost; the fan is unavailable")
-        if self._connection_callback is not None:
-            self._connection_callback(connected)
+        for handler in tuple(self._connection_handlers):
+            handler(state)

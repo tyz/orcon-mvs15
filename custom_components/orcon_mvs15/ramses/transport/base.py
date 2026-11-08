@@ -11,6 +11,7 @@ from ..protocol.frame import RamsesID, RamsesPacket
 type Envelope = dict[str, str]
 type PacketHandler = Callable[[Envelope], Awaitable[None]]
 type VersionHandler = Callable[[str], None]
+type ConnectionHandler = Callable[[ConnectionState], None]
 
 
 class ConnectionState(StrEnum):
@@ -41,9 +42,7 @@ class Transport(Protocol):
     @property
     def connection_state(self) -> ConnectionState: ...
 
-    async def start(
-        self, handle_packet: PacketHandler, handle_version: VersionHandler
-    ) -> None:
+    async def start(self, handle_packet: PacketHandler) -> None:
         """Subscribe to the gateway and start delivering frames."""
         ...  # pragma: no cover
 
@@ -53,4 +52,12 @@ class Transport(Protocol):
 
     async def send(self, packet: RamsesPacket) -> None:
         """Publish one packet to the gateway."""
+        ...  # pragma: no cover
+
+    def subscribe_version(self, handler: VersionHandler) -> Callable[[], None]:
+        """Subscribe to the gateway firmware version."""
+        ...  # pragma: no cover
+
+    def subscribe_connection(self, handler: ConnectionHandler) -> Callable[[], None]:
+        """Subscribe to connection state changes."""
         ...  # pragma: no cover

@@ -5,21 +5,21 @@ import logging
 
 from homeassistant.components.fan import FanEntity
 from homeassistant.components.fan.const import FanEntityFeature
-from homeassistant.core import callback, CoreState, HomeAssistant
+from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .controller import OrconMVS15Controller
 from .device import attached_device_info
 from .models import OrconMVS15Config, OrconMVS15ConfigEntry
 from .ramses.protocol import RamsesPacketDatetime, RamsesID
-from .ramses_esp import RamsesESP
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .discover_entity import DiscoverEntity
 from .ramses.protocol import Code22f1
 
 _LOGGER = logging.getLogger(__name__)
 
-# Fan commands are queued by the session, so entity calls do not collide.
+# Fan commands are serialised by the session, so entity calls do not collide.
 PARALLEL_UPDATES = 0
 
 
@@ -33,8 +33,9 @@ async def async_setup_entry(
         async_add_entities=async_add_entities,
         config=entry.runtime_data.config,
         coordinator=entry.runtime_data.fan_coordinator,
-        ramses_esp=entry.runtime_data.ramses_esp,
-        ramses_id=entry.runtime_data.config.fan_id,
+        controller=entry.runtime_data.controller,
+        discovery=entry.runtime_data.discovery,
+        device_kind="fan",
         name="Orcon MVS-15 fan",
         discovery_key="fan",
         entities=[OrconFan],
@@ -57,13 +58,13 @@ class OrconFan(CoordinatorEntity, FanEntity):
         ramses_id: RamsesID,
         config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
-        ramses_esp: RamsesESP,
+        controller: OrconMVS15Controller,
         discovery_key: str,
     ) -> None:
         super().__init__(coordinator)
         self.hass = hass
         self.fan_id = ramses_id
-        self.ramses_esp = ramses_esp
+        self.controller = controller
         self.discovery_key = discovery_key
         self.gateway_id = config.gateway_id
         self._attr_unique_id = f"orcon_mvs15_{self.fan_id}"
@@ -77,17 +78,12 @@ class OrconFan(CoordinatorEntity, FanEntity):
         }
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
-        await self.ramses_esp.set_preset_mode(preset_mode)
+        await self.controller.set_preset_mode(preset_mode)
 
     @property
     def available(self) -> bool:
         """The fan has no state until 31D9 has been received."""
         return super().available and "fan_mode" in self.coordinator.data
-
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        if self.hass.state == CoreState.running:
-            await self.ramses_esp.init_fan(discovered_fan_id=self.fan_id)
 
     @callback
     def _handle_coordinator_update(self) -> None:

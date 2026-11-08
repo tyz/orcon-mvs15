@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Callable
-
 import logging
 import uuid
 import inspect
@@ -180,15 +178,12 @@ class RamsesPacketResponse(RamsesPacket):
         )
         self.max_retries: int = max_retries
         self.timeout: int = timeout
-        self.cancel_retry_handler: Callable[[], None] | None = None
 
-    def __eq__(self, b: object) -> bool:
-        """Compare expected response to response"""
-        if not isinstance(b, RamsesPacket):
-            return NotImplemented
+    def matches(self, packet: RamsesPacket) -> bool:
+        """Return whether a received packet satisfies this expectation."""
         return (
-            ((not self.type) or self.type == b.type)
-            and ((not self.code) or self.code == b.code)
-            and ((not self.src_id) or self.src_id == b.src_id)
-            and ((not self.dst_id) or self.dst_id == b.dst_id)
+            ((not self.type) or self.type == packet.type)
+            and ((not self.code) or self.code == packet.code)
+            and ((not self.src_id) or self.src_id == packet.src_id)
+            and ((not self.dst_id) or self.dst_id == packet.dst_id)
         )

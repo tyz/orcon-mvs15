@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from ..protocol.frame import RamsesID, RamsesPacket
 from .base import (
+    ConnectionHandler,
     ConnectionState,
     Envelope,
     PacketHandler,
@@ -22,7 +25,8 @@ class LoopbackTransport:
         self._gateway_id = gateway_id
         self._connection_state = connection_state
         self._packet_handler: PacketHandler | None = None
-        self._version_handler: VersionHandler | None = None
+        self._version_handlers: list[VersionHandler] = []
+        self._connection_handlers: list[ConnectionHandler] = []
         self.sent: list[RamsesPacket] = []
         self.started = False
         self.stopped = False
@@ -35,11 +39,8 @@ class LoopbackTransport:
     def connection_state(self) -> ConnectionState:
         return self._connection_state
 
-    async def start(
-        self, handle_packet: PacketHandler, handle_version: VersionHandler
-    ) -> None:
+    async def start(self, handle_packet: PacketHandler) -> None:
         self._packet_handler = handle_packet
-        self._version_handler = handle_version
         self.started = True
 
     async def stop(self) -> None:
@@ -48,6 +49,16 @@ class LoopbackTransport:
 
     async def send(self, packet: RamsesPacket) -> None:
         self.sent.append(packet)
+
+    def subscribe_version(self, handler: VersionHandler) -> Callable[[], None]:
+        """Subscribe to the gateway firmware version."""
+        self._version_handlers.append(handler)
+        return lambda: self._version_handlers.remove(handler)
+
+    def subscribe_connection(self, handler: ConnectionHandler) -> Callable[[], None]:
+        """Subscribe to connection state changes."""
+        self._connection_handlers.append(handler)
+        return lambda: self._connection_handlers.remove(handler)
 
     async def receive(self, envelope: Envelope) -> None:
         """Deliver one gateway envelope as if it arrived from the stick."""
@@ -61,9 +72,15 @@ class LoopbackTransport:
 
     def receive_version(self, version: str) -> None:
         """Deliver a gateway firmware version."""
-        if self._version_handler is None:
+        if not self.started:
             raise RuntimeError("LoopbackTransport.start() has not been called")
-        self._version_handler(version)
+        for handler in tuple(self._version_handlers):
+            handler(version)
 
     def set_connection_state(self, state: ConnectionState) -> None:
+        """Change the connection state and notify the subscribers."""
+        if state == self._connection_state:
+            return
         self._connection_state = state
+        for handler in tuple(self._connection_handlers):
+            handler(state)

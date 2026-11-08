@@ -21,9 +21,7 @@ from custom_components.orcon_mvs15.ramses.transport import (
     TransportError,
     TransportNotReady,
 )
-from custom_components.orcon_mvs15.ramses.transport.ramses_esp import (
-    RamsesEspTransport,
-)
+from custom_components.orcon_mvs15.ramses.transport.ramses_esp import RamsesESP
 
 GATEWAY_ID = "18:149960"
 FAN_ID = "29:224547"
@@ -34,15 +32,13 @@ def make_transport(
     hass: HomeAssistant,
     gateway_id: str = "",
     discovery_timeout: float = 10.0,
-    connection_callback: Callable[[bool], None] | None = None,
-) -> RamsesEspTransport:
+) -> RamsesESP:
     """Build the transport on top of Home Assistant's MQTT client."""
-    return RamsesEspTransport(
+    return RamsesESP(
         HassMqttBackend(hass),
         MQTT_TOPIC,
         gateway_id=RamsesID(gateway_id),
         discovery_timeout=discovery_timeout,
-        connection_callback=connection_callback,
     )
 
 
@@ -143,12 +139,11 @@ async def test_connection_transitions_are_logged_once(
         mqtt_module.mqtt, "async_wait_for_mqtt_client", AsyncMock(return_value=True)
     )
     monkeypatch.setattr(mqtt_module.mqtt, "is_connected", lambda hass_: True)
-    observed: list[bool] = []
-    transport = make_transport(
-        hass, gateway_id=GATEWAY_ID, connection_callback=observed.append
-    )
+    observed: list[ConnectionState] = []
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    transport.subscribe_connection(observed.append)
     await transport.init()
-    await transport.start(Mock(), Mock())
+    await transport.start(Mock())
 
     assert len(connection_callbacks) == 1
     with caplog.at_level(logging.INFO):
@@ -157,7 +152,7 @@ async def test_connection_transitions_are_logged_once(
         connection_callbacks[0](True)
         connection_callbacks[0](True)
 
-    assert observed == [False, True]
+    assert observed == [ConnectionState.DISCONNECTED, ConnectionState.CONNECTED]
     assert caplog.text.count("MQTT connection lost") == 1
     assert caplog.text.count("MQTT connection restored") == 1
 
@@ -314,8 +309,9 @@ async def test_received_messages_reach_the_handlers(
     packet_handler = AsyncMock()
     version_handler = Mock()
     transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    transport.subscribe_version(version_handler)
     await transport.init()
-    await transport.start(packet_handler, version_handler)
+    await transport.start(packet_handler)
     envelope = {"ts": "2026-09-11T17:29:09+00:00", "msg": "081  I --- --:------"}
 
     await transport._handle_packet_message(

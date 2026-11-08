@@ -1,6 +1,7 @@
 """Gateway transports."""
 
 from .base import (
+    ConnectionHandler,
     ConnectionState,
     Envelope,
     PacketHandler,
@@ -11,6 +12,7 @@ from .base import (
 )
 
 __all__ = [
+    "ConnectionHandler",
     "ConnectionState",
     "Envelope",
     "PacketHandler",

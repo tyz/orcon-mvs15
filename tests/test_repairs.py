@@ -2,50 +2,53 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, Mock
+from collections.abc import AsyncIterator, Callable
+from datetime import UTC, datetime
 
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 
-from custom_components.orcon_mvs15 import ramses_esp as ramses_esp_module
+from controller_helpers import (
+    FAN_ID,
+    GATEWAY_ID,
+    NEIGHBOUR_ID,
+    Harness,
+    feed,
+    make_controller,
+    set_connected,
+)
 from custom_components.orcon_mvs15.const import DOMAIN
+from custom_components.orcon_mvs15.controller import FAN_RESPONSE_TIMEOUT
 from custom_components.orcon_mvs15.issues import (
     async_create_fan_not_responding_issue,
     fan_not_responding_issue_id,
 )
-from custom_components.orcon_mvs15.ramses_esp import FAN_RESPONSE_TIMEOUT, RamsesESP
 from custom_components.orcon_mvs15.ramses.protocol import RamsesID
-from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
 
-GATEWAY_ID = "18:149960"
-FAN_ID = "29:224547"
-REMOTE_ID = "29:163058"
-NEIGHBOUR_ID = "29:999999"
-TIMESTAMP = "2026-09-11T17:29:09.534250+02:00"
-
-
-@pytest.fixture(autouse=True)
-def no_humidity_timer(monkeypatch: pytest.MonkeyPatch) -> None:
-    """init_fan() starts the humidity poll; the repair tests only need the fan."""
-    monkeypatch.setattr(
-        ramses_esp_module, "async_track_time_interval", Mock(return_value=Mock())
-    )
+FAN_STATE = f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 000001"
+OWN_POWERUP = f"044 I --- --:------ --:------ {FAN_ID} 042F 006 00004C004C00"
+NEIGHBOUR_POWERUP = (
+    f"044 I --- --:------ --:------ {NEIGHBOUR_ID} 042F 006 00004C004C00"
+)
 
 
-def make_session(hass: HomeAssistant, *, fan_id: str = FAN_ID) -> RamsesESP:
-    """Build a session without an MQTT connection."""
-    return RamsesESP(
-        hass=hass,
-        transport=LoopbackTransport(gateway_id=RamsesID(GATEWAY_ID)),
-        remote_id=RamsesID(REMOTE_ID),
-        fan_id=RamsesID(fan_id),
-        co2_id=RamsesID(),
-        gateway_id=RamsesID(GATEWAY_ID),
-        config_entry_id="test_entry",
-    )
+@pytest.fixture
+async def make(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[Callable[..., Harness]]:
+    """Build controllers and stop them after the test."""
+    created: list[Harness] = []
+
+    def _make(**kwargs: object) -> Harness:
+        harness = make_controller(hass, monkeypatch, **kwargs)  # type: ignore[arg-type]
+        created.append(harness)
+        return harness
+
+    yield _make
+
+    for harness in created:
+        await harness.controller.stop()
 
 
 def get_issue(hass: HomeAssistant) -> ir.IssueEntry | None:
@@ -54,28 +57,16 @@ def get_issue(hass: HomeAssistant) -> ir.IssueEntry | None:
     return ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
 
 
-def make_envelope(msg: str) -> dict[str, str]:
-    """Build the JSON envelope the gateway delivers."""
-    return {"ts": TIMESTAMP, "msg": msg}
-
-
 async def test_fan_watchdog_raises_an_issue_after_the_timeout(
-    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    hass: HomeAssistant, make: Callable[..., Harness]
 ) -> None:
     """A configured fan that never answers gets an actionable repair issue."""
-    scheduled: list[tuple[timedelta, Callable[[datetime], None]]] = []
-    monkeypatch.setattr(
-        ramses_esp_module,
-        "async_call_later",
-        lambda hass_, delay, action: scheduled.append((delay, action)),
-    )
-    session = make_session(hass)
-    session.publish = AsyncMock()
+    harness = make()
 
-    await session.init_fan()
+    harness.controller.start_fan_watchdog()
 
-    assert len(scheduled) == 1
-    delay, action = scheduled[0]
+    assert len(harness.timers.later) == 1
+    delay, action, _cancel = harness.timers.later[0]
     assert delay == FAN_RESPONSE_TIMEOUT
 
     action(datetime.now(UTC))
@@ -89,106 +80,80 @@ async def test_fan_watchdog_raises_an_issue_after_the_timeout(
 
 
 async def test_a_fan_packet_clears_the_issue_and_the_watchdog(
-    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    make: Callable[..., Harness], hass: HomeAssistant
 ) -> None:
     """The first packet from the fan proves the RF link works again."""
-    cancel = Mock()
-    monkeypatch.setattr(
-        ramses_esp_module, "async_call_later", Mock(return_value=cancel)
-    )
-    session = make_session(hass)
-    session.publish = AsyncMock()
-    await session.init_fan()
+    harness = make()
+    await harness.controller.start()
+    _delay, _action, cancel = harness.timers.later[0]
     async_create_fan_not_responding_issue(hass, RamsesID(FAN_ID))
     assert get_issue(hass) is not None
-    session.add_handler("31D9", Mock())
 
-    await session._handle_ramses_packet(
-        make_envelope(f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 000004")
-    )
+    await feed(harness, FAN_STATE)
 
     assert get_issue(hass) is None
     cancel.assert_called_once_with()
 
 
 async def test_only_this_fans_powerup_clears_the_issue(
-    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    make: Callable[..., Harness], hass: HomeAssistant
 ) -> None:
     """A neighbour's 042F must not hide this fan staying silent."""
-    monkeypatch.setattr(
-        ramses_esp_module, "async_call_later", Mock(return_value=Mock())
-    )
-    session = make_session(hass)
-    session.publish = AsyncMock()
-    await session.init_fan()
+    harness = make()
+    await harness.controller.start()
     async_create_fan_not_responding_issue(hass, RamsesID(FAN_ID))
 
-    await session._handle_ramses_packet(
-        make_envelope(
-            f"044 I --- --:------ --:------ {NEIGHBOUR_ID} 042F 006 00004C004C00"
-        )
-    )
+    await feed(harness, NEIGHBOUR_POWERUP)
 
     assert get_issue(hass) is not None
 
-    await session._handle_ramses_packet(
-        make_envelope(f"044 I --- --:------ --:------ {FAN_ID} 042F 006 00004C004C00")
-    )
+    await feed(harness, OWN_POWERUP)
 
     assert get_issue(hass) is None
 
 
 async def test_mqtt_outage_pauses_the_watchdog_and_reconnect_restarts_it(
-    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    make: Callable[..., Harness],
 ) -> None:
     """An unreachable gateway is no evidence that the fan stopped answering."""
-    cancel = Mock()
-    call_later = Mock(return_value=cancel)
-    monkeypatch.setattr(ramses_esp_module, "async_call_later", call_later)
-    session = make_session(hass)
-    session.publish = AsyncMock()
-    await session.init_fan()
-    assert call_later.call_count == 1
+    harness = make()
+    await harness.controller.start()
+    assert len(harness.timers.later) == 1
+    _delay, _action, cancel = harness.timers.later[0]
 
-    session.async_set_mqtt_connected(False)
+    await set_connected(harness, False)
 
     cancel.assert_called_once_with()
-    assert session._fan_watchdog_unsub is None
+    assert harness.controller._fan_watchdog_unsub is None
 
-    session.async_set_mqtt_connected(True)
+    await set_connected(harness, True)
 
-    assert call_later.call_count == 2
-    assert call_later.call_args.args[1] == FAN_RESPONSE_TIMEOUT
+    assert len(harness.timers.later) == 2
+    assert harness.timers.later[1][0] == FAN_RESPONSE_TIMEOUT
 
 
 async def test_cleanup_stops_the_watchdog_and_removes_the_issue(
-    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    make: Callable[..., Harness], hass: HomeAssistant
 ) -> None:
     """Unloading the entry must not leave a repair issue behind."""
-    cancel = Mock()
-    monkeypatch.setattr(
-        ramses_esp_module, "async_call_later", Mock(return_value=cancel)
-    )
-    session = make_session(hass)
-    session.publish = AsyncMock()
-    await session.init_fan()
+    harness = make()
+    harness.controller.start_fan_watchdog()
+    _delay, _action, cancel = harness.timers.later[0]
     async_create_fan_not_responding_issue(hass, RamsesID(FAN_ID))
 
-    session.cleanup()
+    await harness.controller.stop()
 
     cancel.assert_called_once_with()
     assert get_issue(hass) is None
 
 
 async def test_no_watchdog_without_a_known_fan(
-    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    make: Callable[..., Harness],
 ) -> None:
     """Before discovery there is nothing to watch and nothing to report."""
-    call_later = Mock()
-    monkeypatch.setattr(ramses_esp_module, "async_call_later", call_later)
-    session = make_session(hass, fan_id="")
+    harness = make(fan_id="")
 
-    session.start_fan_watchdog()
-    session.async_set_mqtt_connected(True)
+    harness.controller.start_fan_watchdog()
+    harness.controller.async_set_connected(True)
 
-    call_later.assert_not_called()
+    assert harness.timers.later == []

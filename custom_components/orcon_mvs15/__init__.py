@@ -1,19 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-
-from collections.abc import Callable
 
 from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import Event, HomeAssistant, CoreState
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceEntry
 
+from .controller import OrconMVS15Controller
 from .device import (
     async_get_or_create_co2,
     async_get_or_create_fan,
     async_get_or_create_gateway,
 )
+from .discovery import DiscoveryManager
 from .models import (
     OrconMVS15ConfigEntry,
     OrconMVS15Config,
@@ -21,16 +22,13 @@ from .models import (
 )
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .mqtt import HassMqttBackend
-from .ramses_esp import RamsesESP
-from .handlers import DataHandlers
 from .ramses.protocol import RamsesID
-from .ramses.transport.ramses_esp import RamsesEspTransport
+from .ramses.session import RamsesSession
+from .ramses.transport import TransportNotReady
+from .ramses.transport.ramses_esp import RamsesESP
 from .const import (
-    CONF_CO2_ID,
-    CONF_FAN_ID,
     CONF_GATEWAY_ID,
     CONF_PACKET_LOG,
-    CONF_REMOTE_ID,
     DEFAULT_PACKET_LOG,
     DOMAIN,
 )
@@ -41,80 +39,24 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def _setup_coordinator(
-    hass: HomeAssistant,
-    entry: OrconMVS15ConfigEntry,
-    discover_key: str,
-    config_key: str,
-    create_device: Callable[[RamsesID], None] | None = None,
+    hass: HomeAssistant, entry: OrconMVS15ConfigEntry
 ) -> OrconMVS15DataUpdateCoordinator:
     coordinator = OrconMVS15DataUpdateCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
-    unsub = None
-
-    def _device_discovered() -> None:
-        if entry.data.get(config_key):
-            _LOGGER.debug(f"Discovered {config_key} already in config")
-            if unsub:
-                unsub()
-            return
-        ramses_id = coordinator.data.get(discover_key)
-        if not isinstance(ramses_id, str) or not ramses_id:
-            # An empty RamsesID means a 042F frame without a usable sender. Keep
-            # listening instead of storing an address that can never be used.
-            _LOGGER.debug(
-                f"_device_discovered: Got {coordinator.data} without a valid {discover_key}"
-            )
-            return
-        _LOGGER.debug(f"Storing discovered {config_key} ({ramses_id}) in config")
-        new_data = {**entry.data, config_key: ramses_id}
-        hass.config_entries.async_update_entry(entry, data=new_data)
-        if create_device is not None and isinstance(ramses_id, str):
-            create_device(RamsesID(ramses_id))
-        if unsub:
-            unsub()
-
-    unsub = coordinator.async_add_listener(_device_discovered)
     return coordinator
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -> bool:
     config = OrconMVS15Config.from_data(entry.data)
 
-    def _create_fan_device(fan_id: RamsesID) -> None:
-        async_get_or_create_fan(hass, entry.entry_id, config.gateway_id, fan_id)
-
-    def _create_co2_device(co2_id: RamsesID) -> None:
-        async_get_or_create_co2(hass, entry.entry_id, config.gateway_id, co2_id)
-
-    fan_coordinator = await _setup_coordinator(
-        hass, entry, "discovered_fan_id", CONF_FAN_ID, _create_fan_device
-    )
-    co2_coordinator = await _setup_coordinator(
-        hass, entry, "discovered_co2_id", CONF_CO2_ID, _create_co2_device
-    )
-    rem_coordinator = await _setup_coordinator(
-        hass, entry, "discovered_rem_id", CONF_REMOTE_ID
-    )
-
-    ramses_esp: RamsesESP | None = None
-
-    def _handle_connection(connected: bool) -> None:
-        """Mark every coordinator unavailable while MQTT is down.
-
-        The session pauses its fan watchdog too: an unreachable gateway is not
-        evidence that the fan stopped answering.
-        """
-        for coordinator in (fan_coordinator, co2_coordinator, rem_coordinator):
-            coordinator.async_set_available(connected)
-        if ramses_esp is not None:
-            ramses_esp.async_set_mqtt_connected(connected)
+    fan_coordinator = await _setup_coordinator(hass, entry)
+    co2_coordinator = await _setup_coordinator(hass, entry)
 
     try:
-        transport = RamsesEspTransport(
+        transport = RamsesESP(
             HassMqttBackend(hass),
             base_topic=config.mqtt_topic,
             gateway_id=config.gateway_id,
-            connection_callback=_handle_connection,
         )
         await transport.init()
     except Exception as e:
@@ -137,15 +79,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
     if config.co2_id:
         async_get_or_create_co2(hass, entry.entry_id, config.gateway_id, config.co2_id)
 
+    def _create_device(kind: str, ramses_id: RamsesID) -> None:
+        if kind == "fan":
+            async_get_or_create_fan(hass, entry.entry_id, config.gateway_id, ramses_id)
+        elif kind == "co2":
+            async_get_or_create_co2(hass, entry.entry_id, config.gateway_id, ramses_id)
+
     try:
-        ramses_esp = RamsesESP(
-            hass=hass,
-            transport=transport,
-            gateway_id=config.gateway_id,
-            remote_id=config.remote_id,
-            fan_id=config.fan_id,
-            co2_id=config.co2_id,
-            config_entry_id=entry.entry_id,
+        discovery = DiscoveryManager(
+            hass,
+            entry,
+            {"fan": config.fan_id, "co2": config.co2_id},
+            create_device=_create_device,
+        )
+        session = RamsesSession(transport)
+        controller = OrconMVS15Controller(
+            hass,
+            config,
+            session,
+            discovery,
+            fan_coordinator,
+            co2_coordinator,
+            entry_id=entry.entry_id,
             packet_log=entry.options.get(CONF_PACKET_LOG, DEFAULT_PACKET_LOG),
         )
     except ConfigEntryNotReady:
@@ -161,14 +116,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
         config=config,
         fan_coordinator=fan_coordinator,
         co2_coordinator=co2_coordinator,
-        rem_coordinator=rem_coordinator,
-        ramses_esp=ramses_esp,
+        session=session,
+        controller=controller,
+        discovery=discovery,
         cleanup=[],
     )
 
-    dh = DataHandlers(hass, entry)
-    for code, func in dh.pointers.items():
-        ramses_esp.add_handler(code, func)
+    async def _start_session(event: Event | None = None) -> None:
+        """Start the session, mapping a missing broker to a retry."""
+        try:
+            if event is not None:
+                # Home Assistant has just started; give MQTT or the stick a
+                # moment to come up after the restart.
+                await asyncio.sleep(2)
+            await controller.start()
+        except TransportNotReady as err:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="mqtt_not_available",
+            ) from err
 
     if hass.state == CoreState.running:
         _LOGGER.info("Orcon MVS-15 integration has been setup")
@@ -177,9 +143,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
             # as ConfigEntryNotReady and the entry retries. A detached task
             # would only log the failure and leave the entry loaded without
             # subscriptions.
-            await ramses_esp.setup()
+            await _start_session()
         except Exception as e:
-            await ramses_esp.async_cleanup()
+            await controller.stop()
             if isinstance(e, ConfigEntryNotReady):
                 raise
             raise ConfigEntryNotReady(
@@ -190,16 +156,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
     else:
         _LOGGER.info("Orcon MVS-15 integration has been loaded after restart")
 
-        async def _start_session(event: Event) -> None:
+        async def _start_after_restart(event: Event) -> None:
             """Start the session once Home Assistant is up, retrying on failure."""
             try:
-                await ramses_esp.setup(event=event)
+                await _start_session(event)
             except Exception as err:  # no caller left to raise to
                 _LOGGER.error("The Orcon MVS-15 session failed to start: %s", err)
                 hass.config_entries.async_schedule_reload(entry.entry_id)
 
         entry.async_on_unload(
-            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _start_session)
+            hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, _start_after_restart
+            )
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -210,7 +178,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) 
     _LOGGER.debug("Unloading")
     while entry.runtime_data.cleanup:
         entry.runtime_data.cleanup.pop()()
-    await entry.runtime_data.ramses_esp.async_cleanup()
+    await entry.runtime_data.controller.stop()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

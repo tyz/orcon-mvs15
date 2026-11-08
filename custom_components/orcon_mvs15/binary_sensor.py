@@ -6,11 +6,11 @@ from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .controller import OrconMVS15Controller
 from .device import attached_device_info
 from .discover_entity import DiscoverEntity
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .models import OrconMVS15Config, OrconMVS15ConfigEntry
-from .ramses_esp import RamsesESP
 from .ramses.protocol import RamsesID
 
 # Binary sensors only read pushed data, so there is nothing to serialise.
@@ -27,8 +27,9 @@ async def async_setup_entry(
         async_add_entities=async_add_entities,
         config=entry.runtime_data.config,
         coordinator=entry.runtime_data.fan_coordinator,
-        ramses_esp=entry.runtime_data.ramses_esp,
-        ramses_id=entry.runtime_data.config.fan_id,
+        controller=entry.runtime_data.controller,
+        discovery=entry.runtime_data.discovery,
+        device_kind="fan",
         name="Orcon MVS-15 fan",
         discovery_key="fan",
         entities=[FaultBinarySensor],
@@ -47,7 +48,7 @@ class FaultBinarySensor(CoordinatorEntity, BinarySensorEntity):
         ramses_id: RamsesID,
         config: OrconMVS15Config,
         coordinator: OrconMVS15DataUpdateCoordinator,
-        ramses_esp: RamsesESP,
+        controller: OrconMVS15Controller,
         discovery_key: str,
     ) -> None:
         super().__init__(coordinator)

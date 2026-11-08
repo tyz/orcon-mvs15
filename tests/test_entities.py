@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from homeassistant.const import EntityCategory
-from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.core import HomeAssistant
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -67,7 +67,7 @@ async def test_entity_is_unavailable_until_its_data_arrives(
         ramses_id=FAN_ID,
         config=OrconMVS15Config(mqtt_topic=MQTT_TOPIC),
         coordinator=coordinator,
-        ramses_esp=Mock(),
+        controller=Mock(),
         discovery_key=discovery_key,
     )
 
@@ -91,7 +91,7 @@ async def test_entities_follow_the_coordinator_availability(
         ramses_id=FAN_ID,
         config=OrconMVS15Config(mqtt_topic=MQTT_TOPIC),
         coordinator=coordinator,
-        ramses_esp=Mock(),
+        controller=Mock(),
         discovery_key="fan",
     )
 
@@ -141,7 +141,7 @@ def test_signal_strength_is_a_diagnostic_entity(hass: HomeAssistant) -> None:
         ramses_id=FAN_ID,
         config=OrconMVS15Config(mqtt_topic=MQTT_TOPIC),
         coordinator=make_coordinator(hass),
-        ramses_esp=Mock(),
+        controller=Mock(),
         discovery_key="fan",
     )
 
@@ -154,29 +154,29 @@ def test_platforms_declare_parallel_updates(module: ModuleType) -> None:
     assert module.PARALLEL_UPDATES == 0
 
 
-def make_fan(hass: HomeAssistant, ramses_esp: Mock | None = None) -> OrconFan:
+def make_fan(hass: HomeAssistant, controller: Mock | None = None) -> OrconFan:
     """Build a fan entity without adding it to a platform."""
     return OrconFan(
         hass=hass,
         ramses_id=FAN_ID,
         config=OrconMVS15Config(mqtt_topic=MQTT_TOPIC),
         coordinator=make_coordinator(hass),
-        ramses_esp=ramses_esp or Mock(),
+        controller=controller or Mock(),
         discovery_key="fan",
     )
 
 
-async def test_fan_command_is_forwarded_to_the_session(
+async def test_fan_command_is_forwarded_to_the_controller(
     hass: HomeAssistant,
 ) -> None:
-    """A preset change is a session command, not local-only state."""
-    ramses_esp = Mock()
-    ramses_esp.set_preset_mode = AsyncMock()
-    entity = make_fan(hass, ramses_esp)
+    """A preset change is a controller command, not local-only state."""
+    controller = Mock()
+    controller.set_preset_mode = AsyncMock()
+    entity = make_fan(hass, controller)
 
     await entity.async_set_preset_mode("high")
 
-    ramses_esp.set_preset_mode.assert_awaited_once_with("high")
+    controller.set_preset_mode.assert_awaited_once_with("high")
 
 
 async def test_fan_update_tracks_the_mode_and_fault(hass: HomeAssistant) -> None:
@@ -208,31 +208,16 @@ async def test_fan_update_tracks_a_timed_mode(hass: HomeAssistant) -> None:
     entity.async_write_ha_state.assert_called_once_with()
 
 
-def make_co2_sensor(hass: HomeAssistant, ramses_esp: Mock | None = None) -> Co2Sensor:
+def make_co2_sensor(hass: HomeAssistant) -> Co2Sensor:
     """Build a CO2 sensor without adding it to a platform."""
     return Co2Sensor(
         hass=hass,
         ramses_id=FAN_ID,
         config=OrconMVS15Config(mqtt_topic=MQTT_TOPIC),
         coordinator=make_coordinator(hass),
-        ramses_esp=ramses_esp or Mock(),
+        controller=Mock(),
         discovery_key="co2",
     )
-
-
-async def test_co2_sensor_fetches_its_state_when_added_while_running(
-    hass: HomeAssistant,
-) -> None:
-    """A sensor created after startup requests its own 1298 payload."""
-    hass.set_state(CoreState.running)
-    ramses_esp = Mock()
-    ramses_esp.init_co2 = AsyncMock()
-    entity = make_co2_sensor(hass, ramses_esp)
-    entity.hass = hass
-
-    await entity.async_added_to_hass()
-
-    ramses_esp.init_co2.assert_awaited_once_with(discovered_co2_id=FAN_ID)
 
 
 async def test_co2_update_tracks_the_level_and_vent_demand(
@@ -276,7 +261,7 @@ async def test_humidity_update_tracks_the_level(hass: HomeAssistant) -> None:
         ramses_id=FAN_ID,
         config=OrconMVS15Config(mqtt_topic=MQTT_TOPIC),
         coordinator=make_coordinator(hass),
-        ramses_esp=Mock(),
+        controller=Mock(),
         discovery_key="humidity",
     )
     entity.async_write_ha_state = Mock()
@@ -297,7 +282,7 @@ async def test_signal_strength_update_tracks_the_radio_level(
         ramses_id=FAN_ID,
         config=OrconMVS15Config(mqtt_topic=MQTT_TOPIC),
         coordinator=make_coordinator(hass),
-        ramses_esp=Mock(),
+        controller=Mock(),
         discovery_key="fan",
     )
     entity.async_write_ha_state = Mock()

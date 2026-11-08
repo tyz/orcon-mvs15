@@ -197,7 +197,7 @@ def test_response_matches_type_code_source_and_destination() -> None:
         envelope=envelope(f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 12A0 002 002F")
     )
 
-    assert expected == response
+    assert expected.matches(response)
 
 
 @pytest.mark.parametrize(
@@ -218,18 +218,17 @@ def test_response_does_not_match_other_packets(msg: str) -> None:
         code="12A0",
     )
 
-    assert expected != RamsesPacket(envelope=envelope(msg))
+    assert not expected.matches(RamsesPacket(envelope=envelope(msg)))
 
 
 def test_response_with_empty_fields_matches_anything() -> None:
     """An unspecified expected response matches any packet."""
     expected = RamsesPacketResponse()
 
-    assert expected == RamsesPacket(
-        envelope=envelope(f"044  I --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 000004")
+    assert expected.matches(
+        RamsesPacket(
+            envelope=envelope(
+                f"044  I --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 000004"
+            )
+        )
     )
-
-
-def test_response_never_matches_a_non_packet() -> None:
-    """Comparing with an unrelated object is not an error."""
-    assert RamsesPacketResponse() != "not a packet"

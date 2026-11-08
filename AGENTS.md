@@ -13,7 +13,7 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 |---|---|
 | Domain | `orcon_mvs15` — must match `custom_components/orcon_mvs15/` |
 | Transport | MQTT (`homeassistant.components.mqtt`) through a Ramses ESP gateway |
-| Client layer | `ramses/protocol` and `ramses/transport` are Home Assistant-free; `mqtt.py` adapts Home Assistant MQTT; `ramses_esp.py` is the protocol session |
+| Client layer | `ramses/protocol`, `ramses/session.py` and `ramses/transport` are Home Assistant-free; `controller.py` is the policy layer; `mqtt.py` adapts Home Assistant MQTT |
 | Platforms | `fan`, `sensor`, `binary_sensor` in a single config entry |
 | Discovery | MQTT wildcard `<base_topic>/+` for the gateway; Ramses `042F`, `12A0` and `31E0` packets for devices |
 | Update model | `local_push` — the gateway pushes packets; humidity is polled because `12A0` is not broadcast |
@@ -131,16 +131,21 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
   layout, gateway discovery and JSON envelope over an injected `MqttBackend`.
 * `mqtt.py` — `HassMqttBackend`, the Home Assistant MQTT adapter behind the
   transport's backend protocol.
-* `ramses_esp.py` — protocol session: packet parsing/dispatch, expected-response
-  retries, device discovery and packet logging. Registry writes go through
-  `device.py`.
+* `ramses/session.py` — `RamsesSession`: the frame queue and consumer, codec
+  dispatch, per-code and raw subscriptions, and retried expected-response
+  requests. It knows nothing about Home Assistant.
+* `controller.py` — `OrconMVS15Controller`: device ownership, echoes, the `31E0`
+  CO₂ discovery heuristic, `042F` fan discovery, the fan watchdog and repair
+  issue, humidity polling, packet logging and the init and preset commands.
+* `discovery.py` — `DiscoveryManager`: the ids learned at runtime, persisted to
+  the entry and announced to the waiting entities.
 * `device.py` — the single place that builds `DeviceInfo` for each device type
-  and writes to the device registry.
-* `diagnostics.py` — reports the entry, session and coordinator state for the
-  Home Assistant diagnostics download.
+  and writes to the device registry. Registry writes go through it.
+* `diagnostics.py` — reports the entry, session, devices and coordinator state
+  for the Home Assistant diagnostics download.
 * `handlers.py` — turns decoded `Code` payloads into coordinator updates and
   device updates.
-* `coordinator.py` — push-only coordinators for the fan, CO₂ sensor and remote.
+* `coordinator.py` — push-only coordinators for the fan and CO₂ sensor.
 * `models.py` — `OrconMVS15Config`, the required `OrconMVS15RuntimeData` fields
   and the `OrconMVS15ConfigEntry` alias.
 * `discover_entity.py` — creates entities once a Ramses ID is known or discovered.
@@ -181,14 +186,14 @@ rules in this file still apply, and a skill never overrides them.
 * `22F1` carries 3-byte fan modes. Timed modes use `22F3` with 7 bytes. The
   integration starts a countdown for a timed preset and exposes `timer_end` and
   `timer_remaining`; any new `22F1`/`22F3` command resets it.
-* `12A0` is not announced; it must be polled. The session starts the 5-minute
-  poll as soon as the fan ID is known, so a lost first response does not stop
-  later polls.
+* `12A0` is not announced; it must be polled. The controller starts the
+  5-minute poll when it initialises or discovers the fan, so a lost first
+  response does not stop later polls.
 * Signal strength is received as a negative dBm value; handlers negate it into the
   value exposed by the sensors.
-* Expected-response matching is by type, code, source and destination. A packet
-  must be in the retry queue **before** it is published; otherwise a fast
-  response can be missed by the queue.
+* Expected-response matching is by type, code, source and destination. A request
+  must be pending **before** it is published; otherwise a fast response can be
+  missed and trigger an unnecessary retry.
 * Packet logging is off by default and writes to `/config/packet.log` when the
   options flow enables it. It rolls over at 10 MB and is a debugging aid, not a
   stable interface.

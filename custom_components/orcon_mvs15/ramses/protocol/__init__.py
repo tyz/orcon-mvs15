@@ -22,7 +22,6 @@ from .orcon import (
     Code31d9,
     Code31e0,
 )
-from .queue import RamsesPacketQueue, RamsesPacketQueueException
 
 __all__ = [
     "CODE_REGISTRY",
@@ -44,8 +43,6 @@ __all__ = [
     "RamsesPacketData",
     "RamsesPacketDatetime",
     "RamsesPacketException",
-    "RamsesPacketQueue",
-    "RamsesPacketQueueException",
     "RamsesPacketResponse",
     "register_code",
 ]
