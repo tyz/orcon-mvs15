@@ -92,6 +92,24 @@
     },
     "set_preset_failed": {
       "message": "Failed to set fan preset mode {mode}: {error}"
+    },
+    "firmware_update_unsupported": {
+      "message": "Firmware updates are available over MQTT only; the USB connection cannot recover from the gateway reboot."
+    },
+    "firmware_update_in_progress": {
+      "message": "A firmware update is already in progress."
+    },
+    "firmware_latest_unknown": {
+      "message": "The gateway has not reported the latest firmware version yet."
+    },
+    "firmware_version_invalid": {
+      "message": "Invalid firmware version: {version}. Use a release tag such as 0.5.3."
+    },
+    "firmware_update_failed": {
+      "message": "Could not start the firmware update: {error}"
+    },
+    "firmware_update_timeout": {
+      "message": "The gateway did not report firmware {version} after the update. Check that it is connected to WiFi and review the Home Assistant log."
     }
   },
   "issues": {
@@ -134,6 +152,11 @@
     "binary_sensor": {
       "fault": {
         "name": "Fault"
+      }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
       }
     }
   }

@@ -52,6 +52,7 @@ class OrconMVS15RuntimeData:
     config: OrconMVS15Config
     fan_coordinator: OrconMVS15DataUpdateCoordinator
     co2_coordinator: OrconMVS15DataUpdateCoordinator
+    gateway_coordinator: OrconMVS15DataUpdateCoordinator
     session: RamsesSession
     controller: OrconMVS15Controller
     discovery: DiscoveryManager

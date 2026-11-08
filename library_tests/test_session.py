@@ -356,6 +356,38 @@ async def test_gateway_versions_reach_the_subscribers() -> None:
     await session.stop()
 
 
+async def test_latest_versions_reach_the_subscribers() -> None:
+    """The newest firmware version topic is forwarded to the subscribers."""
+    session, transport = await make_session()
+    versions: list[str] = []
+    session.subscribe_latest(versions.append)
+
+    transport.receive_latest("2026.11.0")
+    await settle()
+
+    assert versions == ["2026.11.0"]
+    await session.stop()
+
+
+async def test_commands_are_forwarded_to_the_transport() -> None:
+    """A firmware console command reaches the transport unchanged."""
+    session, transport = await make_session()
+
+    await session.send_command("ota start")
+
+    assert transport.commands == ["ota start"]
+    await session.stop()
+
+
+async def test_commands_are_refused_after_stop() -> None:
+    """A closed session cannot send a firmware command."""
+    session, _transport = await make_session()
+    await session.stop()
+
+    with pytest.raises(TransportError, match="closed"):
+        await session.send_command("ota start")
+
+
 async def test_frames_are_handled_in_arrival_order() -> None:
     """One consumer task serialises handling."""
     session, transport = await make_session()

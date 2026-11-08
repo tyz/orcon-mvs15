@@ -19,6 +19,7 @@ from ..base import (
     ConnectionHandler,
     ConnectionState,
     Envelope,
+    LatestHandler,
     PacketHandler,
     TransportError,
     VersionHandler,
@@ -34,6 +35,7 @@ GATEWAY_ID_MASK = 0x3FFFF
 
 _FRAME_RE = re.compile(r"^(?:\d{3}|---) +(?:RQ|RP|I|W) +--- ")
 _BANNER_RE = re.compile(r"^#\s*(\S+)\s+(\S+)\s*$")
+_LATEST_RE = re.compile(r"^#\s*Latest firmware version:\s*(\S+)\s*$")
 _MAC_RE = re.compile(r"^[0-9A-Fa-f]{2}(?:[:\-][0-9A-Fa-f]{2}){5}$")
 
 
@@ -66,6 +68,7 @@ class RamsesESPSerial:
         self._backend = backend
         self._gateway_id = gateway_id
         self._version_handlers: list[VersionHandler] = []
+        self._latest_handlers: list[LatestHandler] = []
         self._connection_handlers: list[ConnectionHandler] = []
         self._connection_state = ConnectionState.DISCONNECTED
         self._frames: asyncio.Queue[Envelope] = asyncio.Queue(FRAME_QUEUE_SIZE)
@@ -142,10 +145,29 @@ class RamsesESPSerial:
         except Exception as err:
             raise TransportError(f"Failed to send serial frame {msg!r}: {err}") from err
 
+    async def send_command(self, command: str) -> None:
+        """Write one firmware console command."""
+        if not self._started:
+            raise TransportError("The USB gateway is not connected")
+        try:
+            _LOGGER.debug("Send serial command: %s", command)
+            await self._backend.write(f"{command}\r".encode("ascii"))
+        except TransportError:
+            raise
+        except Exception as err:
+            raise TransportError(
+                f"Failed to send serial command {command!r}: {err}"
+            ) from err
+
     def subscribe_version(self, handler: VersionHandler) -> Callable[[], None]:
         """Subscribe to the gateway firmware version."""
         self._version_handlers.append(handler)
         return lambda: self._version_handlers.remove(handler)
+
+    def subscribe_latest(self, handler: LatestHandler) -> Callable[[], None]:
+        """Subscribe to the newest firmware version the gateway found."""
+        self._latest_handlers.append(handler)
+        return lambda: self._latest_handlers.remove(handler)
 
     def subscribe_connection(self, handler: ConnectionHandler) -> Callable[[], None]:
         """Subscribe to connection state changes."""
@@ -215,12 +237,19 @@ class RamsesESPSerial:
             _LOGGER.warning("Dropping a serial frame because the queue is full")
 
     def _handle_console_line(self, text: str) -> None:
-        match = _BANNER_RE.match(text)
-        if match is None or not match.group(1).lower().startswith("ramses"):
+        banner = _BANNER_RE.match(text)
+        if banner is not None and banner.group(1).lower().startswith("ramses"):
+            version = banner.group(2)
+            _LOGGER.info("Gateway firmware version is %s", version)
+            for handler in tuple(self._version_handlers):
+                handler(version)
             return
-        version = match.group(2)
-        _LOGGER.info("Gateway firmware version is %s", version)
-        for handler in tuple(self._version_handlers):
+        latest = _LATEST_RE.match(text)
+        if latest is None:
+            return
+        version = latest.group(1)
+        _LOGGER.info("Latest gateway firmware version is %s", version)
+        for handler in tuple(self._latest_handlers):
             handler(version)
 
     def _handle_closed(self, exc: Exception | None) -> None:

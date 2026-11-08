@@ -11,6 +11,7 @@ from ..protocol.frame import RamsesID, RamsesPacket
 type Envelope = dict[str, str]
 type PacketHandler = Callable[[Envelope], Awaitable[None]]
 type VersionHandler = Callable[[str], None]
+type LatestHandler = Callable[[str], None]
 type ConnectionHandler = Callable[[ConnectionState], None]
 
 
@@ -58,8 +59,16 @@ class Transport(Protocol):
         """Publish one packet to the gateway."""
         ...  # pragma: no cover
 
+    async def send_command(self, command: str) -> None:
+        """Send a firmware console command to the gateway."""
+        ...  # pragma: no cover
+
     def subscribe_version(self, handler: VersionHandler) -> Callable[[], None]:
         """Subscribe to the gateway firmware version."""
+        ...  # pragma: no cover
+
+    def subscribe_latest(self, handler: LatestHandler) -> Callable[[], None]:
+        """Subscribe to the newest firmware version the gateway found."""
         ...  # pragma: no cover
 
     def subscribe_connection(self, handler: ConnectionHandler) -> Callable[[], None]:

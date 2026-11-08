@@ -90,6 +90,11 @@ async def test_diagnostics_report_entry_session_and_coordinators(
             },
         ),
         co2_coordinator=make_coordinator(hass, entry, {"co2": 812}),
+        gateway_coordinator=make_coordinator(
+            hass,
+            entry,
+            {"firmware_version": "0.5.3", "latest_firmware_version": "0.6.0"},
+        ),
         session=session,
         controller=Mock(),
         discovery=discovery,
@@ -127,5 +132,12 @@ async def test_diagnostics_report_entry_session_and_coordinators(
         },
     }
     assert diagnostics["coordinators"]["co2"]["data"] == {"co2": 812}
+    assert diagnostics["coordinators"]["gateway"] == {
+        "last_update_success": True,
+        "data": {
+            "firmware_version": "0.5.3",
+            "latest_firmware_version": "0.6.0",
+        },
+    }
 
     json.dumps(diagnostics)

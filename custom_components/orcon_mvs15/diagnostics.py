@@ -63,5 +63,6 @@ async def async_get_config_entry_diagnostics(
         "coordinators": {
             "fan": _coordinator_diagnostics(runtime.fan_coordinator),
             "co2": _coordinator_diagnostics(runtime.co2_coordinator),
+            "gateway": _coordinator_diagnostics(runtime.gateway_coordinator),
         },
     }

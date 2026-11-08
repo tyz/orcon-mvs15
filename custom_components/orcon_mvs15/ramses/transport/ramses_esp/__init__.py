@@ -13,6 +13,7 @@ from ..base import (
     ConnectionHandler,
     ConnectionState,
     Envelope,
+    LatestHandler,
     PacketHandler,
     TransportError,
     VersionHandler,
@@ -43,6 +44,7 @@ class RamsesESP:
         self._discovery_timeout = discovery_timeout
         self._packet_handler: PacketHandler | None = None
         self._version_handlers: list[VersionHandler] = []
+        self._latest_handlers: list[LatestHandler] = []
         self._connection_handlers: list[ConnectionHandler] = []
         self._unsubs: list[Callable[[], None]] = []
         self._discovery_event = asyncio.Event()
@@ -51,6 +53,8 @@ class RamsesESP:
         self.sub_topic = ""
         self.pub_topic = ""
         self.version_topic = ""
+        self.latest_topic = ""
+        self.cmd_topic = ""
 
     @property
     def gateway_id(self) -> RamsesID:
@@ -82,6 +86,8 @@ class RamsesESP:
         self.sub_topic = f"{self._base_topic}/{self._gateway_id}/rx"
         self.pub_topic = f"{self._base_topic}/{self._gateway_id}/tx"
         self.version_topic = f"{self._base_topic}/{self._gateway_id}/info/version"
+        self.latest_topic = f"{self._base_topic}/{self._gateway_id}/info/latest"
+        self.cmd_topic = f"{self._base_topic}/{self._gateway_id}/cmd/cmd"
 
     async def start(self, handle_packet: PacketHandler) -> None:
         """Subscribe to the configured topics and start delivering frames."""
@@ -93,6 +99,11 @@ class RamsesESP:
         self._unsubs.append(
             await self._backend.subscribe(
                 self.version_topic, self._handle_version_message
+            )
+        )
+        self._unsubs.append(
+            await self._backend.subscribe(
+                self.latest_topic, self._handle_latest_message
             )
         )
         self._unsubs.append(
@@ -129,6 +140,18 @@ class RamsesESP:
                 f"Failed to publish payload {envelope} to {self.pub_topic}: {err}"
             ) from err
 
+    async def send_command(self, command: str) -> None:
+        """Publish one firmware console command."""
+        try:
+            _LOGGER.debug("Send firmware command to %s: %s", self.cmd_topic, command)
+            await self._backend.publish(self.cmd_topic, command)
+        except TransportError:
+            raise
+        except Exception as err:
+            raise TransportError(
+                f"Failed to publish command {command!r} to {self.cmd_topic}: {err}"
+            ) from err
+
     def subscribe_version(self, handler: VersionHandler) -> Callable[[], None]:
         """Subscribe to the gateway firmware version."""
         self._version_handlers.append(handler)
@@ -136,6 +159,16 @@ class RamsesESP:
         def _unsubscribe() -> None:
             if handler in self._version_handlers:
                 self._version_handlers.remove(handler)
+
+        return _unsubscribe
+
+    def subscribe_latest(self, handler: LatestHandler) -> Callable[[], None]:
+        """Subscribe to the newest firmware version the gateway found."""
+        self._latest_handlers.append(handler)
+
+        def _unsubscribe() -> None:
+            if handler in self._latest_handlers:
+                self._latest_handlers.remove(handler)
 
         return _unsubscribe
 
@@ -170,6 +203,15 @@ class RamsesESP:
             payload.decode() if isinstance(payload, (bytes, bytearray)) else payload
         )
         for handler in tuple(self._version_handlers):
+            handler(version)
+
+    async def _handle_latest_message(
+        self, topic: str, payload: str | bytes | bytearray
+    ) -> None:
+        version = (
+            payload.decode() if isinstance(payload, (bytes, bytearray)) else payload
+        )
+        for handler in tuple(self._latest_handlers):
             handler(version)
 
     async def _handle_online_message(

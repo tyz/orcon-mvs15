@@ -9,6 +9,7 @@ from .base import (
     ConnectionHandler,
     ConnectionState,
     Envelope,
+    LatestHandler,
     PacketHandler,
     VersionHandler,
 )
@@ -26,8 +27,10 @@ class LoopbackTransport:
         self._connection_state = connection_state
         self._packet_handler: PacketHandler | None = None
         self._version_handlers: list[VersionHandler] = []
+        self._latest_handlers: list[LatestHandler] = []
         self._connection_handlers: list[ConnectionHandler] = []
         self.sent: list[RamsesPacket] = []
+        self.commands: list[str] = []
         self.started = False
         self.stopped = False
 
@@ -53,10 +56,19 @@ class LoopbackTransport:
     async def send(self, packet: RamsesPacket) -> None:
         self.sent.append(packet)
 
+    async def send_command(self, command: str) -> None:
+        """Record a firmware console command."""
+        self.commands.append(command)
+
     def subscribe_version(self, handler: VersionHandler) -> Callable[[], None]:
         """Subscribe to the gateway firmware version."""
         self._version_handlers.append(handler)
         return lambda: self._version_handlers.remove(handler)
+
+    def subscribe_latest(self, handler: LatestHandler) -> Callable[[], None]:
+        """Subscribe to the newest firmware version the gateway found."""
+        self._latest_handlers.append(handler)
+        return lambda: self._latest_handlers.remove(handler)
 
     def subscribe_connection(self, handler: ConnectionHandler) -> Callable[[], None]:
         """Subscribe to connection state changes."""
@@ -78,6 +90,13 @@ class LoopbackTransport:
         if not self.started:
             raise RuntimeError("LoopbackTransport.start() has not been called")
         for handler in tuple(self._version_handlers):
+            handler(version)
+
+    def receive_latest(self, version: str) -> None:
+        """Deliver the newest firmware version the gateway found."""
+        if not self.started:
+            raise RuntimeError("LoopbackTransport.start() has not been called")
+        for handler in tuple(self._latest_handlers):
             handler(version)
 
     def set_connection_state(self, state: ConnectionState) -> None:

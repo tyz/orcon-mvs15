@@ -278,6 +278,97 @@ def test_transport_starts_disconnected(hass: HomeAssistant) -> None:
     assert transport.connection_state is ConnectionState.DISCONNECTED
 
 
+async def test_latest_version_and_commands_use_the_gateway_topics(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The newest version is subscribed and OTA commands go to cmd/cmd."""
+    monkeypatch.setattr(
+        mqtt_module.mqtt, "async_wait_for_mqtt_client", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        mqtt_module.mqtt, "async_subscribe", AsyncMock(return_value=Mock())
+    )
+    monkeypatch.setattr(
+        mqtt_module.mqtt,
+        "async_subscribe_connection_status",
+        Mock(return_value=Mock()),
+    )
+    monkeypatch.setattr(mqtt_module.mqtt, "is_connected", lambda hass_: True)
+    latest_handler = Mock()
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    transport.subscribe_latest(latest_handler)
+    await transport.init()
+
+    assert transport.latest_topic == f"{MQTT_TOPIC}/{GATEWAY_ID}/info/latest"
+    assert transport.cmd_topic == f"{MQTT_TOPIC}/{GATEWAY_ID}/cmd/cmd"
+
+    await transport.start(AsyncMock())
+    await transport._handle_latest_message(
+        f"{MQTT_TOPIC}/{GATEWAY_ID}/info/latest", b"0.6.0"
+    )
+    await transport._handle_latest_message(
+        f"{MQTT_TOPIC}/{GATEWAY_ID}/info/latest", "0.6.1"
+    )
+
+    assert [call.args[0] for call in latest_handler.call_args_list] == [
+        "0.6.0",
+        "0.6.1",
+    ]
+
+    transport._backend.publish = AsyncMock()
+    await transport.send_command("ota start")
+    transport._backend.publish.assert_awaited_once_with(
+        f"{MQTT_TOPIC}/{GATEWAY_ID}/cmd/cmd", "ota start"
+    )
+
+    await transport.stop()
+
+
+async def test_send_command_wraps_an_unexpected_backend_failure(
+    hass: HomeAssistant,
+) -> None:
+    """A command that cannot be published is a transport error."""
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    await transport.init()
+    transport._backend.publish = AsyncMock(side_effect=RuntimeError("broker down"))
+
+    with pytest.raises(TransportError, match="Failed to publish command"):
+        await transport.send_command("ota start")
+
+
+async def test_send_command_passes_a_transport_error_through(
+    hass: HomeAssistant,
+) -> None:
+    """A backend transport error is not wrapped a second time."""
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    await transport.init()
+    transport._backend.publish = AsyncMock(side_effect=TransportError("broker offline"))
+
+    with pytest.raises(TransportError, match="broker offline"):
+        await transport.send_command("ota start")
+
+
+async def test_transport_subscriptions_can_be_removed(
+    hass: HomeAssistant,
+) -> None:
+    """Each subscription returns its own unsubscribe callable."""
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    handlers = [Mock(), Mock(), Mock()]
+    unsubs = [
+        transport.subscribe_version(handlers[0]),
+        transport.subscribe_latest(handlers[1]),
+        transport.subscribe_connection(handlers[2]),
+    ]
+
+    for unsub in unsubs:
+        unsub()
+        unsub()
+
+    assert transport._version_handlers == []
+    assert transport._latest_handlers == []
+    assert transport._connection_handlers == []
+
+
 async def test_send_wraps_an_unexpected_backend_failure(
     hass: HomeAssistant,
 ) -> None:

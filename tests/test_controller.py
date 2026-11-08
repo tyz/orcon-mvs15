@@ -29,7 +29,12 @@ from controller_helpers import (
     set_connected,
     settle,
 )
-from custom_components.orcon_mvs15.const import CONF_CO2_ID, CONF_FAN_ID, DOMAIN
+from custom_components.orcon_mvs15.const import (
+    CONF_CO2_ID,
+    CONF_FAN_ID,
+    DOMAIN,
+    TRANSPORT_USB,
+)
 from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 from custom_components.orcon_mvs15.ramses.transport import TransportError
 from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
@@ -456,11 +461,13 @@ async def test_a_connection_loss_makes_the_entities_unavailable(
 
     assert harness.fan.available is False
     assert harness.co2.available is False
+    assert harness.gateway.available is False
 
     await set_connected(harness, True)
 
     assert harness.fan.available is True
     assert harness.co2.available is True
+    assert harness.gateway.available is True
 
 
 async def test_the_version_topic_updates_the_gateway_device(
@@ -480,6 +487,178 @@ async def test_the_version_topic_updates_the_gateway_device(
     updated = device_registry.async_get(device.id)
     assert updated is not None
     assert updated.sw_version == "2026.10.1"
+    assert harness.gateway.data["firmware_version"] == "2026.10.1"
+
+
+async def test_the_latest_version_topic_updates_the_gateway_coordinator(
+    make: Callable[..., Harness],
+) -> None:
+    """The newest version the gateway found drives the update entity."""
+    harness = make()
+    await harness.controller.start()
+
+    harness.transport.receive_latest("2026.11.0")
+    await settle()
+
+    assert harness.gateway.data["latest_firmware_version"] == "2026.11.0"
+
+
+async def test_installing_the_latest_firmware_waits_for_the_new_version(
+    make: Callable[..., Harness],
+) -> None:
+    """ota start is sent, and the call returns once the new version arrives."""
+    harness = make(firmware_update_timeout=1)
+    await harness.controller.start()
+    harness.gateway.data = {
+        "firmware_version": "0.5.3",
+        "latest_firmware_version": "0.6.0",
+    }
+
+    task = asyncio.create_task(harness.controller.async_install_firmware())
+    await settle()
+
+    assert harness.transport.commands == ["ota start"]
+
+    harness.transport.receive_version("0.6.0")
+    await settle()
+    await task
+
+    assert harness.gateway.data["firmware_version"] == "0.6.0"
+
+
+async def test_installing_a_specific_version_selects_it_first(
+    make: Callable[..., Harness],
+) -> None:
+    """The firmware needs the version command before ota start."""
+    harness = make(firmware_update_timeout=1)
+    await harness.controller.start()
+    harness.gateway.data = {"firmware_version": "0.5.3"}
+
+    task = asyncio.create_task(harness.controller.async_install_firmware("0.5.2"))
+    await settle()
+
+    assert harness.transport.commands == ["ota version 0.5.2", "ota start"]
+
+    harness.transport.receive_version("0.5.2")
+    await settle()
+    await task
+
+
+async def test_a_repeated_old_version_does_not_finish_the_update(
+    make: Callable[..., Harness],
+) -> None:
+    """A stale version report is not evidence that the update happened."""
+    harness = make(firmware_update_timeout=0.01)
+    await harness.controller.start()
+    harness.gateway.data = {
+        "firmware_version": "0.5.3",
+        "latest_firmware_version": "0.6.0",
+    }
+
+    task = asyncio.create_task(harness.controller.async_install_firmware())
+    await settle()
+    harness.transport.receive_version("0.5.3")
+    await settle()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await task
+
+    assert err.value.translation_key == "firmware_update_timeout"
+    assert err.value.translation_placeholders == {"version": "0.6.0"}
+
+
+async def test_a_second_install_is_refused(make: Callable[..., Harness]) -> None:
+    """One gateway cannot run two firmware updates at once."""
+    harness = make(firmware_update_timeout=1)
+    await harness.controller.start()
+    harness.gateway.data = {"latest_firmware_version": "0.6.0"}
+
+    task = asyncio.create_task(harness.controller.async_install_firmware())
+    await settle()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await harness.controller.async_install_firmware()
+
+    assert err.value.translation_key == "firmware_update_in_progress"
+
+    harness.transport.receive_version("0.6.0")
+    await settle()
+    await task
+
+
+async def test_stopping_cancels_a_pending_install(make: Callable[..., Harness]) -> None:
+    """Unloading the entry releases an install that is waiting for a reboot."""
+    harness = make(firmware_update_timeout=10)
+    await harness.controller.start()
+    harness.gateway.data = {"latest_firmware_version": "0.6.0"}
+
+    task = asyncio.create_task(harness.controller.async_install_firmware())
+    await settle()
+
+    await harness.controller.stop()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+async def test_installing_is_refused_over_usb(make: Callable[..., Harness]) -> None:
+    """The USB transport cannot reconnect after the gateway reboots."""
+    harness = make(transport=TRANSPORT_USB)
+    await harness.controller.start()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await harness.controller.async_install_firmware()
+
+    assert err.value.translation_key == "firmware_update_unsupported"
+    assert harness.transport.commands == []
+
+
+async def test_installing_the_latest_needs_a_known_latest(
+    make: Callable[..., Harness],
+) -> None:
+    """Without a version check there is nothing to install."""
+    harness = make()
+    await harness.controller.start()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await harness.controller.async_install_firmware()
+
+    assert err.value.translation_key == "firmware_latest_unknown"
+    assert harness.transport.commands == []
+
+
+@pytest.mark.parametrize("version", ["", "bad/tag", "bad tag", "a" * 32])
+async def test_installing_rejects_an_unsafe_version(
+    make: Callable[..., Harness], version: str
+) -> None:
+    """The version is a URL path segment and a 32-byte firmware buffer."""
+    harness = make()
+    await harness.controller.start()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await harness.controller.async_install_firmware(version)
+
+    assert err.value.translation_key == "firmware_version_invalid"
+    assert err.value.translation_placeholders == {"version": version}
+    assert harness.transport.commands == []
+
+
+async def test_installing_reports_a_command_that_cannot_be_sent(
+    make: Callable[..., Harness],
+) -> None:
+    """A broker outage is a failed update, not a silent timeout."""
+    harness = make()
+    await harness.controller.start()
+    harness.gateway.data = {"latest_firmware_version": "0.6.0"}
+    harness.session.send_command = AsyncMock(  # type: ignore[method-assign]
+        side_effect=TransportError("broker offline")
+    )
+
+    with pytest.raises(HomeAssistantError) as err:
+        await harness.controller.async_install_firmware()
+
+    assert err.value.translation_key == "firmware_update_failed"
+    assert err.value.translation_placeholders == {"error": "broker offline"}
 
 
 async def test_packet_log_is_off_by_default(make: Callable[..., Harness]) -> None:
