@@ -11,29 +11,21 @@
       },
       "mqtt_connection": {
         "title": "MQTT connection",
-        "description": "Choose the remote and enter the MQTT base topic of the gateway.",
+        "description": "Enter the MQTT base topic of the gateway. The integration generates a remote and pairs it with the fan automatically; power-cycle the fan after setup.",
         "data": {
-          "remote_fake": "Use a generated fake remote",
-          "remote_id": "Remote ID (e.g., 29:123456)",
           "mqtt_topic": "MQTT Topic Prefix (e.g., RAMSES/GATEWAY)"
         },
         "data_description": {
-          "remote_fake": "Generate a remote ID and pair it with the fan automatically, instead of using a 15RF remote. The Remote ID field is ignored. Power-cycle the fan after setup so it is discovered and paired.",
-          "remote_id": "The Ramses ID of the 15RF wireless remote, for example 29:123456.",
           "mqtt_topic": "The base topic of the Ramses ESP gateway, for example RAMSES/GATEWAY."
         }
       },
       "usb_connection": {
         "title": "USB connection",
-        "description": "Select the serial port of the Ramses ESP. Use interface 0 when the stick exposes two ports.",
+        "description": "Select the serial port of the Ramses ESP. Use interface 0 when the stick exposes two ports. The integration generates a remote and pairs it with the fan automatically; power-cycle the fan after setup.",
         "data": {
-          "remote_fake": "Use a generated fake remote",
-          "remote_id": "Remote ID (e.g., 29:123456)",
           "usb_port": "Serial port"
         },
         "data_description": {
-          "remote_fake": "Generate a remote ID and pair it with the fan automatically, instead of using a 15RF remote. The Remote ID field is ignored. Power-cycle the fan after setup so it is discovered and paired.",
-          "remote_id": "The Ramses ID of the 15RF wireless remote, for example 29:123456.",
           "usb_port": "The USB serial port of the Ramses ESP, for example /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_...-if00."
         }
       },
@@ -55,8 +47,7 @@
       "mqtt_topic_whitespace": "The base MQTT topic cannot start or end with a space.",
       "mqtt_topic_wildcard": "The base MQTT topic cannot contain the wildcards + or #.",
       "usb_port_required": "Select the USB serial port of the gateway.",
-      "gateway_id_unavailable": "Could not derive the gateway ID from the USB serial number. Check that the correct port is selected.",
-      "remote_id_required": "Enter the Ramses ID of the remote, or enable 'Use a generated fake remote'."
+      "gateway_id_unavailable": "Could not derive the gateway ID from the USB serial number. Check that the correct port is selected."
     },
     "abort": {
       "already_configured": "This gateway is already configured."

@@ -414,9 +414,9 @@ the known device state after the gateway returns.
    has no `ann_id`.
 3. The controller calls `init_fan()` after setup and when `042F` discovers the
    fan; it requests `10E0`, `12A0` and `31D9`.
-4. With a generated fake remote, the same `042F` starts the `1FC9` handshake
-   while the fan's pairing window is open. A handshake that did not complete is
-   retried on the next `042F`.
+4. A generated remote pairs through the same `042F`: it starts the `1FC9`
+   handshake while the fan's pairing window is open. A handshake that did not
+   complete is retried on the next `042F`.
 5. `31D9` updates the fan mode and fault state.
 
 The current filter accepts `042F` from any source, so a neighbouring Orcon can be
@@ -452,7 +452,7 @@ This is a manual debugging path, not part of the integration’s normal transpor
 ## Known limitations
 
 * No ownership check for `042F` discovery.
-* A generated fake remote is paired automatically on the fan's `042F` power-up
+* A generated remote is paired automatically on the fan's `042F` power-up
   broadcast. The handshake is initiated by Home Assistant and does not use the
   optional `10E0` addendum a real remote broadcasts afterwards.
 * The timed-mode countdown is maintained by the integration; the fan's next

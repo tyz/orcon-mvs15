@@ -11,29 +11,21 @@
       },
       "mqtt_connection": {
         "title": "MQTT-verbinding",
-        "description": "Kies de afstandsbediening en voer het MQTT-basistopic van de gateway in.",
+        "description": "Voer het MQTT-basistopic van de gateway in. De integratie genereert een afstandsbediening en koppelt die automatisch aan de ventilator; herstart de ventilator na de installatie.",
         "data": {
-          "remote_fake": "Gebruik een gegenereerde nepafstandsbediening",
-          "remote_id": "Afstandbediening ID (bijv. 29:123456)",
           "mqtt_topic": "MQTT topic prefix (bijv. RAMSES/GATEWAY)"
         },
         "data_description": {
-          "remote_fake": "Genereer een afstandsbedienings-ID en koppel die automatisch aan de ventilator, in plaats van een 15RF-afstandsbediening te gebruiken. Het veld Afstandbediening ID wordt dan genegeerd. Herstart de ventilator na de installatie, zodat die wordt ontdekt en gekoppeld.",
-          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:123456.",
           "mqtt_topic": "Het basistopic van de Ramses ESP-gateway, bijvoorbeeld RAMSES/GATEWAY."
         }
       },
       "usb_connection": {
         "title": "USB-verbinding",
-        "description": "Selecteer de seriële poort van de Ramses ESP. Gebruik interface 0 als de stick twee poorten heeft.",
+        "description": "Selecteer de seriële poort van de Ramses ESP. Gebruik interface 0 als de stick twee poorten heeft. De integratie genereert een afstandsbediening en koppelt die automatisch aan de ventilator; herstart de ventilator na de installatie.",
         "data": {
-          "remote_fake": "Gebruik een gegenereerde nepafstandsbediening",
-          "remote_id": "Afstandbediening ID (bijv. 29:123456)",
           "usb_port": "Seriele poort"
         },
         "data_description": {
-          "remote_fake": "Genereer een afstandsbedienings-ID en koppel die automatisch aan de ventilator, in plaats van een 15RF-afstandsbediening te gebruiken. Het veld Afstandbediening ID wordt dan genegeerd. Herstart de ventilator na de installatie, zodat die wordt ontdekt en gekoppeld.",
-          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:123456.",
           "usb_port": "De USB-seriële poort van de Ramses ESP, bijvoorbeeld /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_...-if00."
         }
       },
@@ -55,8 +47,7 @@
       "mqtt_topic_whitespace": "Het basis-MQTT-topic mag niet met een spatie beginnen of eindigen.",
       "mqtt_topic_wildcard": "Het basis-MQTT-topic mag de jokertekens + en # niet bevatten.",
       "usb_port_required": "Selecteer de USB-seriële poort van de gateway.",
-      "gateway_id_unavailable": "Kon het gateway-ID niet afleiden uit het serienummer van de USB-poort. Controleer of de juiste poort is geselecteerd.",
-      "remote_id_required": "Voer het Ramses-ID van de afstandsbediening in, of schakel 'Gebruik een gegenereerde nepafstandsbediening' in."
+      "gateway_id_unavailable": "Kon het gateway-ID niet afleiden uit het serienummer van de USB-poort. Controleer of de juiste poort is geselecteerd."
     },
     "abort": {
       "already_configured": "Deze gateway is al geconfigureerd."
