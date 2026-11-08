@@ -262,10 +262,10 @@ async def test_setup_creates_a_gateway_reboot_button(
     assert button_entry.entity_category is EntityCategory.CONFIG
 
 
-async def test_a_fake_remote_adds_a_pairing_button_to_the_fan(
+async def test_a_fake_remote_adds_a_pair_again_button_to_the_fan(
     hass: HomeAssistant, device_registry: DeviceRegistry
 ) -> None:
-    """The generated remote cannot work until the fan is put in pairing mode."""
+    """A failed automatic pairing can be retried on the next fan power-up."""
     entry = make_entry(
         **{
             CONF_REMOTE_ID: "29:123456",
@@ -284,7 +284,7 @@ async def test_a_fake_remote_adds_a_pairing_button_to_the_fan(
     pair_button = next(
         state
         for state in hass.states.async_all("button")
-        if state.name.endswith("Pair remote")
+        if state.name.endswith("Pair again on next fan restart")
     )
     fan_device = device_registry.async_get_device_by_identifier(
         (DOMAIN, FAN_ID), entry.entry_id
@@ -294,6 +294,29 @@ async def test_a_fake_remote_adds_a_pairing_button_to_the_fan(
     assert button_entry is not None
     assert button_entry.device_id == fan_device.id
     assert button_entry.entity_category is EntityCategory.CONFIG
+
+
+async def test_an_out_of_range_fake_remote_id_is_repaired(
+    hass: HomeAssistant,
+) -> None:
+    """A remote ID the address cannot hold would alias to another ID on air."""
+    entry = make_entry(
+        **{
+            CONF_REMOTE_ID: "29:428628",
+            CONF_REMOTE_FAKE: True,
+            CONF_FAN_ID: FAN_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        }
+    )
+    entry.add_to_hass(hass)
+
+    with patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.data[CONF_REMOTE_ID] == "29:166484"
+    assert entry.runtime_data.config.remote_id == RamsesID("29:166484")
 
 
 async def test_setup_passes_the_packet_log_option_to_the_controller(

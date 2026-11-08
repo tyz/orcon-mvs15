@@ -21,6 +21,7 @@ from .orcon import (
     Code22f3,
     Code31d9,
     Code31e0,
+    canonical_id,
 )
 
 __all__ = [
@@ -44,5 +45,6 @@ __all__ = [
     "RamsesPacketDatetime",
     "RamsesPacketException",
     "RamsesPacketResponse",
+    "canonical_id",
     "register_code",
 ]

@@ -74,9 +74,9 @@ rules:
   docs-configuration-parameters:
     status: done
     comment: |
-      README.md documents the remote ID, MQTT topic, USB serial port and the
-      packet-log option. The connection settings use the reconfigure flow; the
-      packet log uses the options flow.
+      README.md documents the generated remote, MQTT topic, USB serial port and
+      the packet-log option. The connection settings use the reconfigure flow;
+      the packet log uses the options flow.
   docs-installation-parameters: done
   entity-unavailable:
     status: done

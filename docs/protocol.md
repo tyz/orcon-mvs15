@@ -137,6 +137,10 @@ device_id   = value & 0x03FFFF
 `FFFFFF` means “all ones”. The integration currently renders it as nine spaces;
 that behaviour is unverified and should not be changed without protocol evidence.
 
+The device number is 18 bits, so `xxxxxx` can hold at most `262143`. A larger
+number overflows into the device type when encoded, and the device on the air
+sees a different ID. Generated fake-remote IDs stay inside that range.
+
 ## Supported codes
 
 | Code | Description | Used | Fan | CO₂ | RF | Broadcast | Requestable | Notes |
@@ -293,6 +297,9 @@ with a Confirm.
   binding code, so the integration sends the one-byte payload `00`.
 * A real remote broadcasts a `10E0` addendum after the Confirm. The integration
   does not send it.
+* The integration initiates the handshake when the fan's `042F` power-up
+  broadcast arrives, while the fan's pairing window is open. It retries on the
+  next power-up until a Confirm has been sent.
 
 ### `22F1` — fan mode
 
@@ -407,7 +414,10 @@ the known device state after the gateway returns.
    has no `ann_id`.
 3. The controller calls `init_fan()` after setup and when `042F` discovers the
    fan; it requests `10E0`, `12A0` and `31D9`.
-4. `31D9` updates the fan mode and fault state.
+4. A generated remote pairs through the same `042F`: it starts the `1FC9`
+   handshake while the fan's pairing window is open. A handshake that did not
+   complete is retried on the next `042F`.
+5. `31D9` updates the fan mode and fault state.
 
 The current filter accepts `042F` from any source, so a neighbouring Orcon can be
 adopted. This is a known risk; ownership verification is an open design question.
@@ -442,9 +452,9 @@ This is a manual debugging path, not part of the integration’s normal transpor
 ## Known limitations
 
 * No ownership check for `042F` discovery.
-* A generated fake remote has to be paired with the fan in its pairing mode; the
-  handshake is initiated by Home Assistant and does not use the optional `10E0`
-  addendum a real remote broadcasts afterwards.
+* A generated remote is paired automatically on the fan's `042F` power-up
+  broadcast. The handshake is initiated by Home Assistant and does not use the
+  optional `10E0` addendum a real remote broadcasts afterwards.
 * The timed-mode countdown is maintained by the integration; the fan's next
   `31D9` state remains the source of truth for the preset.
 * Packet logging is off by default and writes to `/config/packet.log` when

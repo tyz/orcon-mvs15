@@ -88,9 +88,6 @@ EXCEPTION_PLACEHOLDERS: dict[str, dict[str, str] | None] = {
     "firmware_update_timeout": {"version": "0.6.0"},
     "reboot_failed": {"error": "broker offline"},
     "reboot_during_update": None,
-    "remote_pairing_in_progress": None,
-    "remote_pairing_failed": {"error": "broker offline"},
-    "remote_pairing_timeout": None,
 }
 
 

@@ -991,8 +991,8 @@ async def test_pairing_runs_the_orcon_bind_handshake(
     assert "001FC9" in offer.data.upper()
 
     await feed(harness, ACCEPT)
-    await task
 
+    assert await task is True
     confirm = harness.transport.sent[-1]
     assert confirm.type == "I"
     assert confirm.code == "1FC9"
@@ -1014,8 +1014,8 @@ async def test_pairing_confirms_the_index_of_the_accept(
         harness,
         f"044  W --- {FAN_ID} {REMOTE_ID} --:------ 1FC9 012 0731D9825FE10031DA825FE1",
     )
-    await task
 
+    assert await task is True
     assert harness.transport.sent[-1].data == "07"
 
 
@@ -1032,21 +1032,19 @@ async def test_pairing_ignores_an_accept_from_another_fan(
     assert not task.done()
 
     await feed(harness, ACCEPT)
-    await task
+
+    assert await task is True
     assert harness.transport.sent[-1].dst_id == RamsesID(FAN_ID)
 
 
-async def test_pairing_reports_a_fan_that_never_accepts(
+async def test_pairing_gives_up_quietly_without_an_accept(
     make: Callable[..., Harness],
 ) -> None:
-    """Pairing mode has a limited window, so a silent fan is an error."""
+    """A missed power-up window is retried on the next one, not an error."""
     harness = make(fake_remote=True, pairing_timeout=0.01)
     await harness.controller.start()
 
-    with pytest.raises(HomeAssistantError) as err:
-        await harness.controller.async_pair_remote()
-
-    assert err.value.translation_key == "remote_pairing_timeout"
+    assert await harness.controller.async_pair_remote() is False
 
 
 async def test_a_second_pairing_attempt_is_refused(
@@ -1058,19 +1056,16 @@ async def test_a_second_pairing_attempt_is_refused(
     task = asyncio.create_task(harness.controller.async_pair_remote())
     await settle()
 
-    with pytest.raises(HomeAssistantError) as err:
-        await harness.controller.async_pair_remote()
-
-    assert err.value.translation_key == "remote_pairing_in_progress"
+    assert await harness.controller.async_pair_remote() is False
 
     await feed(harness, ACCEPT)
-    await task
+    assert await task is True
 
 
-async def test_pairing_reports_a_failed_offer(
+async def test_pairing_survives_a_failed_offer(
     make: Callable[..., Harness], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A broker that is offline leaves the fan unpaired, and the user learns."""
+    """A broker that is offline leaves the fan unpaired for the next attempt."""
     harness = make(fake_remote=True)
     await harness.controller.start()
 
@@ -1080,7 +1075,157 @@ async def test_pairing_reports_a_failed_offer(
 
     monkeypatch.setattr(harness.transport, "send", failed_send)
 
-    with pytest.raises(HomeAssistantError) as err:
-        await harness.controller.async_pair_remote()
+    assert await harness.controller.async_pair_remote() is False
 
-    assert err.value.translation_key == "remote_pairing_failed"
+
+async def test_a_powerup_pairs_the_fake_remote(
+    make: Callable[..., Harness],
+) -> None:
+    """The fan opens its pairing window when it broadcasts the power-up."""
+    harness = make(fake_remote=True, fan_id="", pairing_timeout=1)
+    await harness.controller.start()
+
+    await feed(harness, POWERUP)
+    offer = next(p for p in harness.transport.sent if p.code == "1FC9")
+    assert offer.src_id == RamsesID(REMOTE_ID)
+
+    await feed(harness, ACCEPT)
+    await settle()
+
+    confirm = next(
+        p
+        for p in harness.transport.sent
+        if p.code == "1FC9" and p.dst_id == RamsesID(FAN_ID)
+    )
+    assert confirm.data == "00"
+    assert harness.controller._remote_paired is True
+
+
+async def test_a_later_powerup_does_not_pair_again(
+    make: Callable[..., Harness],
+) -> None:
+    """One completed handshake is enough until the next Home Assistant start."""
+    harness = make(fake_remote=True, fan_id="", pairing_timeout=1)
+    await harness.controller.start()
+    await feed(harness, POWERUP)
+    await feed(harness, ACCEPT)
+    await settle()
+    sent = len([p for p in harness.transport.sent if p.code == "1FC9"])
+
+    await feed(harness, POWERUP)
+    await settle()
+
+    assert len([p for p in harness.transport.sent if p.code == "1FC9"]) == sent
+
+
+async def test_a_failed_automatic_pairing_is_retried_on_the_next_powerup(
+    make: Callable[..., Harness],
+) -> None:
+    """A fan that was not ready at power-up gets another chance to pair."""
+    harness = make(fake_remote=True, fan_id="", pairing_timeout=0)
+    await harness.controller.start()
+
+    await feed(harness, POWERUP)
+    await asyncio.sleep(0.02)
+    assert harness.controller._remote_paired is False
+    assert harness.controller._pairing_task is None
+    assert harness.controller._pairing is False
+    offers = len([p for p in harness.transport.sent if p.code == "1FC9"])
+
+    await feed(harness, POWERUP)
+    await asyncio.sleep(0.02)
+
+    assert len([p for p in harness.transport.sent if p.code == "1FC9"]) > offers
+
+
+async def test_a_powerup_does_not_pair_a_real_remote(
+    make: Callable[..., Harness],
+) -> None:
+    """A real 15RF remote is paired outside Home Assistant."""
+    harness = make(fake_remote=False, fan_id="")
+    await harness.controller.start()
+
+    await feed(harness, POWERUP)
+
+    assert not [p for p in harness.transport.sent if p.code == "1FC9"]
+
+
+async def test_a_neighbour_powerup_does_not_start_pairing(
+    make: Callable[..., Harness],
+) -> None:
+    """Only the known fan may open the pairing window."""
+    harness = make(fake_remote=True, fan_id=FAN_ID)
+    await harness.controller.start()
+
+    await feed(
+        harness,
+        f"044 I --- --:------ --:------ {NEIGHBOUR_ID} 042F 006 00004C004C00",
+    )
+    await settle()
+
+    assert not [p for p in harness.transport.sent if p.code == "1FC9"]
+
+
+async def test_arming_pairs_again_on_the_next_powerup(
+    make: Callable[..., Harness],
+) -> None:
+    """The button forgets a pairing the fan may no longer honour."""
+    harness = make(fake_remote=True, fan_id="", pairing_timeout=1)
+    await harness.controller.start()
+    await feed(harness, POWERUP)
+    await feed(harness, ACCEPT)
+    await settle()
+    assert harness.controller._remote_paired is True
+
+    await harness.controller.async_arm_pairing()
+    assert harness.controller._remote_paired is False
+
+    await feed(harness, POWERUP)
+    await settle()
+    offers = [
+        p for p in harness.transport.sent if p.code == "1FC9" and p.dst_id == RamsesID()
+    ]
+    assert len(offers) == 2
+
+    await feed(harness, ACCEPT)
+    await settle()
+    assert harness.controller._remote_paired is True
+
+
+async def test_arming_during_an_attempt_keeps_the_next_powerup_usable(
+    make: Callable[..., Harness],
+) -> None:
+    """Arming must finish the cancelled attempt before the next power-up."""
+    harness = make(fake_remote=True, fan_id="", pairing_timeout=10)
+    await harness.controller.start()
+    await feed(harness, POWERUP)
+    await settle()
+    assert harness.controller._pairing is True
+
+    await harness.controller.async_arm_pairing()
+
+    assert harness.controller._pairing is False
+    assert harness.controller._pairing_task is None
+
+    await feed(harness, POWERUP)
+    await settle()
+    offers = [
+        p for p in harness.transport.sent if p.code == "1FC9" and p.dst_id == RamsesID()
+    ]
+    assert len(offers) == 2
+
+
+async def test_stopping_cancels_a_pending_pairing_attempt(
+    make: Callable[..., Harness],
+) -> None:
+    """An unloaded entry must not keep offering to the fan."""
+    harness = make(fake_remote=True, fan_id="", pairing_timeout=10)
+    await harness.controller.start()
+    await feed(harness, POWERUP)
+    await settle()
+    assert harness.controller._pairing_task is not None
+
+    await harness.controller.stop()
+
+    assert harness.controller._pairing_task is None
+    assert harness.controller._pairing is False

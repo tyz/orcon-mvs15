@@ -25,6 +25,7 @@ __all__ = [
     "Code22f3",
     "Code31d9",
     "Code31e0",
+    "canonical_id",
 ]
 
 _LOGGER = logging.getLogger(__name__)
@@ -61,6 +62,17 @@ def _dev_id_to_hex(device_id: RamsesID) -> str:
         raise ValueError(f"Invalid Ramses device ID: {device_id}")
     dev_type, number = (int(part) for part in match.groups())
     return f"{(dev_type << 18) | number:06X}"
+
+
+def canonical_id(device_id: RamsesID) -> RamsesID:
+    """Return the ID a Ramses address actually carries for this device ID.
+
+    The address stores an 18-bit number next to the device type, so a larger
+    number overflows into the type when encoded and decodes as another ID.
+    """
+    if _DEVICE_ID_RE.match(str(device_id)) is None:
+        return device_id
+    return RamsesID(_dev_hex_to_id(_dev_id_to_hex(device_id)))
 
 
 @register_code("1298")
