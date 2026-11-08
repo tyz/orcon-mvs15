@@ -336,6 +336,39 @@ async def test_send_command_wraps_an_unexpected_backend_failure(
         await transport.send_command("ota start")
 
 
+async def test_send_command_passes_a_transport_error_through(
+    hass: HomeAssistant,
+) -> None:
+    """A backend transport error is not wrapped a second time."""
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    await transport.init()
+    transport._backend.publish = AsyncMock(side_effect=TransportError("broker offline"))
+
+    with pytest.raises(TransportError, match="broker offline"):
+        await transport.send_command("ota start")
+
+
+async def test_transport_subscriptions_can_be_removed(
+    hass: HomeAssistant,
+) -> None:
+    """Each subscription returns its own unsubscribe callable."""
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    handlers = [Mock(), Mock(), Mock()]
+    unsubs = [
+        transport.subscribe_version(handlers[0]),
+        transport.subscribe_latest(handlers[1]),
+        transport.subscribe_connection(handlers[2]),
+    ]
+
+    for unsub in unsubs:
+        unsub()
+        unsub()
+
+    assert transport._version_handlers == []
+    assert transport._latest_handlers == []
+    assert transport._connection_handlers == []
+
+
 async def test_send_wraps_an_unexpected_backend_failure(
     hass: HomeAssistant,
 ) -> None:
