@@ -28,6 +28,10 @@ from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 
 FAN_STATE = f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 000001"
 OWN_POWERUP = f"044 I --- --:------ --:------ {FAN_ID} 042F 006 00004C004C00"
+POWERUP_WITHOUT_ANN = f"044 I --- {FAN_ID} --:------ --:------ 042F 006 00004C004C00"
+NEIGHBOUR_POWERUP = (
+    f"044 I --- --:------ --:------ {NEIGHBOUR_ID} 042F 006 00004C004C00"
+)
 NEIGHBOUR_POWERUP = (
     f"044 I --- --:------ --:------ {NEIGHBOUR_ID} 042F 006 00004C004C00"
 )
@@ -79,10 +83,10 @@ async def test_fan_watchdog_raises_an_issue_after_the_timeout(
     assert issue.is_fixable is False
 
 
-async def test_a_fan_packet_clears_the_issue_and_the_watchdog(
+async def test_a_fan_packet_clears_the_issue_and_restarts_the_watchdog(
     make: Callable[..., Harness], hass: HomeAssistant
 ) -> None:
-    """The first packet from the fan proves the RF link works again."""
+    """The fan is watched continuously, not only until its first packet."""
     harness = make()
     await harness.controller.start()
     _delay, _action, cancel = harness.timers.later[0]
@@ -93,6 +97,24 @@ async def test_a_fan_packet_clears_the_issue_and_the_watchdog(
 
     assert get_issue(hass) is None
     cancel.assert_called_once_with()
+    assert len(harness.timers.later) == 2
+
+    harness.timers.later[1][1](datetime.now(UTC))
+
+    assert get_issue(hass) is not None
+
+
+async def test_a_powerup_without_ann_id_still_counts_as_the_fan(
+    make: Callable[..., Harness], hass: HomeAssistant
+) -> None:
+    """The fallback that discovers the fan also proves it is alive."""
+    harness = make()
+    await harness.controller.start()
+    async_create_fan_not_responding_issue(hass, RamsesID(FAN_ID))
+
+    await feed(harness, POWERUP_WITHOUT_ANN)
+
+    assert get_issue(hass) is None
 
 
 async def test_only_this_fans_powerup_clears_the_issue(

@@ -353,6 +353,7 @@ async def test_the_recorded_power_up_ignores_the_neighbour(
         await harness.controller.stop()
 
     assert harness.discovery.get("fan") == FAN_ID
+    assert harness.fan.data["discovered_fan_id"] == FAN_ID
 
 
 async def test_the_recorded_command_echo_reaches_the_handler(

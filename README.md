@@ -187,9 +187,9 @@ broadcast every 5 minutes, and device info (`10E0`) every 24 hours. The fan's
 humidity sensor (`12A0`) is not broadcast, so it is polled every 5 minutes.
 Entities are unavailable until the packet they read has arrived. If the MQTT
 connection is lost, all entities become unavailable and the loss is logged once;
-they recover when the connection returns. A configured fan gets 30 minutes to
-answer the requests sent when the entry starts, and raises a repair issue if it
-stays silent.
+they recover when the connection returns. A configured fan that sends no packet
+for 30 minutes raises a repair issue; every packet from the fan restarts the
+window.
 
 ## Known limitations
 
@@ -197,9 +197,9 @@ stays silent.
   not implemented yet.
 - The timed-mode countdown is maintained by the integration; the fan's next
   reported state remains the source of truth for the preset.
-- A `042F` power-up message is accepted from any source. A neighbouring Orcon
-  unit that powers up while this fan is still being discovered could be
-  adopted as this fan.
+- A `042F` power-up message is accepted from any source while the fan ID is
+  unknown. A neighbouring Orcon unit that powers up while this fan is still
+  being discovered could be adopted as this fan.
 - Only MQTT transport is supported; USB is on the TODO list.
 - The optional `/config/packet.log` (rolled over at 10 MB) is a debugging aid.
   It is not a stable interface.
@@ -223,13 +223,14 @@ supported codes, discovery flows and retry behaviour are documented in
 
 ### The fan stopped responding
 
-When the fan ID is known, the integration asks the fan for its state at startup.
-If no packet arrives from the fan within 30 minutes, Home Assistant shows a
-repair issue under **Settings > System > Repairs**. The issue is deleted
-automatically as soon as the fan is heard again. Check that the fan has power
-and that the Ramses ESP gateway is within RF range, then power-cycle the fan so
-it announces itself. The watchdog pauses while the MQTT connection is down,
-because an unreachable gateway says nothing about the RF link.
+When the fan ID is known, the integration asks the fan for its state at startup
+and keeps watching for its packets. If no packet arrives from the fan for 30
+minutes, Home Assistant shows a repair issue under **Settings > System >
+Repairs**. The issue is deleted automatically as soon as the fan is heard again.
+Check that the fan has power and that the Ramses ESP gateway is within RF range,
+then power-cycle the fan so it announces itself. The watchdog pauses while the
+MQTT connection is down, because an unreachable gateway says nothing about the
+RF link.
 
 ### Debug logging
 

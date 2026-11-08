@@ -11,7 +11,7 @@ import logging
 import os
 import threading
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, TextIO
 
@@ -55,6 +55,18 @@ HUMIDITY_POLL_INTERVAL = timedelta(minutes=5)
 FAN_RESPONSE_TIMEOUT = timedelta(minutes=30)
 
 PACKET_LOG_MAX_SIZE = 10_000_000
+
+
+def packet_fan_id(packet: RamsesPacket) -> RamsesID:
+    """Return the fan a packet came from.
+
+    Not every unit fills in ``ann_id`` on a ``042F`` broadcast, so fall back to
+    the sender when it is empty. Every decision about ownership uses this one
+    rule, so discovery and the watchdog cannot disagree.
+    """
+    if packet.code == "042F":
+        return packet.ann_id or packet.src_id
+    return packet.src_id
 
 
 class OrconMVS15Controller:
@@ -159,13 +171,21 @@ class OrconMVS15Controller:
     def _is_ours(self, packet: RamsesPacket) -> bool:
         """Filter out neighbouring installations, except for 042F discovery."""
         known = {
-            self.fan_id,
-            self.co2_id,
-            self.config.gateway_id,
-            self.config.remote_id,
+            ramses_id
+            for ramses_id in (
+                self.fan_id,
+                self.co2_id,
+                self.config.gateway_id,
+                self.config.remote_id,
+            )
+            if ramses_id
         }
-        if packet.src_id in known or packet.code == "042F":
+        if packet.src_id in known:
             return True
+        if packet.code == "042F":
+            # Before the fan is known a power-up is the only way to learn its
+            # id; afterwards a different ann_id is another installation.
+            return not self.fan_id or packet_fan_id(packet) == self.fan_id
         if (
             not self.co2_id
             and self.fan_id
@@ -176,17 +196,13 @@ class OrconMVS15Controller:
         ):
             if self.discovery.discover("co2", packet.src_id):
                 _LOGGER.debug("Discovered CO2 sensor (%s)", packet.src_id)
-                self.hass.async_create_task(self.init_co2())
+                self._start_init(self.init_co2)
             return True
         return False
 
     def _fan_sent(self, packet: RamsesPacket) -> bool:
         """Return whether this packet came from our fan."""
-        return (
-            packet.ann_id == self.fan_id
-            if packet.code == "042F"
-            else packet.src_id == self.fan_id
-        )
+        return packet_fan_id(packet) == self.fan_id
 
     @staticmethod
     def _is_own_echo(packet: RamsesPacket) -> bool:
@@ -198,19 +214,15 @@ class OrconMVS15Controller:
         }
 
     def _powerup(self, payload: Code) -> None:
-        """Use the fan's power-up broadcast for discovery.
-
-        Not every unit fills in ``ann_id``. When it is empty, fall back to the
-        sender so a broadcast that only names a source still discovers the fan.
-        """
-        fan_id = payload.packet.ann_id or payload.packet.src_id
+        """Use the fan's power-up broadcast for discovery."""
+        fan_id = packet_fan_id(payload.packet)
         _LOGGER.info(
             "Fan startup payload received, signal strength: %s dBm",
             payload.values["signal_strength"],
         )
         if self.discovery.discover("fan", fan_id):
             _LOGGER.debug("Fetching device info for discovered fan (%s)", fan_id)
-            self.hass.async_create_task(self.init_fan())
+            self._start_init(self.init_fan)
         self.fan_coordinator.async_set_updated_data(
             {
                 **self.fan_coordinator.data,
@@ -219,16 +231,30 @@ class OrconMVS15Controller:
             }
         )
 
+    def _start_init(self, init: Callable[[], Awaitable[None]]) -> None:
+        """Run a discovered-device init without losing a failed publish."""
+
+        async def _run() -> None:
+            try:
+                await init()
+            except TransportError as err:
+                _LOGGER.warning("Could not fetch the discovered device state: %s", err)
+
+        self.hass.async_create_task(_run())
+
     async def init_fan(self) -> None:
         """Fetch the current fan state and start polling."""
         if self._closed or not self.fan_id:
             return
         gateway_id = self.config.gateway_id
-        await self.session.request(Code10e0.get(gateway_id, self.fan_id))
-        await self.session.request(Code12a0.get(gateway_id, self.fan_id))
-        await self.session.request(Code31d9.get(gateway_id, self.fan_id))
-        self.start_humidity_polling()
-        self.start_fan_watchdog()
+        try:
+            await self.session.request(Code10e0.get(gateway_id, self.fan_id))
+            await self.session.request(Code12a0.get(gateway_id, self.fan_id))
+            await self.session.request(Code31d9.get(gateway_id, self.fan_id))
+        finally:
+            # A failed publish must not leave the fan unwatched or unpolled.
+            self.start_humidity_polling()
+            self.start_fan_watchdog()
 
     async def init_co2(self) -> None:
         """Fetch the current CO2 sensor state and device info."""
@@ -262,10 +288,10 @@ class OrconMVS15Controller:
             _LOGGER.debug("Removed the humidity poll interval")
 
     def start_fan_watchdog(self) -> None:
-        """Wait for the fan's first packet and raise an issue on silence.
+        """Raise an issue if the fan stays silent for the whole window.
 
-        Restarting is intentional: every init_fan() asks the fan for its state,
-        so a fresh request deserves a fresh response window.
+        Restarting is intentional: every fan packet and every init_fan()
+        deserves a fresh response window.
         """
         self.cancel_fan_watchdog()
         if not self.fan_id or self._closed:
@@ -288,8 +314,8 @@ class OrconMVS15Controller:
 
     @callback
     def _fan_responded(self) -> None:
-        """The fan is alive: stop the timer and clear any stale issue."""
-        self.cancel_fan_watchdog()
+        """The fan is alive: clear the issue and restart the silence window."""
+        self.start_fan_watchdog()
         async_delete_fan_not_responding_issue(self.hass, self.fan_id)
 
     @callback
