@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 
 import pytest
@@ -355,6 +356,73 @@ def test_rf_bind_decodes_zone_command_and_device() -> None:
     assert values["zone_idx"] == 0
     assert values["command"] == "1FC9"
     assert values["device_id"] == "01:145038"
+
+
+def test_rf_bind_rejects_an_empty_payload() -> None:
+    """A length of zero has no zone or device to bind."""
+    packet = received(f"044  I --- {FAN_ID} {GATEWAY_ID} --:------ 1FC9 000")
+
+    with pytest.raises(CodeException, match="Unexpected length"):
+        Code1fc9(packet)
+
+
+def test_device_info_description_is_split_on_bytes_not_hex_pairs() -> None:
+    """A description whose hex contains "00" across two bytes is not cut."""
+    header = "000001C8262101010000050107E9020107E9"
+    description = b"P\x01Orcon MVS-15"
+    packet = made("10E0", header + description.hex() + "00")
+
+    values = Code10e0(packet).values
+
+    assert values["description"] == "P\x01Orcon MVS-15"
+
+
+def test_device_info_invalid_date_is_not_a_date() -> None:
+    """A firmware date out of range is dropped instead of failing the decode."""
+    data = (
+        "00"
+        "0001"
+        "C8"
+        "26"
+        "21"
+        "01"
+        "01"
+        "00"
+        "00"
+        "00000000"  # day and month are zero, which datetime rejects
+        "020107E9"
+        "4F72636F6E204D56532D313500"  # "Orcon MVS-15" + NUL
+    )
+    values = Code10e0(made("10E0", data)).values
+
+    assert values["date_2"].t_datetime is None
+    assert repr(values["date_2"]) == "00000000"
+
+
+def test_device_info_ffffffff_date_is_no_date(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """FFFFFFFF means the device has no date, without an invalid-date log."""
+    caplog.set_level(logging.DEBUG)
+    data = (
+        "00"
+        "0001"
+        "C8"
+        "26"
+        "21"
+        "01"
+        "01"
+        "00"
+        "00"
+        "FFFFFFFF"
+        "FFFFFFFF"
+        "4F72636F6E204D56532D313500"  # "Orcon MVS-15" + NUL
+    )
+    values = Code10e0(made("10E0", data)).values
+
+    assert values["date_2"].t_datetime is None
+    assert repr(values["date_2"]) == "FFFFFFFF"
+    assert "Invalid hex date" not in caplog.text
 
 
 def test_power_cycle_counter_decodes_counters() -> None:
