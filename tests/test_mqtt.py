@@ -1,4 +1,4 @@
-"""Tests for the MQTT transport and gateway discovery."""
+"""Tests for the Home Assistant MQTT backend and the Ramses ESP transport."""
 
 from __future__ import annotations
 
@@ -7,19 +7,43 @@ import json
 import logging
 
 from collections.abc import Callable
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from homeassistant.components.mqtt import ReceiveMessage
 from homeassistant.core import HomeAssistant
 
 from custom_components.orcon_mvs15 import mqtt as mqtt_module
-from custom_components.orcon_mvs15.mqtt import MQTT, MQTTException
-from custom_components.orcon_mvs15.ramses_packet import RamsesID, RamsesPacket
+from custom_components.orcon_mvs15.mqtt import HassMqttBackend
+from custom_components.orcon_mvs15.ramses.protocol import RamsesID, RamsesPacket
+from custom_components.orcon_mvs15.ramses.transport import (
+    ConnectionState,
+    TransportError,
+    TransportNotReady,
+)
+from custom_components.orcon_mvs15.ramses.transport.ramses_esp import (
+    RamsesEspTransport,
+)
 
 GATEWAY_ID = "18:149960"
 FAN_ID = "29:224547"
 MQTT_TOPIC = "RAMSES/GATEWAY"
+
+
+def make_transport(
+    hass: HomeAssistant,
+    gateway_id: str = "",
+    discovery_timeout: float = 10.0,
+    connection_callback: Callable[[bool], None] | None = None,
+) -> RamsesEspTransport:
+    """Build the transport on top of Home Assistant's MQTT client."""
+    return RamsesEspTransport(
+        HassMqttBackend(hass),
+        MQTT_TOPIC,
+        gateway_id=RamsesID(gateway_id),
+        discovery_timeout=discovery_timeout,
+        connection_callback=connection_callback,
+    )
 
 
 def online_message(topic: str) -> ReceiveMessage:
@@ -47,14 +71,13 @@ async def test_gateway_discovery_times_out(
         return subscribe(hass, topic, handler)
 
     monkeypatch.setattr(mqtt_module.mqtt, "async_subscribe", fake_subscribe)
-    transport = MQTT(hass, MQTT_TOPIC, discovery_timeout=0.01)
+    transport = make_transport(hass, discovery_timeout=0.01)
 
-    with pytest.raises(MQTTException, match="gateway"):
+    with pytest.raises(TransportError, match="gateway"):
         await transport.init()
 
     subscribe.assert_called_once()
     unsub.assert_called_once_with()
-    assert transport._mqtt_unsubs == []
 
 
 async def test_gateway_discovery_subscribes_to_the_gateway_topics(
@@ -71,7 +94,7 @@ async def test_gateway_discovery_subscribes_to_the_gateway_topics(
         return wildcard_unsub
 
     monkeypatch.setattr(mqtt_module.mqtt, "async_subscribe", fake_subscribe)
-    transport = MQTT(hass, MQTT_TOPIC, discovery_timeout=1)
+    transport = make_transport(hass, discovery_timeout=1)
     task = hass.async_create_task(transport.init())
     for _ in range(10):
         if subscriptions:
@@ -116,16 +139,16 @@ async def test_connection_transitions_are_logged_once(
         "async_subscribe_connection_status",
         fake_connection_status,
     )
+    monkeypatch.setattr(
+        mqtt_module.mqtt, "async_wait_for_mqtt_client", AsyncMock(return_value=True)
+    )
     monkeypatch.setattr(mqtt_module.mqtt, "is_connected", lambda hass_: True)
     observed: list[bool] = []
-    transport = MQTT(
-        hass,
-        MQTT_TOPIC,
-        gateway_id=RamsesID(GATEWAY_ID),
-        connection_callback=observed.append,
+    transport = make_transport(
+        hass, gateway_id=GATEWAY_ID, connection_callback=observed.append
     )
     await transport.init()
-    await transport.setup(Mock(), Mock())
+    await transport.start(Mock(), Mock())
 
     assert len(connection_callbacks) == 1
     with caplog.at_level(logging.INFO):
@@ -138,7 +161,7 @@ async def test_connection_transitions_are_logged_once(
     assert caplog.text.count("MQTT connection lost") == 1
     assert caplog.text.count("MQTT connection restored") == 1
 
-    transport.cleanup()
+    await transport.stop()
     status_unsub.assert_called_once_with()
 
 
@@ -155,7 +178,7 @@ async def test_configured_gateway_skips_discovery(
         return Mock()
 
     monkeypatch.setattr(mqtt_module.mqtt, "async_subscribe", fake_subscribe)
-    transport = MQTT(hass, MQTT_TOPIC, gateway_id=RamsesID(GATEWAY_ID))
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
 
     await transport.init()
 
@@ -168,12 +191,12 @@ async def test_online_message_is_ignored_when_the_gateway_is_known(
     hass: HomeAssistant,
 ) -> None:
     """A second gateway on the wildcard topic must not replace the stored one."""
-    transport = MQTT(hass, MQTT_TOPIC, gateway_id=RamsesID(GATEWAY_ID))
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
 
-    await transport._handle_online_message(online_message(f"{MQTT_TOPIC}/18:999999"))
+    await transport._handle_online_message(f"{MQTT_TOPIC}/18:999999", b"online")
 
     assert transport.gateway_id == GATEWAY_ID
-    assert not transport._online_event.is_set()
+    assert not transport._discovery_event.is_set()
 
 
 def make_packet() -> RamsesPacket:
@@ -197,11 +220,11 @@ async def test_publish_sends_the_packet_envelope(
         published.append((topic, payload))
 
     monkeypatch.setattr(mqtt_module.mqtt, "async_publish", fake_publish)
-    transport = MQTT(hass, MQTT_TOPIC, gateway_id=RamsesID(GATEWAY_ID))
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
     await transport.init()
     packet = make_packet()
 
-    await transport.publish(packet)
+    await transport.send(packet)
 
     assert published == [
         (f"{MQTT_TOPIC}/{GATEWAY_ID}/tx", json.dumps(packet.ramses_esp_envelope()))
@@ -211,14 +234,104 @@ async def test_publish_sends_the_packet_envelope(
 async def test_publish_wraps_transport_errors(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A broker failure becomes an MQTTException for the caller."""
+    """A broker failure becomes a transport error for the caller."""
 
     async def failing_publish(hass_: HomeAssistant, topic: str, payload: str) -> None:
         raise RuntimeError("broker is offline")
 
     monkeypatch.setattr(mqtt_module.mqtt, "async_publish", failing_publish)
-    transport = MQTT(hass, MQTT_TOPIC, gateway_id=RamsesID(GATEWAY_ID))
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
     await transport.init()
 
-    with pytest.raises(MQTTException, match="broker is offline"):
-        await transport.publish(make_packet())
+    with pytest.raises(TransportError, match="broker is offline"):
+        await transport.send(make_packet())
+
+
+async def test_a_malformed_payload_is_logged(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Invalid JSON is reported instead of killing the subscription."""
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+
+    with caplog.at_level(logging.ERROR):
+        await transport._handle_packet_message(
+            f"{MQTT_TOPIC}/{GATEWAY_ID}/rx", b"not json"
+        )
+
+    assert "Failed to process Ramses-ESP MQTT message" in caplog.text
+
+
+async def test_backend_reports_a_missing_mqtt_client(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The backend tells the session that MQTT is not usable yet."""
+    monkeypatch.setattr(
+        mqtt_module.mqtt,
+        "async_wait_for_mqtt_client",
+        AsyncMock(return_value=False),
+    )
+    backend = HassMqttBackend(hass)
+
+    with pytest.raises(TransportNotReady):
+        await backend.start()
+
+
+def test_transport_starts_disconnected(hass: HomeAssistant) -> None:
+    """No connection has been observed until the transport starts."""
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+
+    assert transport.connection_state is ConnectionState.DISCONNECTED
+
+
+async def test_send_wraps_an_unexpected_backend_failure(
+    hass: HomeAssistant,
+) -> None:
+    """A backend that is not the Home Assistant adapter is still contained."""
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    await transport.init()
+    transport._backend.publish = AsyncMock(side_effect=RuntimeError("broker down"))
+
+    with pytest.raises(TransportError, match="Failed to publish payload"):
+        await transport.send(make_packet())
+
+
+async def test_received_messages_reach_the_handlers(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The transport hands decoded envelopes and version strings to the session."""
+    monkeypatch.setattr(
+        mqtt_module.mqtt, "async_wait_for_mqtt_client", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        mqtt_module.mqtt, "async_subscribe", AsyncMock(return_value=Mock())
+    )
+    monkeypatch.setattr(
+        mqtt_module.mqtt,
+        "async_subscribe_connection_status",
+        Mock(return_value=Mock()),
+    )
+    monkeypatch.setattr(mqtt_module.mqtt, "is_connected", lambda hass_: True)
+    packet_handler = AsyncMock()
+    version_handler = Mock()
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    await transport.init()
+    await transport.start(packet_handler, version_handler)
+    envelope = {"ts": "2026-09-11T17:29:09+00:00", "msg": "081  I --- --:------"}
+
+    await transport._handle_packet_message(
+        f"{MQTT_TOPIC}/{GATEWAY_ID}/rx", json.dumps(envelope).encode()
+    )
+    await transport._handle_version_message(
+        f"{MQTT_TOPIC}/{GATEWAY_ID}/info/version", b"2026.10.1"
+    )
+    await transport._handle_version_message(
+        f"{MQTT_TOPIC}/{GATEWAY_ID}/info/version", "2026.10.1"
+    )
+
+    packet_handler.assert_awaited_once_with(envelope)
+    assert [call.args[0] for call in version_handler.call_args_list] == [
+        "2026.10.1",
+        "2026.10.1",
+    ]
+
+    await transport.stop()

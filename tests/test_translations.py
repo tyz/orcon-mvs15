@@ -11,7 +11,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import translation
 
-from custom_components.orcon_mvs15.codes import Code22f1
+from custom_components.orcon_mvs15.ramses.protocol import Code22f1
 from custom_components.orcon_mvs15.const import DOMAIN
 
 COMPONENT = Path(__file__).parent.parent / "custom_components" / "orcon_mvs15"

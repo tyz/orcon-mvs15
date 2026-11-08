@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 
 from custom_components.orcon_mvs15.discover_entity import DiscoverEntity
 from custom_components.orcon_mvs15.models import OrconMVS15Config
-from custom_components.orcon_mvs15.ramses_packet import RamsesID
+from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 
 FAN_ID = "29:224547"
 

@@ -19,7 +19,7 @@ from custom_components.orcon_mvs15.device import (
     update_device_info,
     update_gateway_version,
 )
-from custom_components.orcon_mvs15.ramses_packet import RamsesID
+from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 
 GATEWAY_ID = RamsesID("18:149960")
 FAN_ID = RamsesID("29:224547")

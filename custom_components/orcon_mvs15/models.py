@@ -7,7 +7,7 @@ from types import MappingProxyType
 from homeassistant.config_entries import ConfigEntry
 
 from .coordinator import OrconMVS15DataUpdateCoordinator
-from .ramses_packet import RamsesID
+from .ramses.protocol import RamsesID
 from .ramses_esp import RamsesESP
 from .const import (
     CONF_GATEWAY_ID,

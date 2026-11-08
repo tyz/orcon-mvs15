@@ -13,7 +13,7 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 |---|---|
 | Domain | `orcon_mvs15` — must match `custom_components/orcon_mvs15/` |
 | Transport | MQTT (`homeassistant.components.mqtt`) through a Ramses ESP gateway |
-| Client layer | `protocol` modules (`ramses_packet.py`, `codes.py`, `ramses_packet_queue.py`) are Home Assistant-free; `mqtt.py` is transport; `ramses_esp.py` is the protocol session |
+| Client layer | `ramses/protocol` and `ramses/transport` are Home Assistant-free; `mqtt.py` adapts Home Assistant MQTT; `ramses_esp.py` is the protocol session |
 | Platforms | `fan`, `sensor`, `binary_sensor` in a single config entry |
 | Discovery | MQTT wildcard `<base_topic>/+` for the gateway; Ramses `042F`, `12A0` and `31E0` packets for devices |
 | Update model | `local_push` — the gateway pushes packets; humidity is polled because `12A0` is not broadcast |
@@ -124,8 +124,13 @@ naming rules live in `custom_components/orcon_mvs15/README.naming.md`.
 
 ## Current Architecture
 
-* `mqtt.py` — subscribes to gateway topics and publishes envelopes, including
-  gateway discovery on the wildcard topic.
+* `ramses/protocol/` — Home Assistant-free frame primitives, codec base and
+  open registry, the Orcon codecs and the expected-response retry queue.
+* `ramses/transport/` — the `Transport` protocol, a loopback transport for
+  tests and offline tools, and the RAMSES ESP transport that owns the topic
+  layout, gateway discovery and JSON envelope over an injected `MqttBackend`.
+* `mqtt.py` — `HassMqttBackend`, the Home Assistant MQTT adapter behind the
+  transport's backend protocol.
 * `ramses_esp.py` — protocol session: packet parsing/dispatch, expected-response
   retries, device discovery and packet logging. Registry writes go through
   `device.py`.

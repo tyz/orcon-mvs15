@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import logging
 import asyncio
-import json
 import threading
 
 from collections.abc import Callable
@@ -11,8 +10,6 @@ from functools import partial
 from typing import TextIO
 from datetime import datetime, timedelta
 
-from homeassistant.components import mqtt as mqtt_client
-from homeassistant.components.mqtt import ReceiveMessage
 from homeassistant.core import HomeAssistant, Event, callback
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
@@ -23,12 +20,14 @@ from .issues import (
     async_create_fan_not_responding_issue,
     async_delete_fan_not_responding_issue,
 )
-from .ramses_packet import RamsesPacket, RamsesID
-from .ramses_packet_queue import RamsesPacketQueue
-from .mqtt import MQTT, MQTTException
-from .codes import (
+from .ramses.protocol import Code, RamsesID, RamsesPacket, RamsesPacketQueue
+from .ramses.transport import (
+    Transport,
+    TransportError,
+    TransportNotReady,
+)
+from .ramses.protocol import (
     CODE_REGISTRY,
-    Code,
     Code10e0,
     Code1298,
     Code12a0,
@@ -53,7 +52,7 @@ class RamsesESP:
     def __init__(
         self,
         hass: HomeAssistant,
-        mqtt: MQTT,
+        transport: Transport,
         remote_id: RamsesID,
         fan_id: RamsesID,
         co2_id: RamsesID,
@@ -62,7 +61,7 @@ class RamsesESP:
         packet_log: bool = False,
     ) -> None:
         self.hass = hass
-        self.mqtt = mqtt
+        self.transport = transport
         self.remote_id = remote_id
         self.fan_id = fan_id
         self.co2_id = co2_id
@@ -93,14 +92,13 @@ class RamsesESP:
         if self._closed:
             _LOGGER.debug("Session is closed, not starting it")
             return
-        if not await mqtt_client.async_wait_for_mqtt_client(self.hass):
+        try:
+            await self.transport.start(self._handle_envelope, self._handle_version)
+        except TransportNotReady as err:
             raise ConfigEntryNotReady(
                 translation_domain=DOMAIN,
                 translation_key="mqtt_not_available",
-            )
-        await self.mqtt.setup(
-            self.handle_ramses_mqtt_message, self.handle_ramses_mqtt_version_message
-        )
+            ) from err
         if event:  # only on Home-Assistant restart
             """sleep for a bit, mqtt (or the stick) is not ready yet for some reason"""
             await asyncio.sleep(2)
@@ -198,6 +196,7 @@ class RamsesESP:
     async def async_cleanup(self) -> None:
         """Stop the session and close the packet log off the event loop."""
         self.cleanup()
+        await self.transport.stop()
         await self.hass.async_add_executor_job(self._close_packet_log)
 
     def _close_packet_log(self) -> None:
@@ -235,7 +234,7 @@ class RamsesESP:
         if self._closed:
             # The caller is an entity command; silently dropping it would
             # report success for a command that was never sent.
-            raise MQTTException("The Orcon MVS-15 session is unloading")
+            raise TransportError("The Orcon MVS-15 session is unloading")
         if packet.expected_response:
             packet.expected_response.cancel_retry_handler = async_call_later(
                 # Try again if expected_response wasn't received within packet.expected_response.timeout seconds
@@ -247,7 +246,7 @@ class RamsesESP:
             # before the packet is known and would trigger a retry.
             self._send_queue.add(packet)
         try:
-            await self.mqtt.publish(packet)
+            await self.transport.send(packet)
         except Exception:
             if packet.expected_response:
                 # Publishing failed, so there is nothing to wait for. Drop the
@@ -255,24 +254,20 @@ class RamsesESP:
                 self._send_queue.discard(packet)
             raise
 
-    async def handle_ramses_mqtt_message(self, msg: ReceiveMessage) -> None:
-        """Decode JSON, parse the MQTT payload and log it to file"""
+    async def _handle_envelope(self, envelope: dict[str, str]) -> None:
+        """Decode one gateway envelope and write it to the packet log."""
         try:
-            envelope = json.loads(msg.payload)
             await self._handle_ramses_packet(envelope)
             if self.packet_log_enabled:
                 await self.packet_log(envelope)
         except Exception:
             _LOGGER.error(
-                f"Failed to process Ramses-ESP MQTT message {msg.payload!r}",
+                f"Failed to process Ramses-ESP MQTT message {envelope!r}",
                 exc_info=True,
             )
 
-    async def handle_ramses_mqtt_version_message(self, msg: ReceiveMessage) -> None:
-        """Update Ramses-ESP device info"""
-        sw_version = msg.payload
-        if isinstance(sw_version, (bytes, bytearray)):
-            sw_version = sw_version.decode()
+    def _handle_version(self, sw_version: str) -> None:
+        """Update the Ramses-ESP device info."""
         update_gateway_version(
             self.hass, self.config_entry_id, self.gateway_id, sw_version
         )
@@ -290,7 +285,7 @@ class RamsesESP:
         _LOGGER.info(f"Setting fan preset mode to {mode}")
         try:
             await self.publish(packet)
-        except MQTTException as err:
+        except TransportError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="set_preset_failed",
@@ -386,13 +381,16 @@ class RamsesESP:
         )
         if self.fan_id and fan_responded:
             self._fan_responded()
-        # 042F is for testing only, when I publish it myself (ss == 0).
+        # 042F arrives from the fan at power-up and drives discovery. Keeping
+        # it lets a manually published frame (ss == 0) test that path without
+        # power-cycling the fan.
         if packet.signal_strength == 0 and packet.code not in {"042F", "22F1", "22F3"}:
             """Ignore the gateway echo of our own requests.
 
-            22F1 and 22F3 are the exception: their echo is the only proof that
-            a locally sent mode command reached the stick, and a timed preset
-            needs it to start its countdown.
+            042F, 22F1 and 22F3 are the exceptions: a manually published 042F
+            still exercises discovery, and the echo of a locally sent mode
+            command is the only proof that it reached the stick, which a timed
+            preset needs to start its countdown.
             """
             return
         if (q_packet := self._send_queue.get(packet)) is not None:

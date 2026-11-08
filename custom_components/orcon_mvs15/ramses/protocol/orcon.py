@@ -1,17 +1,18 @@
-from __future__ import annotations
+"""Codecs for the RAMSES II codes this integration understands."""
 
-from .ramses_packet import (
-    RamsesPacket,
-    RamsesPacketResponse,
-    RamsesPacketDatetime,
-    RamsesID,
-)
+from __future__ import annotations
 
 import logging
 
+from .codes import CODE_REGISTRY, Code, register_code
+from .frame import (
+    RamsesID,
+    RamsesPacket,
+    RamsesPacketDatetime,
+    RamsesPacketResponse,
+)
+
 __all__ = [
-    "CODE_REGISTRY",
-    "Code",
     "Code042f",
     "Code1060",
     "Code10e0",
@@ -28,85 +29,7 @@ __all__ = [
 _LOGGER = logging.getLogger(__name__)
 
 
-class CodeException(Exception):
-    pass
-
-
-class Code:
-    _code = "FFFF"
-
-    def __init__(self, packet: RamsesPacket) -> None:
-        self.packet = packet
-        self.values: dict[str, str | int | bool | RamsesPacketDatetime | None] = {}
-        if self.packet:
-            self._validate_packet()
-            self._parse_packet()
-
-    def _expected_length(self, length: int) -> bool:
-        return True
-
-    def _percent(self, value: str) -> int | None:
-        if int(value, 16) > 200:  # FE or FF
-            return None
-        return int(value, 16) // 2
-
-    def _dev_hex_to_id(self, device_hex: str) -> str:
-        """Convert (say) '06368E' to '01:145038'"""
-        if device_hex == "FFFFFF":  # aka '63:262143'
-            return f"{'':9}"
-        if not device_hex.strip():  # aka '--:------'
-            return "--:------"
-        _tmp = int(device_hex, 16)
-        dev_type = (_tmp & 0xFC0000) >> 18
-        return f"{dev_type:02d}:{_tmp & 0x03FFFF:06d}"
-
-    def _validate_packet(self) -> None:
-        """Validate the RamsesPacket, raise CodeException if it fails"""
-        if not self._expected_length(self.packet.length):
-            raise CodeException(f"Unexpected length: {self.packet}")
-
-    def _parse_packet(self) -> None:
-        """Parse the RamsesPacket, put result in self.values"""
-        self.values = {"_label": "Unsupported code", "packet": str(self.packet)}
-
-    def __repr__(self) -> str:
-        """Return a human readable string of self.values"""
-        if self.packet.length == 1:
-            return f"{self.values['_label']} state request"
-        keyval = ", ".join(
-            [f"{k}: {v}" for k, v in self.values.items() if not k.startswith("_")]
-        )
-        return f"{self.values['_label']}: {keyval}"
-
-    @classmethod
-    def get(cls, src_id: RamsesID, dst_id: RamsesID) -> RamsesPacket:
-        """Build a RamsesPacket object that requests the current status"""
-        p = RamsesPacket(
-            src_id=src_id,
-            dst_id=dst_id,
-            type="RQ",
-            code=cls._code,
-            data="00",
-        )
-        p.expected_response = RamsesPacketResponse(
-            src_id=dst_id,
-            dst_id=src_id,
-            type="RP",
-            code=cls._code,
-        )
-        return p
-
-    @classmethod
-    def set(cls, src_id: RamsesID, dst_id: RamsesID, value: str) -> RamsesPacket:
-        """Build a RamsesPacket object that sets a value"""
-        raise NotImplementedError
-
-    @classmethod
-    def presets(cls) -> list[str]:
-        """Return a list of optional values for self.set"""
-        raise NotImplementedError
-
-
+@register_code("1298")
 class Code1298(Code):
     """CO2"""
 
@@ -128,6 +51,7 @@ class Code1298(Code):
                 self.values.update({"level": None})
 
 
+@register_code("22F1")
 class Code22f1(Code):
     """Fan mode, will act as 22F3 if needed"""
 
@@ -192,6 +116,7 @@ class Code22f1(Code):
         return list(cls._fan_modes.keys())
 
 
+@register_code("22F3")
 class Code22f3(Code22f1):
     """Fan mode with timer"""
 
@@ -205,6 +130,7 @@ class Code22f3(Code22f1):
         raise NotImplementedError
 
 
+@register_code("31D9")
 class Code31d9(Code):
     """Fan state"""
 
@@ -244,6 +170,7 @@ class Code31d9(Code):
         return list(cls._presets.values())
 
 
+@register_code("31E0")
 class Code31e0(Code):
     """Vent demand"""
 
@@ -269,6 +196,7 @@ class Code31e0(Code):
             )
 
 
+@register_code("10E0")
 class Code10e0(Code):
     """Device info"""
 
@@ -310,6 +238,7 @@ class Code10e0(Code):
         )
 
 
+@register_code("10E1")
 class Code10e1(Code):
     """Device ID"""
 
@@ -329,6 +258,7 @@ class Code10e1(Code):
             self.values.update({"device_id": self._dev_hex_to_id(self.packet.data)})
 
 
+@register_code("12A0")
 class Code12a0(Code):
     """Indoor humidity"""
 
@@ -348,6 +278,7 @@ class Code12a0(Code):
             self.values.update({"level": int(self.packet.data, 16)})
 
 
+@register_code("1060")
 class Code1060(Code):
     """Battery state
     Not used by the 15RF wireless remote, but I occasionally receive it
@@ -379,6 +310,7 @@ class Code1060(Code):
         raise NotImplementedError
 
 
+@register_code("1FC9")
 class Code1fc9(Code):
     """RF bind"""
 
@@ -406,6 +338,7 @@ class Code1fc9(Code):
         raise NotImplementedError
 
 
+@register_code("042F")
 class Code042f(Code):
     """Counter that seem to increase on every power cycle. Broadcasted on startup"""
 
@@ -426,21 +359,6 @@ class Code042f(Code):
     @classmethod
     def get(cls, src_id: RamsesID, dst_id: RamsesID) -> RamsesPacket:
         raise NotImplementedError
-
-
-CODE_REGISTRY: dict[str, type[Code]] = {
-    "042F": Code042f,
-    "1060": Code1060,
-    "10E0": Code10e0,
-    "10E1": Code10e1,
-    "1298": Code1298,
-    "12A0": Code12a0,
-    "1FC9": Code1fc9,
-    "22F1": Code22f1,
-    "22F3": Code22f3,
-    "31D9": Code31d9,
-    "31E0": Code31e0,
-}
 
 
 if __name__ == "__main__":

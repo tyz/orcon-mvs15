@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DOMAIN
-from .ramses_packet import RamsesPacketDatetime
+from .ramses.protocol import RamsesPacketDatetime
 
 _LOGGER = logging.getLogger(__name__)
 

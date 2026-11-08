@@ -21,7 +21,7 @@ from .coordinator import OrconMVS15DataUpdateCoordinator
 from .device import attached_device_info
 from .models import OrconMVS15Config, OrconMVS15ConfigEntry
 from .discover_entity import DiscoverEntity
-from .ramses_packet import RamsesPacketDatetime, RamsesID
+from .ramses.protocol import RamsesPacketDatetime, RamsesID
 from .ramses_esp import RamsesESP
 
 _LOGGER = logging.getLogger(__name__)

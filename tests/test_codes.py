@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from custom_components.orcon_mvs15.codes import (
+from custom_components.orcon_mvs15.ramses.protocol import (
     CODE_REGISTRY,
     Code,
     Code042f,
@@ -22,7 +22,7 @@ from custom_components.orcon_mvs15.codes import (
     Code31e0,
     CodeException,
 )
-from custom_components.orcon_mvs15.ramses_packet import RamsesID, RamsesPacket
+from custom_components.orcon_mvs15.ramses.protocol import RamsesID, RamsesPacket
 
 TIMESTAMP = "2026-09-11T17:29:09.534250+02:00"
 FAN_ID = "29:224547"

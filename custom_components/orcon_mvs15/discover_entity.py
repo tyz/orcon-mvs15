@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .models import OrconMVS15Config
-from .ramses_packet import RamsesID
+from .ramses.protocol import RamsesID
 from .ramses_esp import RamsesESP
 
 _LOGGER = logging.getLogger(__name__)
