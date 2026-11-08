@@ -485,7 +485,7 @@ async def test_packet_log_reports_a_failed_reopen(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A reopen failure after rotation is logged, not raised to the caller."""
+    """A reopen failure leaves the log closed but recoverable."""
     harness = make()
     path = tmp_path / "packet.log"
     real_open = open
@@ -506,8 +506,27 @@ async def test_packet_log_reports_a_failed_reopen(
         )
 
     assert "Error reopening" in caplog.text
-    assert harness.controller._log_f is not None
-    assert harness.controller._log_f.closed
+    assert harness.controller._log_f is None
+
+    item = envelope(FAN_STATE)
+    await harness.controller.packet_log(item, path=str(path))
+
+    assert path.read_text().strip() == f"{item['ts']} {item['msg']}"
+
+
+async def test_packet_log_recreates_a_deleted_file(
+    make: Callable[..., Harness], tmp_path: Path
+) -> None:
+    """Deleting the log while it is open must not disable packet logging."""
+    harness = make()
+    path = tmp_path / "packet.log"
+    item = envelope(FAN_STATE)
+    await harness.controller.packet_log(item, path=str(path))
+
+    path.unlink()
+    await harness.controller.packet_log(item, path=str(path))
+
+    assert path.read_text().strip() == f"{item['ts']} {item['msg']}"
 
 
 async def test_packet_log_ignores_a_failing_close(
