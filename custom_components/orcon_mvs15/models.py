@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable
 from types import MappingProxyType
 
 from homeassistant.config_entries import ConfigEntry
@@ -13,6 +13,7 @@ from .ramses.protocol import RamsesID
 from .ramses.session import RamsesSession
 from .const import (
     CONF_GATEWAY_ID,
+    CONF_REMOTE_FAKE,
     CONF_REMOTE_ID,
     CONF_FAN_ID,
     CONF_CO2_ID,
@@ -28,6 +29,7 @@ from .const import (
 class OrconMVS15Config:
     gateway_id: RamsesID = RamsesID()
     remote_id: RamsesID = RamsesID()
+    fake_remote: bool = False
     fan_id: RamsesID = RamsesID()
     co2_id: RamsesID = RamsesID()
     mqtt_topic: str = DEFAULT_MQTT_TOPIC
@@ -35,10 +37,11 @@ class OrconMVS15Config:
     usb_port: str = ""
 
     @classmethod
-    def from_data(cls, data: MappingProxyType[str, str]) -> OrconMVS15Config:
+    def from_data(cls, data: MappingProxyType[str, Any]) -> OrconMVS15Config:
         return cls(
             gateway_id=RamsesID(data.get(CONF_GATEWAY_ID)),
             remote_id=RamsesID(data.get(CONF_REMOTE_ID)),
+            fake_remote=bool(data.get(CONF_REMOTE_FAKE, False)),
             fan_id=RamsesID(data.get(CONF_FAN_ID)),
             co2_id=RamsesID(data.get(CONF_CO2_ID)),
             mqtt_topic=data.get(CONF_MQTT_TOPIC, DEFAULT_MQTT_TOPIC),

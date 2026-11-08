@@ -147,7 +147,7 @@ that behaviour is unverified and should not be changed without protocol evidence
 | `1060` | Battery state | No | No | No | No | — | No | Occasionally received from another Orcon system; not used by the 15RF wireless remote. |
 | `1298` | CO₂ sensor | Yes | No | Yes | No | 10 m | Yes | CO₂ concentration in ppm. |
 | `12A0` | Indoor humidity | Yes | Yes | No | No | — | Yes | Not announced; polled by the integration. |
-| `1FC9` | RF bind | No | ? | ? | ? | — | No | Pairing is work in progress. |
+| `1FC9` | RF bind | Yes | Yes | Yes | Yes | On pairing | No | Three-way Offer/Accept/Confirm; used to pair a generated fake remote. |
 | `22F1` | Fan mode | Yes | Yes | No | No | — | Yes | 3-byte fan mode. |
 | `22F3` | Fan mode with timer | Yes | Yes | No | No | — | No | 7-byte timed fan mode. |
 | `31D9` | Fan state | Yes | Yes | No | No | 5 m | Yes | Current mode plus fault flag. |
@@ -270,11 +270,29 @@ Example:
 
 ### `1FC9` — RF bind
 
-* Length: a multiple of 6 bytes.
-* `data[0:2]` — zone index.
-* `data[2:6]` — command.
-* `data[6:]` — device ID.
-* Pairing is work in progress; the integration does not send it yet.
+A three-way handshake. The device that wants to be bound is the Supplicant and
+starts with an Offer; the fan answers with an Accept, and the Supplicant closes
+with a Confirm.
+
+* Length: 1 byte for a Confirm without bindings, otherwise a positive multiple
+  of 6 bytes.
+* Each 6-byte group is: zone/domain index (1 byte), binding code (2 bytes) and
+  device ID (3 bytes).
+* Orcon remotes offer `22F1`, `22F3`, their OEM code `67` on `10E0`, and `1FC9`
+  itself. An Orcon capture:
+
+```text
+ I --- 29:158183 --:------ 29:158183 1FC9 024 00-22F1-7669E7 00-22F3-7669E7 67-10E0-7669E7 00-1FC9-7669E7
+ W --- 32:155617 29:158183 --:------ 1FC9 012 00-31D9-825FE1 00-31DA-825FE1
+ I --- 29:158183 32:155617 --:------ 1FC9 001 00
+```
+
+* The fan's Accept lists the codes it will accept, for example `31D9` and
+  `31DA`.
+* The Confirm mirrors the index of the Accept. An index of `00` needs no
+  binding code, so the integration sends the one-byte payload `00`.
+* A real remote broadcasts a `10E0` addendum after the Confirm. The integration
+  does not send it.
 
 ### `22F1` — fan mode
 
@@ -424,8 +442,9 @@ This is a manual debugging path, not part of the integration’s normal transpor
 ## Known limitations
 
 * No ownership check for `042F` discovery.
-* No pairing/binding flow (`1FC9`) yet; commands use the configured remote ID as
-  the source.
+* A generated fake remote has to be paired with the fan in its pairing mode; the
+  handshake is initiated by Home Assistant and does not use the optional `10E0`
+  addendum a real remote broadcasts afterwards.
 * The timed-mode countdown is maintained by the integration; the fan's next
   `31D9` state remains the source of truth for the preset.
 * Packet logging is off by default and writes to `/config/packet.log` when

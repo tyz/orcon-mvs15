@@ -36,7 +36,7 @@ from custom_components.orcon_mvs15.const import (
     TRANSPORT_MQTT,
     TRANSPORT_USB,
 )
-from custom_components.orcon_mvs15.ramses.protocol import RamsesID
+from custom_components.orcon_mvs15.ramses.protocol import RamsesID, RamsesPacket
 from custom_components.orcon_mvs15.ramses.transport import TransportError
 from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
 
@@ -962,3 +962,125 @@ async def test_cleanup_closes_the_packet_log(
 
     assert log_file.closed
     assert harness.controller._log_f is None
+
+
+ACCEPT = f"044  W --- {FAN_ID} {REMOTE_ID} --:------ 1FC9 012 0031D9825FE10031DA825FE1"
+NEIGHBOUR_ACCEPT = (
+    f"044  W --- {NEIGHBOUR_ID} {REMOTE_ID} --:------ 1FC9 012 0031D9825FE10031DA825FE1"
+)
+
+
+async def test_pairing_runs_the_orcon_bind_handshake(
+    make: Callable[..., Harness],
+) -> None:
+    """The fake remote offers 22F1 and 22F3, then confirms the fan's accept."""
+    harness = make(fake_remote=True, pairing_timeout=1)
+    await harness.controller.start()
+
+    task = asyncio.create_task(harness.controller.async_pair_remote())
+    await settle()
+
+    offer = next(p for p in harness.transport.sent if p.code == "1FC9")
+    assert offer.type == "I"
+    assert offer.code == "1FC9"
+    assert offer.src_id == RamsesID(REMOTE_ID)
+    assert offer.ann_id == RamsesID(REMOTE_ID)
+    assert offer.dst_id == RamsesID()
+    assert offer.data.upper().startswith("0022F1")
+    assert "0022F3" in offer.data.upper()
+    assert "001FC9" in offer.data.upper()
+
+    await feed(harness, ACCEPT)
+    await task
+
+    confirm = harness.transport.sent[-1]
+    assert confirm.type == "I"
+    assert confirm.code == "1FC9"
+    assert confirm.src_id == RamsesID(REMOTE_ID)
+    assert confirm.dst_id == RamsesID(FAN_ID)
+    assert confirm.data == "00"
+
+
+async def test_pairing_confirms_the_index_of_the_accept(
+    make: Callable[..., Harness],
+) -> None:
+    """A nonzero binding index in the Accept is mirrored in the Confirm."""
+    harness = make(fake_remote=True, pairing_timeout=1)
+    await harness.controller.start()
+    task = asyncio.create_task(harness.controller.async_pair_remote())
+    await settle()
+
+    await feed(
+        harness,
+        f"044  W --- {FAN_ID} {REMOTE_ID} --:------ 1FC9 012 0731D9825FE10031DA825FE1",
+    )
+    await task
+
+    assert harness.transport.sent[-1].data == "07"
+
+
+async def test_pairing_ignores_an_accept_from_another_fan(
+    make: Callable[..., Harness],
+) -> None:
+    """Only the configured fan may complete the binding."""
+    harness = make(fake_remote=True, pairing_timeout=1)
+    await harness.controller.start()
+    task = asyncio.create_task(harness.controller.async_pair_remote())
+    await settle()
+
+    await feed(harness, NEIGHBOUR_ACCEPT)
+    assert not task.done()
+
+    await feed(harness, ACCEPT)
+    await task
+    assert harness.transport.sent[-1].dst_id == RamsesID(FAN_ID)
+
+
+async def test_pairing_reports_a_fan_that_never_accepts(
+    make: Callable[..., Harness],
+) -> None:
+    """Pairing mode has a limited window, so a silent fan is an error."""
+    harness = make(fake_remote=True, pairing_timeout=0.01)
+    await harness.controller.start()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await harness.controller.async_pair_remote()
+
+    assert err.value.translation_key == "remote_pairing_timeout"
+
+
+async def test_a_second_pairing_attempt_is_refused(
+    make: Callable[..., Harness],
+) -> None:
+    """Two overlapping handshakes would confuse the fan's binding state."""
+    harness = make(fake_remote=True, pairing_timeout=1)
+    await harness.controller.start()
+    task = asyncio.create_task(harness.controller.async_pair_remote())
+    await settle()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await harness.controller.async_pair_remote()
+
+    assert err.value.translation_key == "remote_pairing_in_progress"
+
+    await feed(harness, ACCEPT)
+    await task
+
+
+async def test_pairing_reports_a_failed_offer(
+    make: Callable[..., Harness], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A broker that is offline leaves the fan unpaired, and the user learns."""
+    harness = make(fake_remote=True)
+    await harness.controller.start()
+
+    async def failed_send(packet: RamsesPacket) -> None:
+        """Fail the way a transport does when the broker is offline."""
+        raise TransportError("broker is offline")
+
+    monkeypatch.setattr(harness.transport, "send", failed_send)
+
+    with pytest.raises(HomeAssistantError) as err:
+        await harness.controller.async_pair_remote()
+
+    assert err.value.translation_key == "remote_pairing_failed"

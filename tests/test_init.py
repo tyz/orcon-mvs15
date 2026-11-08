@@ -24,6 +24,7 @@ from custom_components.orcon_mvs15.const import (
     CONF_GATEWAY_ID,
     CONF_MQTT_TOPIC,
     CONF_PACKET_LOG,
+    CONF_REMOTE_FAKE,
     CONF_REMOTE_ID,
     CONF_TRANSPORT,
     CONF_USB_PORT,
@@ -103,7 +104,7 @@ class FakeSerialTransport(LoopbackTransport):
             self._gateway_id = RamsesID(GATEWAY_ID)
 
 
-def make_entry(**data: str) -> MockConfigEntry:
+def make_entry(**data: object) -> MockConfigEntry:
     """Build a registered config entry with the MQTT topic filled in."""
     return MockConfigEntry(domain=DOMAIN, data={CONF_MQTT_TOPIC: MQTT_TOPIC, **data})
 
@@ -258,6 +259,40 @@ async def test_setup_creates_a_gateway_reboot_button(
     button_entry = entity_registry.async_get(button.entity_id)
     assert button_entry is not None
     assert button_entry.device_id == device.id
+    assert button_entry.entity_category is EntityCategory.CONFIG
+
+
+async def test_a_fake_remote_adds_a_pairing_button_to_the_fan(
+    hass: HomeAssistant, device_registry: DeviceRegistry
+) -> None:
+    """The generated remote cannot work until the fan is put in pairing mode."""
+    entry = make_entry(
+        **{
+            CONF_REMOTE_ID: "29:123456",
+            CONF_REMOTE_FAKE: True,
+            CONF_FAN_ID: FAN_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        }
+    )
+    entry.add_to_hass(hass)
+
+    with patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    pair_button = next(
+        state
+        for state in hass.states.async_all("button")
+        if state.name.endswith("Pair remote")
+    )
+    fan_device = device_registry.async_get_device_by_identifier(
+        (DOMAIN, FAN_ID), entry.entry_id
+    )
+    assert fan_device is not None
+    button_entry = er.async_get(hass).async_get(pair_button.entity_id)
+    assert button_entry is not None
+    assert button_entry.device_id == fan_device.id
     assert button_entry.entity_category is EntityCategory.CONFIG
 
 

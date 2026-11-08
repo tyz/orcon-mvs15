@@ -106,6 +106,8 @@ def make_controller(
     packet_log_path: str | None = None,
     transport: str = TRANSPORT_MQTT,
     firmware_update_timeout: float = 300.0,
+    fake_remote: bool = False,
+    pairing_timeout: float = 15.0,
 ) -> Harness:
     """Build a controller with fake coordinators and captured timers."""
     timers = Timers()
@@ -125,6 +127,7 @@ def make_controller(
     config = OrconMVS15Config(
         gateway_id=RamsesID(GATEWAY_ID),
         remote_id=RamsesID(REMOTE_ID),
+        fake_remote=fake_remote,
         fan_id=RamsesID(fan_id),
         co2_id=RamsesID(co2_id),
         mqtt_topic=MQTT_TOPIC,
@@ -147,6 +150,7 @@ def make_controller(
         packet_log=packet_log,
         packet_log_path=packet_log_path,
         firmware_update_timeout=firmware_update_timeout,
+        pairing_timeout=pairing_timeout,
     )
     return Harness(
         controller=controller,
