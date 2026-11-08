@@ -227,7 +227,7 @@ class RamsesSession:
         except Exception:
             _LOGGER.error("Error parsing MQTT message %s", envelope, exc_info=True)
             return
-        if (code_class := CODE_REGISTRY.get(packet.code.upper())) is None:
+        if (code_class := CODE_REGISTRY.get(packet.code)) is None:
             _LOGGER.warning(
                 "There is no class for code %s, using the generic Code", packet.code
             )

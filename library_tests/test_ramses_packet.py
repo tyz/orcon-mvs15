@@ -43,6 +43,22 @@ def test_parse_received_frame() -> None:
     assert packet.data == "000404"
 
 
+def test_parse_normalises_a_lowercase_code() -> None:
+    """A transport's lowercase code is stored as the registry's upper case."""
+    packet = RamsesPacket(
+        envelope=envelope(f"081  I --- {FAN_ID} {GATEWAY_ID} --:------ 12a0 002 002F")
+    )
+
+    assert packet.code == "12A0"
+
+
+def test_constructed_packet_normalises_a_lowercase_code() -> None:
+    """Outgoing packets use the same upper-case code as the wire format."""
+    packet = RamsesPacket(code="12a0", data="00")
+
+    assert packet.code == "12A0"
+
+
 def test_parse_frame_without_data_field() -> None:
     """A frame without data has length zero and no data."""
     packet = RamsesPacket(

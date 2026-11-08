@@ -103,7 +103,7 @@ class RamsesPacket:
         self.src_id = src_id
         self.dst_id = dst_id
         self.ann_id = ann_id
-        self.code = code
+        self.code = code.upper()
         self.expected_response: RamsesPacketResponse | None = None
         self.length: int = 0
         self.packet_id = uuid.uuid4().hex
@@ -162,7 +162,7 @@ class RamsesPacket:
         self.src_id = RamsesID(fields[3])
         self.dst_id = RamsesID(fields[4])
         self.ann_id = RamsesID(fields[5])
-        self.code = fields[6]
+        self.code = fields[6].upper()
         try:
             declared_length = int(fields[7])
         except ValueError as err:
