@@ -24,6 +24,7 @@ from custom_components.orcon_mvs15.ramses.protocol import (
     CodeException,
 )
 from custom_components.orcon_mvs15.ramses.protocol import RamsesID, RamsesPacket
+from custom_components.orcon_mvs15.ramses.protocol.orcon import _dev_hex_to_id
 
 TIMESTAMP = "2026-09-11T17:29:09.534250+02:00"
 FAN_ID = "29:224547"
@@ -184,6 +185,21 @@ def test_fan_mode_command_rejects_unknown_preset() -> None:
     """Asking for a preset that does not exist is an error, not a silent no-op."""
     with pytest.raises(KeyError):
         Code22f1.set(RamsesID(GATEWAY_ID), RamsesID(FAN_ID), "Turbo")
+
+
+def test_timed_fan_mode_has_an_explicit_command() -> None:
+    """22F3 builds a timed command without inferring the code from its length."""
+    packet = Code22f3.set(RamsesID(GATEWAY_ID), RamsesID(FAN_ID), "high_30m")
+
+    assert packet.code == "22F3"
+    assert packet.data == "00021E03040000"
+    assert packet.length == 7
+
+
+def test_timed_fan_mode_rejects_a_plain_preset() -> None:
+    """A timed command class refuses a preset that has no countdown."""
+    with pytest.raises(CodeException, match="not a timed fan mode"):
+        Code22f3.set(RamsesID(GATEWAY_ID), RamsesID(FAN_ID), "low")
 
 
 def test_timed_fan_mode_decodes_preset() -> None:
@@ -445,16 +461,12 @@ def test_power_cycle_counter_decodes_counters() -> None:
 )
 def test_device_hex_to_id(device_hex: str, device_id: str) -> None:
     """Device ids are device type plus a six digit device number."""
-    code = Code(made("FFFF", "00"))
-
-    assert code._dev_hex_to_id(device_hex) == device_id
+    assert _dev_hex_to_id(device_hex) == device_id
 
 
 def test_device_hex_to_id_ffffff_is_unverified() -> None:
     """FFFFFF currently renders as nine spaces; see AGENTS.md before changing it."""
-    code = Code(made("FFFF", "00"))
-
-    assert code._dev_hex_to_id("FFFFFF") == " " * 9
+    assert _dev_hex_to_id("FFFFFF") == " " * 9
 
 
 def test_a_payload_with_the_wrong_length_is_rejected() -> None:
