@@ -39,7 +39,9 @@ from .serial_backend import async_serial_number
 
 def _random_remote_id() -> str:
     """Return a Ramses ID that is unlikely to belong to another remote."""
-    return f"29:{randbelow(1_000_000):06d}"
+    # The 3-byte address stores the device type plus an 18-bit number, so a
+    # larger number would alias to a different remote ID on the air.
+    return f"29:{randbelow(1 << 18):06d}"
 
 
 def _topic_error(topic: str) -> str | None:

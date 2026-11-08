@@ -22,6 +22,7 @@ from ramses.protocol import (
     Code31d9,
     Code31e0,
     CodeException,
+    canonical_id,
 )
 from ramses.protocol import RamsesID, RamsesPacket
 from ramses.protocol.orcon import _dev_hex_to_id
@@ -515,6 +516,13 @@ def test_device_hex_to_id(device_hex: str, device_id: str) -> None:
 def test_device_hex_to_id_ffffff_is_unverified() -> None:
     """FFFFFF currently renders as nine spaces; see AGENTS.md before changing it."""
     assert _dev_hex_to_id("FFFFFF") == " " * 9
+
+
+def test_canonical_id_drops_bits_the_address_cannot_hold() -> None:
+    """The address stores an 18-bit number, so a larger ID aliases on the air."""
+    assert canonical_id(RamsesID("29:163058")) == RamsesID("29:163058")
+    assert canonical_id(RamsesID("29:428628")) == RamsesID("29:166484")
+    assert canonical_id(RamsesID()) == RamsesID()
 
 
 def test_a_payload_with_the_wrong_length_is_rejected() -> None:

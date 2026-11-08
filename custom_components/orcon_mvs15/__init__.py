@@ -23,7 +23,7 @@ from .models import (
 )
 from .coordinator import OrconMVS15DataUpdateCoordinator
 from .mqtt import HassMqttBackend
-from .ramses.protocol import RamsesID
+from .ramses.protocol import RamsesID, canonical_id
 from .ramses.session import RamsesSession
 from .ramses.transport import Transport, TransportNotReady
 from .ramses.transport.ramses_esp import RamsesESP
@@ -32,6 +32,7 @@ from .serial_backend import SerialxBackend
 from .const import (
     CONF_GATEWAY_ID,
     CONF_PACKET_LOG,
+    CONF_REMOTE_ID,
     DEFAULT_PACKET_LOG,
     DOMAIN,
     TRANSPORT_USB,
@@ -58,6 +59,18 @@ async def _setup_coordinator(
 
 async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -> bool:
     config = OrconMVS15Config.from_data(entry.data)
+    if config.fake_remote and config.remote_id:
+        canonical = canonical_id(config.remote_id)
+        if canonical != config.remote_id:
+            _LOGGER.warning(
+                "The generated remote ID %s does not fit a Ramses address; using %s",
+                config.remote_id,
+                canonical,
+            )
+            config.remote_id = canonical
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_REMOTE_ID: str(canonical)}
+            )
 
     fan_coordinator = await _setup_coordinator(hass, entry)
     co2_coordinator = await _setup_coordinator(hass, entry)

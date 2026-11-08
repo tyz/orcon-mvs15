@@ -137,6 +137,10 @@ device_id   = value & 0x03FFFF
 `FFFFFF` means “all ones”. The integration currently renders it as nine spaces;
 that behaviour is unverified and should not be changed without protocol evidence.
 
+The device number is 18 bits, so `xxxxxx` can hold at most `262143`. A larger
+number overflows into the device type when encoded, and the device on the air
+sees a different ID. Generated fake-remote IDs stay inside that range.
+
 ## Supported codes
 
 | Code | Description | Used | Fan | CO₂ | RF | Broadcast | Requestable | Notes |

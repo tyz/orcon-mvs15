@@ -12,6 +12,7 @@ from homeassistant.data_entry_flow import FlowResultType
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.orcon_mvs15.config_flow import _random_remote_id
 from custom_components.orcon_mvs15.const import (
     CONF_GATEWAY_ID,
     CONF_MQTT_TOPIC,
@@ -65,6 +66,18 @@ async def test_the_remote_id_field_has_no_prefilled_example(
     remote_id = next(marker for marker in schema if marker.schema == CONF_REMOTE_ID)
 
     assert remote_id.default() == ""
+
+
+def test_a_generated_remote_id_fits_the_ramses_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A larger number would alias to another remote ID on the air."""
+    monkeypatch.setattr(
+        "custom_components.orcon_mvs15.config_flow.randbelow",
+        lambda upper: upper - 1,
+    )
+
+    assert _random_remote_id() == "29:262143"
 
 
 @pytest.mark.parametrize("step", [STEP_MQTT, STEP_USB])

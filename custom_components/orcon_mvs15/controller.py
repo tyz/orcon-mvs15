@@ -550,6 +550,11 @@ class OrconMVS15Controller:
             if accepted.done() or packet.type != "W" or packet.code != "1FC9":
                 return
             if packet.dst_id != remote_id:
+                _LOGGER.debug(
+                    "Ignoring a bind accept for %s while pairing %s",
+                    packet.dst_id,
+                    remote_id,
+                )
                 return
             if self.fan_id and packet.src_id != self.fan_id:
                 return
