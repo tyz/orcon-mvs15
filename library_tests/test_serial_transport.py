@@ -16,6 +16,7 @@ from ramses.transport.ramses_esp.backend import SerialClosedHandler, SerialDataH
 from ramses.transport.ramses_esp.serial import (
     FRAME_QUEUE_SIZE,
     MAX_LINE_LENGTH,
+    RECONNECT_INITIAL_DELAY,
     RamsesESPSerial,
     gateway_id_from_serial,
 )
@@ -559,3 +560,154 @@ async def test_a_close_during_stop_is_not_reported() -> None:
     await transport.stop()
 
     assert states == [ConnectionState.CONNECTED, ConnectionState.DISCONNECTED]
+
+
+class RecordingSleep:
+    """Record the reconnect delays instead of waiting for them."""
+
+    def __init__(self, stop_after: int | None = None) -> None:
+        self.delays: list[float] = []
+        self._stop_after = stop_after
+
+    async def __call__(self, delay: float) -> None:
+        self.delays.append(delay)
+        if self._stop_after is not None and len(self.delays) >= self._stop_after:
+            raise asyncio.CancelledError
+        await asyncio.sleep(0)
+
+
+class BlockingSleep:
+    """Park the reconnect task until the test releases or stops it."""
+
+    def __init__(self) -> None:
+        self.delays: list[float] = []
+        self.gate = asyncio.Event()
+
+    async def __call__(self, delay: float) -> None:
+        self.delays.append(delay)
+        await self.gate.wait()
+
+
+async def test_a_lost_port_is_reopened() -> None:
+    """A USB reboot or firmware install must not need a reload."""
+    backend = FakeSerialBackend()
+    sleep = RecordingSleep()
+    transport = RamsesESPSerial(backend, gateway_id=RamsesID(GATEWAY_ID), sleep=sleep)
+    states: list[ConnectionState] = []
+    transport.subscribe_connection(states.append)
+    received: list[dict[str, str]] = []
+
+    async def handle(envelope: dict[str, str]) -> None:
+        received.append(envelope)
+
+    await transport.start(handle)
+    try:
+        backend.feed(b"half a line without")
+        backend.lose(OSError("the stick rebooted"))
+        await settle()
+        backend.feed(f"{FRAME}\n".encode())
+        await settle()
+
+        assert backend.start_calls == 2
+        assert sleep.delays == [RECONNECT_INITIAL_DELAY]
+        assert transport.connection_state is ConnectionState.CONNECTED
+        assert states == [
+            ConnectionState.CONNECTED,
+            ConnectionState.DISCONNECTED,
+            ConnectionState.CONNECTED,
+        ]
+        assert [envelope["msg"] for envelope in received] == [FRAME]
+    finally:
+        await transport.stop()
+
+    assert transport.connection_state is ConnectionState.DISCONNECTED
+
+
+async def test_reconnect_backs_off_until_the_port_is_back() -> None:
+    """A stick that stays away is retried at most every max delay."""
+    backend = FakeSerialBackend()
+    sleep = RecordingSleep(stop_after=4)
+    transport = RamsesESPSerial(
+        backend,
+        gateway_id=RamsesID(GATEWAY_ID),
+        reconnect_delay=1.0,
+        reconnect_max_delay=4.0,
+        sleep=sleep,
+    )
+    await transport.start(AsyncMock())
+    backend.fail_start = True
+
+    backend.lose(OSError("still away"))
+    for _ in range(50):
+        await asyncio.sleep(0)
+
+    assert sleep.delays == [1.0, 2.0, 4.0, 4.0]
+    assert backend.start_calls == 1
+    assert transport.connection_state is ConnectionState.DISCONNECTED
+
+    await transport.stop()
+
+
+async def test_commands_are_refused_while_reconnecting() -> None:
+    """A command between the loss and the reopen fails instead of vanishing."""
+    backend = FakeSerialBackend()
+    sleep = BlockingSleep()
+    transport = RamsesESPSerial(backend, gateway_id=RamsesID(GATEWAY_ID), sleep=sleep)
+    await transport.start(AsyncMock())
+
+    backend.lose(OSError("gone"))
+    await settle()
+
+    with pytest.raises(TransportError, match="not connected"):
+        await transport.send_command("reset")
+
+    await transport.stop()
+
+    assert transport._reconnect_task is None
+    assert backend.start_calls == 1
+
+
+async def test_a_transport_error_on_send_command_is_not_wrapped() -> None:
+    """A console write that already failed in transport terms keeps its message."""
+    backend = FakeSerialBackend()
+    backend.write_error = TransportError("the port is gone")
+    transport = RamsesESPSerial(backend, gateway_id=RamsesID(GATEWAY_ID))
+    await transport.start(AsyncMock())
+
+    try:
+        with pytest.raises(TransportError, match="the port is gone"):
+            await transport.send_command("reset")
+    finally:
+        await transport.stop()
+
+
+async def test_a_second_close_does_not_start_a_second_reconnect() -> None:
+    """Repeated close callbacks share the reconnect that is already running."""
+    backend = FakeSerialBackend()
+    sleep = BlockingSleep()
+    transport = RamsesESPSerial(backend, gateway_id=RamsesID(GATEWAY_ID), sleep=sleep)
+    await transport.start(AsyncMock())
+
+    backend.lose(OSError("gone"))
+    await settle()
+    backend.lose(OSError("still gone"))
+    await settle()
+
+    assert sleep.delays == [RECONNECT_INITIAL_DELAY]
+
+    await transport.stop()
+
+
+async def test_stopping_does_not_start_a_reconnect() -> None:
+    """A close reported after an intentional stop is ignored."""
+    backend = FakeSerialBackend()
+    sleep = RecordingSleep()
+    transport = RamsesESPSerial(backend, gateway_id=RamsesID(GATEWAY_ID), sleep=sleep)
+    await transport.start(AsyncMock())
+
+    await transport.stop()
+    backend.lose(OSError("late close"))
+    await settle()
+
+    assert sleep.delays == []
+    assert backend.start_calls == 1

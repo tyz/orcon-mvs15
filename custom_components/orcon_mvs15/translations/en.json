@@ -94,7 +94,7 @@
       "message": "Failed to set fan preset mode {mode}: {error}"
     },
     "firmware_update_unsupported": {
-      "message": "Firmware updates are available over MQTT only; the USB connection cannot recover from the gateway reboot."
+      "message": "Firmware updates are available over MQTT only."
     },
     "firmware_update_in_progress": {
       "message": "A firmware update is already in progress."
@@ -110,6 +110,12 @@
     },
     "firmware_update_timeout": {
       "message": "The gateway did not report firmware {version} after the update. Check that it is connected to WiFi and review the Home Assistant log."
+    },
+    "reboot_failed": {
+      "message": "Could not reboot the gateway: {error}"
+    },
+    "reboot_during_update": {
+      "message": "The gateway cannot reboot while a firmware update is in progress."
     }
   },
   "issues": {
@@ -157,6 +163,11 @@
     "update": {
       "firmware": {
         "name": "Firmware"
+      }
+    },
+    "button": {
+      "reboot": {
+        "name": "Reboot"
       }
     }
   }

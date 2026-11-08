@@ -32,8 +32,8 @@ class OrconMVS15DataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
     def async_set_available(self, available: bool) -> None:
         """Set availability without logging a poll error on every transition.
 
-        Data is pushed, so a failed poll does not exist. The MQTT connection is
-        the signal that the fan can no longer be reached.
+        Data is pushed, so a failed poll does not exist. The transport
+        connection is the signal that the device can no longer be reached.
         """
         if self.last_update_success == available:
             return

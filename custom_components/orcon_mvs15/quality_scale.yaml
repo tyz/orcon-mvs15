@@ -82,13 +82,13 @@ rules:
     status: done
     comment: |
       Entities are unavailable until their first packet and while the MQTT
-      connection is down or the USB port is closed.
+      broker or gateway is down or the USB port is closed.
   integration-owner: done
   log-when-unavailable:
     status: done
     comment: |
-      A lost and restored MQTT or USB connection is logged once, and the
-      coordinators mark their entities unavailable in between.
+      A lost and restored broker, gateway or USB connection is logged once, and
+      the coordinators mark their entities unavailable in between.
   parallel-updates: done
   reauthentication-flow:
     status: exempt
@@ -134,8 +134,8 @@ rules:
   entity-category:
     status: done
     comment: |
-      Signal strength sensors are diagnostic entities; the other entities are
-      user-facing.
+      Signal strength sensors are diagnostic entities and the gateway reboot
+      button is a configuration action; the other entities are user-facing.
   entity-device-class: done
   entity-disabled-by-default:
     status: done
@@ -151,8 +151,9 @@ rules:
   icon-translations:
     status: done
     comment: |
-      icons.json defines the fan preset icons. No entity sets an icon in
-      Python; the other icons come from the device class.
+      icons.json defines the fan preset icons and the gateway reboot button.
+      No entity sets an icon in Python; the other icons come from the device
+      class.
   reconfiguration-flow: done
   repair-issues:
     status: done

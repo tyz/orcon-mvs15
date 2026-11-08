@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EntityCategory
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
@@ -225,6 +225,40 @@ async def test_setup_creates_a_firmware_update_entity(
     update_entry = entity_registry.async_get(update.entity_id)
     assert update_entry is not None
     assert update_entry.device_id == device.id
+
+
+async def test_setup_creates_a_gateway_reboot_button(
+    hass: HomeAssistant, device_registry: DeviceRegistry
+) -> None:
+    """The gateway gets one configuration button with a stable identity."""
+    entry = make_entry(
+        **{
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_GATEWAY_ID: GATEWAY_ID,
+            CONF_MQTT_TOPIC: MQTT_TOPIC,
+        }
+    )
+    entry.add_to_hass(hass)
+
+    with patch("custom_components.orcon_mvs15.RamsesESP", FakeTransport):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    buttons = hass.states.async_all("button")
+    assert len(buttons) == 1
+    button = buttons[0]
+    assert button.name == f"Indalo-Tech RAMSES_ESP ({GATEWAY_ID}) Reboot"
+    assert button.attributes["device_class"] == "restart"
+
+    device = device_registry.async_get_device_by_identifier(
+        (DOMAIN, GATEWAY_ID), entry.entry_id
+    )
+    assert device is not None
+    entity_registry = er.async_get(hass)
+    button_entry = entity_registry.async_get(button.entity_id)
+    assert button_entry is not None
+    assert button_entry.device_id == device.id
+    assert button_entry.entity_category is EntityCategory.CONFIG
 
 
 async def test_setup_passes_the_packet_log_option_to_the_controller(

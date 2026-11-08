@@ -263,7 +263,7 @@ class OrconMVS15Controller:
             try:
                 await init()
             except TransportError as err:
-                _LOGGER.warning("Could not fetch the discovered device state: %s", err)
+                _LOGGER.warning("Could not fetch the device state: %s", err)
 
         self.hass.async_create_task(_run())
 
@@ -358,8 +358,22 @@ class OrconMVS15Controller:
             self.cancel_fan_watchdog()
 
     def _connection_changed(self, state: ConnectionState) -> None:
-        """Translate the transport state into integration availability."""
-        self.async_set_connected(state is ConnectionState.CONNECTED)
+        """Translate the transport state into availability and a refresh."""
+        connected = state is ConnectionState.CONNECTED
+        self.async_set_connected(connected)
+        if connected:
+            self._start_init(self._refresh_devices)
+
+    async def _refresh_devices(self) -> None:
+        """Re-fetch the known devices after the gateway comes back.
+
+        The next broadcast can be five minutes away, so a reconnect would
+        otherwise leave the entities unavailable long after the stick is up.
+        """
+        if self.fan_id:
+            await self.init_fan()
+        if self.co2_id:
+            await self.init_co2()
 
     def _version_received(self, version: str) -> None:
         """Store the gateway firmware version and release a waiting update."""
@@ -396,18 +410,16 @@ class OrconMVS15Controller:
         command and waits for the rebooted firmware to report its version.
         """
         if self.config.transport != TRANSPORT_MQTT:
-            raise self._firmware_error("firmware_update_unsupported")
+            raise self._gateway_error("firmware_update_unsupported")
         if self._firmware_update_future is not None:
-            raise self._firmware_error("firmware_update_in_progress")
+            raise self._gateway_error("firmware_update_in_progress")
         target = version.strip() if version is not None else None
         if target is not None and not FIRMWARE_VERSION_RE.match(target):
-            raise self._firmware_error(
-                "firmware_version_invalid", version=version or ""
-            )
+            raise self._gateway_error("firmware_version_invalid", version=version or "")
         if target is None:
             latest = self.gateway_coordinator.data.get("latest_firmware_version")
             if not isinstance(latest, str) or not latest:
-                raise self._firmware_error("firmware_latest_unknown")
+                raise self._gateway_error("firmware_latest_unknown")
             target = latest
         previous = self.gateway_coordinator.data.get("firmware_version")
         future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
@@ -419,14 +431,14 @@ class OrconMVS15Controller:
                     await self.session.send_command(f"ota version {target}")
                 await self.session.send_command("ota start")
             except TransportError as err:
-                raise self._firmware_error(
+                raise self._gateway_error(
                     "firmware_update_failed", error=str(err)
                 ) from err
             try:
                 async with asyncio.timeout(self.firmware_update_timeout):
                     reported = await future
             except TimeoutError as err:
-                raise self._firmware_error(
+                raise self._gateway_error(
                     "firmware_update_timeout", version=target
                 ) from err
         finally:
@@ -437,13 +449,23 @@ class OrconMVS15Controller:
         )
 
     @staticmethod
-    def _firmware_error(key: str, **placeholders: str) -> HomeAssistantError:
-        """Build a translated firmware-update error."""
+    def _gateway_error(key: str, **placeholders: str) -> HomeAssistantError:
+        """Build a translated gateway-command error."""
         return HomeAssistantError(
             translation_domain=DOMAIN,
             translation_key=key,
             translation_placeholders=placeholders,
         )
+
+    async def async_reboot_gateway(self) -> None:
+        """Reboot the gateway with the firmware's own `reset` command."""
+        if self._firmware_update_future is not None:
+            raise self._gateway_error("reboot_during_update")
+        _LOGGER.info("Rebooting the Ramses ESP gateway")
+        try:
+            await self.session.send_command("reset")
+        except TransportError as err:
+            raise self._gateway_error("reboot_failed", error=str(err)) from err
 
     async def set_preset_mode(self, mode: str) -> None:
         """Set the fan preset mode."""

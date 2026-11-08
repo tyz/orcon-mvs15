@@ -94,7 +94,7 @@
       "message": "Kon de stand {mode} van de ventilator niet instellen: {error}"
     },
     "firmware_update_unsupported": {
-      "message": "Firmware-updates zijn alleen beschikbaar via MQTT; de USB-verbinding kan niet herstellen van de herstart van de gateway."
+      "message": "Firmware-updates zijn alleen beschikbaar via MQTT."
     },
     "firmware_update_in_progress": {
       "message": "Er is al een firmware-update bezig."
@@ -110,6 +110,12 @@
     },
     "firmware_update_timeout": {
       "message": "De gateway heeft na de update geen firmware {version} gemeld. Controleer of de stick met wifi is verbonden en bekijk het logboek van Home Assistant."
+    },
+    "reboot_failed": {
+      "message": "Kon de gateway niet herstarten: {error}"
+    },
+    "reboot_during_update": {
+      "message": "De gateway kan niet herstarten terwijl een firmware-update bezig is."
     }
   },
   "issues": {
@@ -157,6 +163,11 @@
     "update": {
       "firmware": {
         "name": "Firmware"
+      }
+    },
+    "button": {
+      "reboot": {
+        "name": "Herstarten"
       }
     }
   }

@@ -160,6 +160,138 @@ async def test_connection_transitions_are_logged_once(
     status_unsub.assert_called_once_with()
 
 
+def gateway_status(payload: bytes, topic: str) -> ReceiveMessage:
+    """Build a retained message the gateway publishes on its own topic."""
+    return ReceiveMessage(
+        topic=topic,
+        payload=payload,
+        qos=1,
+        retain=True,
+        subscribed_topic=topic,
+        timestamp=0.0,
+    )
+
+
+async def test_the_gateway_last_will_is_subscribed(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The retained online/offline topic becomes the gateway's availability."""
+    subscriptions: dict[str, Callable] = {}
+
+    async def fake_subscribe(
+        hass_: HomeAssistant, topic: str, handler: Callable
+    ) -> Callable[[], None]:
+        subscriptions[topic] = handler
+        return Mock()
+
+    monkeypatch.setattr(mqtt_module.mqtt, "async_subscribe", fake_subscribe)
+    monkeypatch.setattr(
+        mqtt_module.mqtt,
+        "async_subscribe_connection_status",
+        Mock(return_value=Mock()),
+    )
+    monkeypatch.setattr(
+        mqtt_module.mqtt, "async_wait_for_mqtt_client", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(mqtt_module.mqtt, "is_connected", lambda hass_: True)
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    await transport.init()
+    observed: list[ConnectionState] = []
+    transport.subscribe_connection(observed.append)
+
+    await transport.start(Mock())
+
+    assert transport.lwt_topic == f"{MQTT_TOPIC}/{GATEWAY_ID}"
+    assert set(subscriptions) == {
+        transport.sub_topic,
+        transport.version_topic,
+        transport.latest_topic,
+        transport.lwt_topic,
+    }
+    handler = subscriptions[transport.lwt_topic]
+
+    await handler(gateway_status(b"offline", transport.lwt_topic))
+    assert transport.connection_state is ConnectionState.DISCONNECTED
+
+    await handler(gateway_status(b"online", transport.lwt_topic))
+    assert transport.connection_state is ConnectionState.CONNECTED
+
+    await handler(gateway_status(b"offline", transport.lwt_topic))
+    await handler(gateway_status(b"offline", transport.lwt_topic))
+    assert observed == [
+        ConnectionState.DISCONNECTED,
+        ConnectionState.CONNECTED,
+        ConnectionState.DISCONNECTED,
+    ]
+
+    await transport.stop()
+
+
+async def test_the_gateway_and_the_broker_must_both_be_up(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reachable broker does not make an offline gateway available."""
+    connection_callbacks: list[Callable[[bool], None]] = []
+    subscriptions: dict[str, Callable] = {}
+
+    async def fake_subscribe(
+        hass_: HomeAssistant, topic: str, handler: Callable
+    ) -> Callable[[], None]:
+        subscriptions[topic] = handler
+        return Mock()
+
+    def fake_connection_status(
+        hass_: HomeAssistant, callback: Callable[[bool], None]
+    ) -> Callable[[], None]:
+        connection_callbacks.append(callback)
+        return Mock()
+
+    monkeypatch.setattr(mqtt_module.mqtt, "async_subscribe", fake_subscribe)
+    monkeypatch.setattr(
+        mqtt_module.mqtt, "async_subscribe_connection_status", fake_connection_status
+    )
+    monkeypatch.setattr(
+        mqtt_module.mqtt, "async_wait_for_mqtt_client", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(mqtt_module.mqtt, "is_connected", lambda hass_: True)
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    await transport.init()
+    observed: list[ConnectionState] = []
+    transport.subscribe_connection(observed.append)
+    await transport.start(Mock())
+    handler = subscriptions[transport.lwt_topic]
+
+    await handler(gateway_status(b"offline", transport.lwt_topic))
+    connection_callbacks[0](False)
+    connection_callbacks[0](True)
+    assert transport.connection_state is ConnectionState.DISCONNECTED
+
+    await handler(gateway_status(b"online", transport.lwt_topic))
+    assert transport.connection_state is ConnectionState.CONNECTED
+    assert observed == [ConnectionState.DISCONNECTED, ConnectionState.CONNECTED]
+
+    await transport.stop()
+
+
+async def test_an_unknown_gateway_status_is_ignored(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Only the firmware's online/offline payloads change availability."""
+    transport = make_transport(hass, gateway_id=GATEWAY_ID)
+    await transport.init()
+    transport._broker_connected = True
+    transport._connection_state = ConnectionState.CONNECTED
+    observed: list[ConnectionState] = []
+    transport.subscribe_connection(observed.append)
+
+    with caplog.at_level(logging.DEBUG):
+        await transport._handle_gateway_status(transport.lwt_topic, b"starting")
+
+    assert observed == []
+    assert transport.connection_state is ConnectionState.CONNECTED
+    assert "Ignoring gateway status" in caplog.text
+
+
 async def test_configured_gateway_skips_discovery(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:

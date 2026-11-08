@@ -150,8 +150,14 @@ async def test_mqtt_outage_pauses_the_watchdog_and_reconnect_restarts_it(
 
     await set_connected(harness, True)
 
-    assert len(harness.timers.later) == 2
+    # The reconnect arms the window immediately; the state refresh that
+    # follows re-arms it so the fan gets a full window once the gateway is back.
+    assert len(harness.timers.later) == 3
     assert harness.timers.later[1][0] == FAN_RESPONSE_TIMEOUT
+    _delay, _action, refreshed_cancel = harness.timers.later[1]
+    refreshed_cancel.assert_called_once_with()
+    assert harness.timers.later[2][0] == FAN_RESPONSE_TIMEOUT
+    assert harness.controller._fan_watchdog_unsub is harness.timers.later[2][2]
 
 
 async def test_cleanup_stops_the_watchdog_and_removes_the_issue(
