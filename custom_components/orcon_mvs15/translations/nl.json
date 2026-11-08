@@ -3,7 +3,15 @@
     "step": {
       "user": {
         "title": "Configureer Orcon MVS-15",
-        "description": "Voer de instellingen in voor je Orcon MVS-15 ventilatie-unit.",
+        "description": "Kies hoe de Ramses ESP-gateway is aangesloten.",
+        "menu_options": {
+          "mqtt_connection": "MQTT-broker",
+          "usb_connection": "USB-seriële poort"
+        }
+      },
+      "mqtt_connection": {
+        "title": "MQTT-verbinding",
+        "description": "Voer de 15RF-afstandsbediening en het MQTT-basistopic van de gateway in.",
         "data": {
           "remote_id": "Afstandbediening ID (bijv. 29:123456)",
           "mqtt_topic": "MQTT topic prefix (bijv. RAMSES/GATEWAY)"
@@ -11,6 +19,18 @@
         "data_description": {
           "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
           "mqtt_topic": "Het basistopic van de Ramses ESP-gateway, bijvoorbeeld RAMSES/GATEWAY."
+        }
+      },
+      "usb_connection": {
+        "title": "USB-verbinding",
+        "description": "Selecteer de seriële poort van de Ramses ESP. Gebruik interface 0 als de stick twee poorten heeft.",
+        "data": {
+          "remote_id": "Afstandbediening ID (bijv. 29:123456)",
+          "usb_port": "Seriele poort"
+        },
+        "data_description": {
+          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
+          "usb_port": "De USB-seriële poort van de Ramses ESP, bijvoorbeeld /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_...-if00."
         }
       },
       "fan_discovery": {
@@ -19,24 +39,22 @@
       },
       "reconfigure": {
         "title": "Orcon MVS-15 opnieuw configureren",
-        "description": "Wijzig de afstandsbediening-ID of het MQTT topic prefix.",
-        "data": {
-          "remote_id": "Afstandbediening ID (bijv. 29:123456)",
-          "mqtt_topic": "MQTT topic prefix (bijv. RAMSES/GATEWAY)"
-        },
-        "data_description": {
-          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
-          "mqtt_topic": "Het basistopic van de Ramses ESP-gateway, bijvoorbeeld RAMSES/GATEWAY."
+        "description": "Kies welke verbinding je wilt wijzigen.",
+        "menu_options": {
+          "mqtt_connection": "MQTT-broker",
+          "usb_connection": "USB-seriële poort"
         }
       }
     },
     "error": {
       "mqtt_topic_required": "Voer het basis-MQTT-topic van de gateway in.",
       "mqtt_topic_whitespace": "Het basis-MQTT-topic mag niet met een spatie beginnen of eindigen.",
-      "mqtt_topic_wildcard": "Het basis-MQTT-topic mag de jokertekens + en # niet bevatten."
+      "mqtt_topic_wildcard": "Het basis-MQTT-topic mag de jokertekens + en # niet bevatten.",
+      "usb_port_required": "Selecteer de USB-seriële poort van de gateway.",
+      "gateway_id_unavailable": "Kon het gateway-ID niet afleiden uit het serienummer van de USB-poort. Controleer of de juiste poort is geselecteerd."
     },
     "abort": {
-      "already_configured": "Dit MQTT-topic is al geconfigureerd."
+      "already_configured": "Deze gateway is al geconfigureerd."
     }
   },
   "options": {
@@ -62,6 +80,12 @@
     },
     "mqtt_not_available": {
       "message": "De MQTT-integratie is niet beschikbaar."
+    },
+    "usb_setup_failed": {
+      "message": "Kon de USB-verbinding niet starten: {error}"
+    },
+    "usb_not_available": {
+      "message": "De USB-gateway is niet beschikbaar."
     },
     "unknown_preset_mode": {
       "message": "Onbekende stand voor de ventilator: {mode}"

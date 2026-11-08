@@ -25,12 +25,16 @@ from custom_components.orcon_mvs15.const import (
     CONF_MQTT_TOPIC,
     CONF_PACKET_LOG,
     CONF_REMOTE_ID,
+    CONF_TRANSPORT,
+    CONF_USB_PORT,
     DOMAIN,
+    TRANSPORT_USB,
 )
 from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 from custom_components.orcon_mvs15.ramses.transport import (
     ConnectionState,
     TransportError,
+    TransportNotReady,
 )
 from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
 
@@ -71,6 +75,32 @@ class FakeTransport(LoopbackTransport):
         """Record that the transport was released."""
         self.cleaned = True
         await super().stop()
+
+
+class FakeSerialBackend:
+    """Stand-in for the serialx adapter."""
+
+    last_port: str | None = None
+
+    def __init__(self, port: str) -> None:
+        self.port = port
+        FakeSerialBackend.last_port = port
+
+
+class FakeSerialTransport(LoopbackTransport):
+    """Stand-in for the USB transport during entry setup."""
+
+    last_instance: FakeSerialTransport | None = None
+
+    def __init__(self, backend: object, gateway_id: RamsesID = RamsesID()) -> None:
+        super().__init__(gateway_id=gateway_id)
+        self.backend = backend
+        FakeSerialTransport.last_instance = self
+
+    async def init(self) -> None:
+        """Derive the gateway id the way the real transport does."""
+        if not self.gateway_id:
+            self._gateway_id = RamsesID(GATEWAY_ID)
 
 
 def make_entry(**data: str) -> MockConfigEntry:
@@ -551,3 +581,87 @@ async def test_stale_device_removal_keeps_the_gateway(
 
     assert await async_remove_config_entry_device(hass, entry, gateway) is False
     assert await async_remove_config_entry_device(hass, entry, fan) is True
+
+
+async def test_usb_setup_uses_the_selected_serial_port(
+    hass: HomeAssistant,
+) -> None:
+    """A USB entry opens the configured port and stores its gateway id."""
+    entry = make_entry(
+        **{
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_TRANSPORT: TRANSPORT_USB,
+            CONF_USB_PORT: "/dev/serial/by-id/ramses-esp-if00",
+        }
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.orcon_mvs15.SerialxBackend", FakeSerialBackend),
+        patch("custom_components.orcon_mvs15.RamsesESPSerial", FakeSerialTransport),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert FakeSerialBackend.last_port == "/dev/serial/by-id/ramses-esp-if00"
+    assert FakeSerialTransport.last_instance is not None
+    assert entry.data[CONF_GATEWAY_ID] == GATEWAY_ID
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_usb_setup_failure_is_retryable(hass: HomeAssistant) -> None:
+    """A USB transport that cannot start sends the entry back to setup."""
+    entry = make_entry(
+        **{
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_TRANSPORT: TRANSPORT_USB,
+            CONF_USB_PORT: "/dev/ttyACM0",
+            CONF_GATEWAY_ID: GATEWAY_ID,
+        }
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.orcon_mvs15.SerialxBackend", FakeSerialBackend),
+        patch(
+            "custom_components.orcon_mvs15.RamsesESPSerial.init",
+            AsyncMock(side_effect=TransportError("Could not derive the gateway id")),
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
+
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_key == "usb_setup_failed"
+    assert entry.error_reason_translation_placeholders == {
+        "error": "Could not derive the gateway id"
+    }
+
+
+async def test_a_usb_start_failure_is_retryable(hass: HomeAssistant) -> None:
+    """An unavailable USB gateway is a retryable setup failure."""
+    entry = make_entry(
+        **{
+            CONF_REMOTE_ID: REMOTE_ID,
+            CONF_TRANSPORT: TRANSPORT_USB,
+            CONF_USB_PORT: "/dev/ttyACM0",
+            CONF_GATEWAY_ID: GATEWAY_ID,
+        }
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.orcon_mvs15.SerialxBackend", FakeSerialBackend),
+        patch("custom_components.orcon_mvs15.RamsesESPSerial", FakeSerialTransport),
+        patch(
+            "custom_components.orcon_mvs15.RamsesSession.start",
+            AsyncMock(side_effect=TransportNotReady("the port is busy")),
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
+
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_key == "usb_not_available"
+    assert FakeSerialTransport.last_instance is not None

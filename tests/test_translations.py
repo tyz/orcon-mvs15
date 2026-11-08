@@ -70,6 +70,8 @@ EXCEPTION_PLACEHOLDERS: dict[str, dict[str, str] | None] = {
     "mqtt_setup_failed": {"error": "boom"},
     "session_setup_failed": {"error": "boom"},
     "mqtt_not_available": None,
+    "usb_setup_failed": {"error": "boom"},
+    "usb_not_available": None,
     "unknown_preset_mode": {"mode": "Turbo"},
     "set_preset_failed": {"mode": "low", "error": "offline"},
 }

@@ -1,4 +1,4 @@
-"""The MQTT operations a RAMSES ESP transport needs from its host."""
+"""The host operations a RAMSES ESP transport needs."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ from ..base import TransportError
 
 type MessageHandler = Callable[[str, str | bytes | bytearray], Awaitable[None] | None]
 type ConnectionHandler = Callable[[bool], None]
+type SerialDataHandler = Callable[[bytes], None]
+type SerialClosedHandler = Callable[[Exception | None], None]
 
 
 class MqttBackendError(TransportError):
@@ -43,4 +45,27 @@ class MqttBackend(Protocol):
 
     def is_connected(self) -> bool:
         """Return whether the client is currently connected."""
+        ...  # pragma: no cover
+
+
+@runtime_checkable
+class SerialBackend(Protocol):
+    """The byte channel the USB transport depends on."""
+
+    async def serial_number(self) -> str | None:
+        """Return the USB serial number of the port, if the OS exposes it."""
+        ...  # pragma: no cover
+
+    async def start(
+        self, handle_data: SerialDataHandler, handle_closed: SerialClosedHandler
+    ) -> None:
+        """Open the port and deliver received bytes to the handler."""
+        ...  # pragma: no cover
+
+    async def stop(self) -> None:
+        """Close the port."""
+        ...  # pragma: no cover
+
+    async def write(self, data: bytes) -> None:
+        """Write bytes to the port."""
         ...  # pragma: no cover
