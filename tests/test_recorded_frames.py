@@ -38,7 +38,7 @@ from recorded_frames import (
 FAN_ID = "29:224547"
 CO2_ID = "32:093959"
 GATEWAY_ID = "18:149960"
-REMOTE_ID = "29:163058"
+REMOTE_ID = "29:123456"
 
 FIXTURE_FILES = sorted(path.name for path in FIXTURES.glob("*.log"))
 

@@ -382,6 +382,42 @@ def test_rf_bind_rejects_an_empty_payload() -> None:
         Code1fc9(packet)
 
 
+def test_rf_bind_offer_matches_an_orcon_remote() -> None:
+    """An Orcon remote offers 22F1, 22F3, its OEM and 1FC9 in one frame."""
+    packet = Code1fc9.bind_offer(RamsesID("29:158183"))
+
+    assert packet.ramses_esp_envelope()["msg"] == (
+        "I  --- 29:158183 --:------ 29:158183 1FC9 024 "
+        "0022F17669E70022F37669E76710E07669E7001FC97669E7"
+    )
+
+
+def test_rf_bind_offer_needs_a_real_device_id() -> None:
+    """A placeholder address cannot be encoded into a binding."""
+    with pytest.raises(ValueError, match="Invalid Ramses device ID"):
+        Code1fc9.bind_offer(RamsesID())
+
+
+def test_rf_bind_confirm_is_a_single_index_byte() -> None:
+    """The Confirm mirrors the Accept's index and carries no bindings."""
+    packet = Code1fc9.bind_confirm(RamsesID("29:158183"), RamsesID("32:155617"))
+
+    assert packet.ramses_esp_envelope()["msg"] == (
+        "I  --- 29:158183 32:155617 --:------ 1FC9 001 00"
+    )
+
+
+def test_rf_bind_accepts_an_empty_confirm() -> None:
+    """A one-byte Confirm is valid 1FC9 traffic, not a malformed packet."""
+    packet = received("044  I --- 29:158183 32:155617 --:------ 1FC9 001 00")
+
+    values = Code1fc9(packet).values
+
+    assert values["zone_idx"] == 0
+    assert values["command"] is None
+    assert values["device_id"] is None
+
+
 def test_device_info_description_is_split_on_bytes_not_hex_pairs() -> None:
     """A description whose hex contains "00" across two bytes is not cut."""
     header = "000001C8262101010000050107E9020107E9"

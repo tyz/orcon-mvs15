@@ -6,7 +6,7 @@ are replayed by `tests/test_recorded_frames.py`.
 | Role | Address | Device info |
 |---|---|---|
 | HGI (gateway) | `18:149960` | requests only, no `10E0` broadcast |
-| Wireless remote, sold as `Afstandsbediening 15RF` | `29:163058` | no `10E0`; only `22F1`/`22F3` |
+| Wireless remote, sold as `Afstandsbediening 15RF` | `29:123456` | no `10E0`; only `22F1`/`22F3` |
 | Fan, sold as `MVS-15xxx` | `29:224547` | product `26`, `VMC-15RP01` |
 | Wired CO₂ sensor, sold as `CO2 ruimtesensor 15RF` | `32:093959` | product `51`, `VMS-15CM17` |
 

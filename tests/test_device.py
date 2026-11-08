@@ -23,7 +23,7 @@ from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 
 GATEWAY_ID = RamsesID("18:149960")
 FAN_ID = RamsesID("29:224547")
-CO2_ID = RamsesID("29:163058")
+CO2_ID = RamsesID("29:123456")
 
 
 def make_entry(hass: HomeAssistant) -> MockConfigEntry:

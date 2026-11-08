@@ -11,20 +11,21 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import AbortFlow
-from homeassistant.helpers.selector import SerialPortSelector
+from homeassistant.helpers.selector import BooleanSelector, SerialPortSelector
 
+from secrets import randbelow
 from typing import Any
 
 from .const import (
     CONF_GATEWAY_ID,
     CONF_MQTT_TOPIC,
     CONF_PACKET_LOG,
+    CONF_REMOTE_FAKE,
     CONF_REMOTE_ID,
     CONF_TRANSPORT,
     CONF_USB_PORT,
     DEFAULT_MQTT_TOPIC,
     DEFAULT_PACKET_LOG,
-    DEFAULT_REMOTE_ID,
     DOMAIN,
     STEP_MQTT,
     STEP_USB,
@@ -34,6 +35,11 @@ from .const import (
 from .ramses.protocol import RamsesID
 from .ramses.transport.ramses_esp.serial import gateway_id_from_serial
 from .serial_backend import async_serial_number
+
+
+def _random_remote_id() -> str:
+    """Return a Ramses ID that is unlikely to belong to another remote."""
+    return f"29:{randbelow(1_000_000):06d}"
 
 
 def _topic_error(topic: str) -> str | None:
@@ -47,26 +53,38 @@ def _topic_error(topic: str) -> str | None:
     return None
 
 
-def _remote_schema(remote_id: str) -> dict[Any, Any]:
-    """Return the remote field shared by both connection forms."""
-    return {Required(CONF_REMOTE_ID, default=remote_id): str}
+def _remote_id(current: dict[str, Any], user_input: dict[str, Any]) -> str:
+    """Return the remote ID to store, generating one for a fake remote."""
+    if not user_input[CONF_REMOTE_FAKE]:
+        return str(user_input[CONF_REMOTE_ID])
+    if current.get(CONF_REMOTE_FAKE) and current.get(CONF_REMOTE_ID):
+        return str(current[CONF_REMOTE_ID])
+    return _random_remote_id()
 
 
-def _mqtt_schema(remote_id: str, mqtt_topic: str) -> Schema:
+def _remote_schema(remote_id: str, fake_remote: bool) -> dict[Any, Any]:
+    """Return the remote fields shared by both connection forms."""
+    return {
+        Required(CONF_REMOTE_FAKE, default=fake_remote): BooleanSelector(),
+        Required(CONF_REMOTE_ID, default=remote_id): str,
+    }
+
+
+def _mqtt_schema(remote_id: str, fake_remote: bool, mqtt_topic: str) -> Schema:
     """Build the MQTT connection form with defaults for the entered values."""
     return Schema(
         {
-            **_remote_schema(remote_id),
+            **_remote_schema(remote_id, fake_remote),
             Required(CONF_MQTT_TOPIC, default=mqtt_topic): str,
         }
     )
 
 
-def _usb_schema(remote_id: str, usb_port: str) -> Schema:
+def _usb_schema(remote_id: str, fake_remote: bool, usb_port: str) -> Schema:
     """Build the USB connection form with the current port preselected."""
     return Schema(
         {
-            **_remote_schema(remote_id),
+            **_remote_schema(remote_id, fake_remote),
             Required(CONF_USB_PORT, default=usb_port): SerialPortSelector(),
         }
     )
@@ -137,7 +155,8 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 self._async_abort_duplicate(CONF_MQTT_TOPIC, topic, TRANSPORT_MQTT)
                 data: dict[str, Any] = {
-                    CONF_REMOTE_ID: user_input[CONF_REMOTE_ID],
+                    CONF_REMOTE_FAKE: user_input[CONF_REMOTE_FAKE],
+                    CONF_REMOTE_ID: _remote_id(current, user_input),
                     CONF_MQTT_TOPIC: topic,
                     CONF_TRANSPORT: TRANSPORT_MQTT,
                 }
@@ -150,7 +169,8 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id=STEP_MQTT,
             data_schema=_mqtt_schema(
-                current.get(CONF_REMOTE_ID, DEFAULT_REMOTE_ID),
+                current.get(CONF_REMOTE_ID, ""),
+                current.get(CONF_REMOTE_FAKE, False),
                 current.get(CONF_MQTT_TOPIC, DEFAULT_MQTT_TOPIC),
             ),
             errors=errors,
@@ -177,7 +197,8 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
                 else:
                     return await self._async_finish(
                         {
-                            CONF_REMOTE_ID: user_input[CONF_REMOTE_ID],
+                            CONF_REMOTE_FAKE: user_input[CONF_REMOTE_FAKE],
+                            CONF_REMOTE_ID: _remote_id(current, user_input),
                             CONF_TRANSPORT: TRANSPORT_USB,
                             CONF_USB_PORT: port,
                             CONF_GATEWAY_ID: gateway_id,
@@ -187,7 +208,8 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id=STEP_USB,
             data_schema=_usb_schema(
-                current.get(CONF_REMOTE_ID, DEFAULT_REMOTE_ID),
+                current.get(CONF_REMOTE_ID, ""),
+                current.get(CONF_REMOTE_FAKE, False),
                 current.get(CONF_USB_PORT, ""),
             ),
             errors=errors,

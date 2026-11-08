@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from .codes import CODE_REGISTRY, Code, CodeException, register_code
 from .frame import (
@@ -48,6 +49,18 @@ def _dev_hex_to_id(device_hex: str) -> str:
     _tmp = int(device_hex, 16)
     dev_type = (_tmp & 0xFC0000) >> 18
     return f"{dev_type:02d}:{_tmp & 0x03FFFF:06d}"
+
+
+_DEVICE_ID_RE = re.compile(r"^(\d{2}):(\d{6})$")
+
+
+def _dev_id_to_hex(device_id: RamsesID) -> str:
+    """Convert (say) '29:158183' to '7669E7', the inverse of _dev_hex_to_id."""
+    match = _DEVICE_ID_RE.match(str(device_id))
+    if match is None:
+        raise ValueError(f"Invalid Ramses device ID: {device_id}")
+    dev_type, number = (int(part) for part in match.groups())
+    return f"{(dev_type << 18) | number:06X}"
 
 
 @register_code("1298")
@@ -345,14 +358,16 @@ class Code1060(Code):
 class Code1fc9(Code):
     """RF bind"""
 
-    """
-       Work in progress
-       FIXME: Length could be a multiple of 6, not sure if that's ever the case with Orcon
-    """
     _code = "1FC9"
 
+    # Orcon remotes offer the fan-mode codes and identify their OEM in the
+    # final 10E0 entry of the offer.
+    _binding_codes = ("22F1", "22F3")
+    _oem_code = "67"
+
     def _expected_length(self, length: int) -> bool:
-        return length > 0 and length % 6 == 0
+        # A Confirm with no bindings is a single index byte.
+        return length == 1 or (length > 0 and length % 6 == 0)
 
     def _parse_packet(self) -> None:
         payload = self.packet.payload
@@ -360,9 +375,49 @@ class Code1fc9(Code):
             "_label": "RF Bind",
             "signal_strength": -self.packet.signal_strength,
             "zone_idx": payload[0],
-            "command": payload[1:3].hex().upper(),
-            "device_id": _dev_hex_to_id(payload[3:].hex().upper()),
+            "command": None,
+            "device_id": None,
         }
+        if len(payload) >= 6:
+            self.values.update(
+                {
+                    "command": payload[1:3].hex().upper(),
+                    "device_id": _dev_hex_to_id(payload[3:6].hex().upper()),
+                }
+            )
+
+    @classmethod
+    def bind_offer(cls, remote_id: RamsesID) -> RamsesPacket:
+        """Build the Supplicant's Offer for an Orcon fan.
+
+        The frame is addressed to all devices and announces the remote's
+        device ID: ``I --- <remote> --:------ <remote> 1FC9 024 ...``.
+        """
+        hex_id = _dev_id_to_hex(remote_id)
+        data = "".join(f"00{code}{hex_id}" for code in cls._binding_codes)
+        data += f"{cls._oem_code}10E0{hex_id}"
+        data += f"00{cls._code}{hex_id}"
+        return RamsesPacket(
+            src_id=remote_id,
+            dst_id=RamsesID(),
+            ann_id=remote_id,
+            type="I",
+            code=cls._code,
+            data=data,
+        )
+
+    @classmethod
+    def bind_confirm(
+        cls, remote_id: RamsesID, fan_id: RamsesID, index: str = "00"
+    ) -> RamsesPacket:
+        """Build the Supplicant's Confirm, mirroring the index of the Accept."""
+        return RamsesPacket(
+            src_id=remote_id,
+            dst_id=fan_id,
+            type="I",
+            code=cls._code,
+            data=index,
+        )
 
     @classmethod
     def get(cls, src_id: RamsesID, dst_id: RamsesID) -> RamsesPacket:

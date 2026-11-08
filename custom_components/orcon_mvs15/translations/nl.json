@@ -11,13 +11,15 @@
       },
       "mqtt_connection": {
         "title": "MQTT-verbinding",
-        "description": "Voer de 15RF-afstandsbediening en het MQTT-basistopic van de gateway in.",
+        "description": "Kies de afstandsbediening en voer het MQTT-basistopic van de gateway in.",
         "data": {
+          "remote_fake": "Gebruik een gegenereerde nepafstandsbediening",
           "remote_id": "Afstandbediening ID (bijv. 29:123456)",
           "mqtt_topic": "MQTT topic prefix (bijv. RAMSES/GATEWAY)"
         },
         "data_description": {
-          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
+          "remote_fake": "Genereer een afstandsbedienings-ID en koppel die aan de ventilator, in plaats van een 15RF-afstandsbediening te gebruiken. Het veld Afstandbediening ID wordt dan genegeerd. Koppel de ventilator na de installatie met de knop Afstandsbediening koppelen.",
+          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:123456.",
           "mqtt_topic": "Het basistopic van de Ramses ESP-gateway, bijvoorbeeld RAMSES/GATEWAY."
         }
       },
@@ -25,11 +27,13 @@
         "title": "USB-verbinding",
         "description": "Selecteer de seriële poort van de Ramses ESP. Gebruik interface 0 als de stick twee poorten heeft.",
         "data": {
+          "remote_fake": "Gebruik een gegenereerde nepafstandsbediening",
           "remote_id": "Afstandbediening ID (bijv. 29:123456)",
           "usb_port": "Seriele poort"
         },
         "data_description": {
-          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
+          "remote_fake": "Genereer een afstandsbedienings-ID en koppel die aan de ventilator, in plaats van een 15RF-afstandsbediening te gebruiken. Het veld Afstandbediening ID wordt dan genegeerd. Koppel de ventilator na de installatie met de knop Afstandsbediening koppelen.",
+          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:123456.",
           "usb_port": "De USB-seriële poort van de Ramses ESP, bijvoorbeeld /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_...-if00."
         }
       },
@@ -113,6 +117,15 @@
     },
     "reboot_during_update": {
       "message": "De gateway kan niet herstarten terwijl een firmware-update bezig is."
+    },
+    "remote_pairing_in_progress": {
+      "message": "Er is al een koppelpoging voor de afstandsbediening bezig."
+    },
+    "remote_pairing_failed": {
+      "message": "Kon de nepafstandsbediening niet koppelen: {error}"
+    },
+    "remote_pairing_timeout": {
+      "message": "De ventilator antwoordde niet op het koppelverzoek. Zet de ventilator in koppelmodus en druk opnieuw op Afstandsbediening koppelen."
     }
   },
   "issues": {
@@ -165,6 +178,9 @@
     "button": {
       "reboot": {
         "name": "Herstarten"
+      },
+      "pair_remote": {
+        "name": "Afstandsbediening koppelen"
       }
     }
   }

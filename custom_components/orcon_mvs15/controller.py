@@ -34,6 +34,7 @@ from .ramses.protocol import (
     Code10e0,
     Code1298,
     Code12a0,
+    Code1fc9,
     Code22f1,
     Code31d9,
     Code31e0,
@@ -63,6 +64,11 @@ PACKET_LOG_MAX_SIZE = 10_000_000
 FIRMWARE_UPDATE_TIMEOUT = 300.0
 # The firmware stores the tag in a 32-byte buffer and uses it in a URL path.
 FIRMWARE_VERSION_RE = re.compile(r"^[A-Za-z0-9._-]{1,31}$")
+
+# The fan only answers a 1FC9 Offer while its pairing mode is active. Repeat
+# the Offer until the Accept arrives, so a lost RF packet is not fatal.
+PAIRING_TIMEOUT = 15.0
+PAIRING_OFFER_INTERVAL = 2.0
 
 
 def packet_fan_id(packet: RamsesPacket) -> RamsesID:
@@ -111,6 +117,7 @@ class OrconMVS15Controller:
         packet_log: bool = False,
         packet_log_path: str | None = None,
         firmware_update_timeout: float = FIRMWARE_UPDATE_TIMEOUT,
+        pairing_timeout: float = PAIRING_TIMEOUT,
     ) -> None:
         self.hass = hass
         self.config = config
@@ -121,8 +128,10 @@ class OrconMVS15Controller:
         self.gateway_coordinator = gateway_coordinator
         self.entry_id = entry_id
         self.firmware_update_timeout = firmware_update_timeout
+        self.pairing_timeout = pairing_timeout
         self._firmware_update_future: asyncio.Future[str] | None = None
         self._firmware_update_target: str | None = None
+        self._pairing = False
         self.packet_log_enabled = packet_log
         self.packet_log_path = packet_log_path or hass.config.path("packet.log")
         self.handlers = DataHandlers(
@@ -482,6 +491,74 @@ class OrconMVS15Controller:
             await self.session.send_command("reset")
         except TransportError as err:
             raise self._gateway_error("reboot_failed", error=str(err)) from err
+
+    async def async_pair_remote(self) -> None:
+        """Bind the configured fake remote to the fan with a 1FC9 handshake.
+
+        The fan must be in pairing mode. This device-side gesture is the same
+        one a real 15RF remote performs: Offer broadcast, Accept from the fan,
+        then a Confirm addressed to that fan.
+        """
+        if self._pairing:
+            raise self._gateway_error("remote_pairing_in_progress")
+        remote_id = self.config.remote_id
+        if not remote_id:
+            raise self._gateway_error(
+                "remote_pairing_failed", error="no remote ID configured"
+            )
+
+        loop = asyncio.get_running_loop()
+        accepted: asyncio.Future[RamsesPacket] = loop.create_future()
+
+        def _accept(payload: Code) -> None:
+            packet = payload.packet
+            if accepted.done() or packet.type != "W" or packet.code != "1FC9":
+                return
+            if packet.dst_id != remote_id:
+                return
+            if self.fan_id and packet.src_id != self.fan_id:
+                return
+            accepted.set_result(packet)
+
+        offer = Code1fc9.bind_offer(remote_id)
+        _LOGGER.info("Pairing the fake remote %s with the fan", remote_id)
+        self._pairing = True
+        unsubscribe = self.session.subscribe("1FC9", _accept)
+        try:
+            deadline = loop.time() + self.pairing_timeout
+            while True:
+                try:
+                    await self.session.send(offer)
+                except TransportError as err:
+                    raise self._gateway_error(
+                        "remote_pairing_failed", error=str(err)
+                    ) from err
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    raise self._gateway_error("remote_pairing_timeout")
+                try:
+                    accept = await asyncio.wait_for(
+                        asyncio.shield(accepted),
+                        timeout=min(PAIRING_OFFER_INTERVAL, remaining),
+                    )
+                    break
+                except TimeoutError:
+                    # The fan had not entered pairing mode yet; offer again.
+                    continue
+            try:
+                await self.session.send(
+                    Code1fc9.bind_confirm(
+                        remote_id, accept.src_id, f"{accept.payload[0]:02X}"
+                    )
+                )
+            except TransportError as err:
+                raise self._gateway_error(
+                    "remote_pairing_failed", error=str(err)
+                ) from err
+        finally:
+            unsubscribe()
+            self._pairing = False
+        _LOGGER.info("The fake remote %s is paired with %s", remote_id, accept.src_id)
 
     async def set_preset_mode(self, mode: str) -> None:
         """Set the fan preset mode."""
