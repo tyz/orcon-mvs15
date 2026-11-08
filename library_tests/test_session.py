@@ -236,6 +236,19 @@ async def test_a_failing_retry_publish_drops_the_request() -> None:
     await session.stop()
 
 
+async def test_a_lowercase_code_reaches_its_handler() -> None:
+    """A transport may deliver a lowercase code; subscribers still see it."""
+    session, transport = await make_session()
+    seen: list[str] = []
+    session.subscribe("12A0", lambda payload: seen.append(payload.packet.code))
+
+    await transport.receive_frame(HUMIDITY_RESPONSE.replace("12A0", "12a0"), TIMESTAMP)
+    await settle()
+
+    assert seen == ["12A0"]
+    await session.stop()
+
+
 async def test_code_and_raw_subscriptions_can_be_removed() -> None:
     """Every subscription returns its own unsubscribe callable."""
     session, transport = await make_session()

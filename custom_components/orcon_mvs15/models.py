@@ -17,6 +17,7 @@ from .const import (
     CONF_FAN_ID,
     CONF_CO2_ID,
     CONF_MQTT_TOPIC,
+    DEFAULT_MQTT_TOPIC,
 )
 
 
@@ -26,7 +27,7 @@ class OrconMVS15Config:
     remote_id: RamsesID = RamsesID()
     fan_id: RamsesID = RamsesID()
     co2_id: RamsesID = RamsesID()
-    mqtt_topic: str = "RAMSES/GATEWAY"
+    mqtt_topic: str = DEFAULT_MQTT_TOPIC
 
     @classmethod
     def from_data(cls, data: MappingProxyType[str, str]) -> OrconMVS15Config:

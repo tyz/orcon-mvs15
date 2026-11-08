@@ -39,6 +39,9 @@ class LoopbackTransport:
     def connection_state(self) -> ConnectionState:
         return self._connection_state
 
+    async def init(self) -> None:
+        """A loopback already knows its gateway; there is nothing to discover."""
+
     async def start(self, handle_packet: PacketHandler) -> None:
         self._packet_handler = handle_packet
         self.started = True

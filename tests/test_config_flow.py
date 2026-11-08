@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -151,6 +153,71 @@ async def test_reconfigure_may_keep_the_current_topic(hass: HomeAssistant) -> No
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert entry.data[CONF_REMOTE_ID] == "29:111111"
+    assert entry.data[CONF_MQTT_TOPIC] == "RAMSES/GATEWAY"
+
+
+@pytest.mark.parametrize(
+    ("topic", "error"),
+    [
+        ("", "mqtt_topic_required"),
+        ("   ", "mqtt_topic_required"),
+        (" RAMSES/GATEWAY", "mqtt_topic_whitespace"),
+        ("RAMSES/GATEWAY ", "mqtt_topic_whitespace"),
+        ("RAMSES/+", "mqtt_topic_wildcard"),
+        ("RAMSES/GATEWAY/#", "mqtt_topic_wildcard"),
+        ("+", "mqtt_topic_wildcard"),
+    ],
+)
+async def test_user_flow_rejects_an_unusable_topic(
+    hass: HomeAssistant, topic: str, error: str
+) -> None:
+    """A blank topic, a wildcard or surrounding spaces never reaches setup."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_REMOTE_ID: "29:163058",
+            CONF_MQTT_TOPIC: topic,
+        },
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+    assert result["errors"] == {CONF_MQTT_TOPIC: error}
+
+
+async def test_reconfigure_rejects_a_wildcard_topic(hass: HomeAssistant) -> None:
+    """The reconfigure flow cannot store a topic that subscribes too widely."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_REMOTE_ID: "29:163058",
+            CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
+        },
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": entry.entry_id,
+        },
+    )
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_REMOTE_ID: "29:111111",
+            CONF_MQTT_TOPIC: "RAMSES/+",
+        },
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+    assert result["errors"] == {CONF_MQTT_TOPIC: "mqtt_topic_wildcard"}
     assert entry.data[CONF_MQTT_TOPIC] == "RAMSES/GATEWAY"
 
 

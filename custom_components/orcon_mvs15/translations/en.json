@@ -30,6 +30,11 @@
         }
       }
     },
+    "error": {
+      "mqtt_topic_required": "Enter the base MQTT topic of the gateway.",
+      "mqtt_topic_whitespace": "The base MQTT topic cannot start or end with a space.",
+      "mqtt_topic_wildcard": "The base MQTT topic cannot contain the wildcards + or #."
+    },
     "abort": {
       "already_configured": "This MQTT topic is already configured."
     }

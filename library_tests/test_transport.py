@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from ramses.protocol import RamsesID, RamsesPacket
-from ramses.transport import ConnectionState
+from ramses.transport import ConnectionState, Transport
 from ramses.transport.loopback import LoopbackTransport
 
 GATEWAY_ID = "18:149960"
@@ -36,6 +36,16 @@ def test_loopback_reports_the_gateway_and_connection_state() -> None:
     transport.set_connection_state(ConnectionState.DISCONNECTED)
 
     assert transport.connection_state is ConnectionState.DISCONNECTED
+
+
+async def test_loopback_initialises_without_gateway_discovery() -> None:
+    """The transport protocol carries init(), a no-op for a fixed gateway."""
+    transport = LoopbackTransport()
+
+    await transport.init()
+
+    assert isinstance(transport, Transport)
+    assert transport.gateway_id == "18:000000"
 
 
 async def test_loopback_records_sent_packets() -> None:

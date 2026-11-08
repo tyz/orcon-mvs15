@@ -30,6 +30,11 @@
         }
       }
     },
+    "error": {
+      "mqtt_topic_required": "Voer het basis-MQTT-topic van de gateway in.",
+      "mqtt_topic_whitespace": "Het basis-MQTT-topic mag niet met een spatie beginnen of eindigen.",
+      "mqtt_topic_wildcard": "Het basis-MQTT-topic mag de jokertekens + en # niet bevatten."
+    },
     "abort": {
       "already_configured": "Dit MQTT-topic is al geconfigureerd."
     }
