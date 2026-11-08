@@ -4,7 +4,7 @@ import logging
 import uuid
 import inspect
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ class RamsesPacket:
             if isinstance(timestamp, RamsesPacketDatetime)
             else RamsesPacketDatetime(timestamp)
             if timestamp is not None
-            else RamsesPacketDatetime(datetime.now())
+            else RamsesPacketDatetime(datetime.now(UTC))
         )
         self.timestamp = self._timestamp
         self.signal_strength = -1 if signal_strength is None else signal_strength
@@ -147,7 +147,10 @@ class RamsesPacket:
 
     def parse(self) -> None:
         fields = self._envelope["msg"].split()
-        assert fields[2] == "---", "Missing dashes"
+        if len(fields) < 8:
+            raise RamsesPacketException(f"Wrong number of fields: {len(fields)}")
+        if fields[2] != "---":
+            raise RamsesPacketException("Missing dashes")
         self.timestamp = RamsesPacketDatetime(self._envelope["ts"])
         self._timestamp = self.timestamp
         try:
@@ -160,14 +163,21 @@ class RamsesPacket:
         self.dst_id = RamsesID(fields[4])
         self.ann_id = RamsesID(fields[5])
         self.code = fields[6]
-        if int(fields[7]) > 0:
-            assert len(fields) == 9, "Wrong number of fields"
+        try:
+            declared_length = int(fields[7])
+        except ValueError as err:
+            raise RamsesPacketException(f"Invalid length {fields[7]!r}") from err
+        if declared_length > 0:
+            if len(fields) != 9:
+                raise RamsesPacketException("Wrong number of fields")
             self.data = fields[8]
-            assert int(fields[7]) == self.length, (
-                f"Wrong length ({fields[7]} vs {self.length})"
-            )
+            if declared_length != self.length:
+                raise RamsesPacketException(
+                    f"Wrong length ({declared_length} vs {self.length})"
+                )
         else:
-            assert len(fields) == 8, "No data expected!"
+            if len(fields) != 8:
+                raise RamsesPacketException("No data expected!")
             self.data = ""
 
 
