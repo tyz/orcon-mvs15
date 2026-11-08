@@ -102,6 +102,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrconMVS15ConfigEntry) -
             co2_coordinator,
             entry_id=entry.entry_id,
             packet_log=entry.options.get(CONF_PACKET_LOG, DEFAULT_PACKET_LOG),
+            packet_log_path=hass.config.path("packet.log"),
         )
     except ConfigEntryNotReady:
         raise

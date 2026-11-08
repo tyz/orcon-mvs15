@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from .codes import CODE_REGISTRY, Code, register_code
+from .codes import CODE_REGISTRY, Code, CodeException, register_code
 from .frame import (
     RamsesID,
     RamsesPacket,
@@ -27,6 +27,27 @@ __all__ = [
 ]
 
 _LOGGER = logging.getLogger(__name__)
+
+# The meaning of FFFFFF is unverified; ramses_rf renders it as nine spaces.
+_UNVERIFIED_DEVICE_ID = " " * 9
+
+
+def _percent(value: int) -> int | None:
+    """Decode a half-percent byte; FE and FF mean no value."""
+    if value > 200:  # FE or FF
+        return None
+    return value // 2
+
+
+def _dev_hex_to_id(device_hex: str) -> str:
+    """Convert (say) '06368E' to '01:145038'."""
+    if device_hex == "FFFFFF":
+        return _UNVERIFIED_DEVICE_ID
+    if not device_hex.strip():  # aka '--:------'
+        return "--:------"
+    _tmp = int(device_hex, 16)
+    dev_type = (_tmp & 0xFC0000) >> 18
+    return f"{dev_type:02d}:{_tmp & 0x03FFFF:06d}"
 
 
 @register_code("1298")
@@ -95,23 +116,31 @@ class Code22f1(Code):
             _LOGGER.debug(f"Unknown preset for 22F1/22F3: {payload.hex().upper()}")
 
     @classmethod
-    def set(cls, src_id: RamsesID, dst_id: RamsesID, value: str) -> RamsesPacket:
+    def _command(
+        cls, src_id: RamsesID, dst_id: RamsesID, value: str, code: str
+    ) -> RamsesPacket:
         data = cls._fan_modes[value].hex().upper()
-        p = RamsesPacket(
+        packet = RamsesPacket(
             src_id=src_id,
             dst_id=dst_id,
             type="I",
+            code=code,
             data=data,
         )
-        p.expected_response = RamsesPacketResponse(
+        packet.expected_response = RamsesPacketResponse(
             src_id=dst_id,
             dst_id=RamsesID(),
             type="I",
             code="31D9",
         )
-        p.code = "22F1" if p.length == 3 else "22F3"
-        _LOGGER.debug(f"Code22f1.set({value}) == {data} -> {p}")
-        return p
+        _LOGGER.debug(f"{code}.set({value}) == {data} -> {packet}")
+        return packet
+
+    @classmethod
+    def set(cls, src_id: RamsesID, dst_id: RamsesID, value: str) -> RamsesPacket:
+        if value in cls._timed_modes:
+            return Code22f3.set(src_id, dst_id, value)
+        return cls._command(src_id, dst_id, value, cls._code)
 
     @classmethod
     def presets(cls) -> list[str]:
@@ -126,6 +155,12 @@ class Code22f3(Code22f1):
 
     def _expected_length(self, length: int) -> bool:
         return length == 7
+
+    @classmethod
+    def set(cls, src_id: RamsesID, dst_id: RamsesID, value: str) -> RamsesPacket:
+        if value not in cls._timed_modes:
+            raise CodeException(f"{value} is not a timed fan mode")
+        return cls._command(src_id, dst_id, value, cls._code)
 
     @classmethod
     def get(cls, src_id: RamsesID, dst_id: RamsesID) -> RamsesPacket:
@@ -192,7 +227,7 @@ class Code31e0(Code):
             payload = self.packet.payload
             self.values.update(
                 {
-                    "percentage": self._percent(payload[2]),
+                    "percentage": _percent(payload[2]),
                     "unknown": f"{payload[6]:02X}",  # 64, 1E or AA
                 }
             )
@@ -251,7 +286,7 @@ class Code10e1(Code):
         }
         if self.packet.length == 4:
             self.values.update(
-                {"device_id": self._dev_hex_to_id(self.packet.payload.hex().upper())}
+                {"device_id": _dev_hex_to_id(self.packet.payload.hex().upper())}
             )
 
 
@@ -296,7 +331,7 @@ class Code1060(Code):
             payload = self.packet.payload
             self.values.update(
                 {
-                    "level": self._percent(payload[1]),
+                    "level": _percent(payload[1]),
                     "low": payload[2] == 0,
                 }
             )
@@ -326,7 +361,7 @@ class Code1fc9(Code):
             "signal_strength": -self.packet.signal_strength,
             "zone_idx": payload[0],
             "command": payload[1:3].hex().upper(),
-            "device_id": self._dev_hex_to_id(payload[3:].hex().upper()),
+            "device_id": _dev_hex_to_id(payload[3:].hex().upper()),
         }
 
     @classmethod

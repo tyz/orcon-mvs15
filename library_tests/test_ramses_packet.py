@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
-from custom_components.orcon_mvs15.ramses.protocol import (
+from ramses.protocol import (
     RamsesID,
     RamsesPacket,
     RamsesPacketData,
@@ -63,11 +63,17 @@ def test_parse_frame_without_data_field() -> None:
         f"081  I --- {FAN_ID} {GATEWAY_ID} --:------ 22F1 003",
         # Missing the --- separator.
         f"081  I {FAN_ID} {GATEWAY_ID} --:------ 22F1 003 000404",
+        # A length that is not a number.
+        f"081  I --- {FAN_ID} {GATEWAY_ID} --:------ 22F1 00X 000404",
+        # Too few fields to describe a packet.
+        f"081  I --- {FAN_ID} {GATEWAY_ID} --:------ 22F1",
+        # A zero length with a data field.
+        f"081  I --- {FAN_ID} {GATEWAY_ID} --:------ 22F1 000 00",
     ],
 )
 def test_malformed_frame_raises(msg: str) -> None:
     """Malformed frames fail loudly instead of being half parsed."""
-    with pytest.raises(AssertionError):
+    with pytest.raises(RamsesPacketException):
         RamsesPacket(envelope=envelope(msg))
 
 
@@ -104,6 +110,26 @@ def test_structured_packet_keeps_timestamp_and_signal_strength() -> None:
     assert packet.signal_strength == 44
     assert repr(packet.timestamp) == TIMESTAMP
     assert packet.ramses_esp_envelope()["msg"].endswith("31D9 003 000004")
+
+
+def test_structured_packet_defaults_to_utc() -> None:
+    """A packet without a timestamp uses the current time in UTC."""
+    before = datetime.now(UTC)
+
+    packet = RamsesPacket(
+        src_id=RamsesID(FAN_ID),
+        dst_id=RamsesID(GATEWAY_ID),
+        type="I",
+        code="31D9",
+        data="000004",
+    )
+
+    after = datetime.now(UTC)
+    stamp = packet.timestamp
+    assert isinstance(stamp, RamsesPacketDatetime)
+    assert stamp.t_datetime is not None
+    assert stamp.t_datetime.tzinfo is UTC
+    assert before <= stamp.t_datetime <= after
 
 
 def test_published_envelope_has_no_signal_strength() -> None:

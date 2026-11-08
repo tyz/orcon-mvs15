@@ -98,6 +98,7 @@ def make_controller(
     fan_id: str = FAN_ID,
     co2_id: str = "",
     packet_log: bool = False,
+    packet_log_path: str | None = None,
 ) -> Harness:
     """Build a controller with fake coordinators and captured timers."""
     timers = Timers()
@@ -134,6 +135,7 @@ def make_controller(
         co2,  # test stub, duck typed on purpose
         entry_id=entry.entry_id,
         packet_log=packet_log,
+        packet_log_path=packet_log_path,
     )
     return Harness(
         controller=controller,

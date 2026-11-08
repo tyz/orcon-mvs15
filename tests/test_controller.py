@@ -434,6 +434,19 @@ async def test_packet_log_writes_when_enabled(make: Callable[..., Harness]) -> N
     harness.controller.packet_log.assert_awaited_once_with(envelope(FAN_STATE))
 
 
+async def test_packet_log_uses_the_configured_path(
+    make: Callable[..., Harness], tmp_path: Path
+) -> None:
+    """The injected path is the default for every write."""
+    path = tmp_path / "configured.log"
+    harness = make(packet_log=True, packet_log_path=str(path))
+    item = envelope(FAN_STATE)
+
+    await harness.controller.packet_log(item)
+
+    assert path.read_text().strip() == f"{item['ts']} {item['msg']}"
+
+
 async def test_packet_log_writes_and_rotates(
     make: Callable[..., Harness], tmp_path: Path
 ) -> None:

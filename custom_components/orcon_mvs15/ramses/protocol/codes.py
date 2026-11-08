@@ -45,21 +45,6 @@ class Code:
     def _expected_length(self, length: int) -> bool:
         return True
 
-    def _percent(self, value: int) -> int | None:
-        if value > 200:  # FE or FF
-            return None
-        return value // 2
-
-    def _dev_hex_to_id(self, device_hex: str) -> str:
-        """Convert (say) '06368E' to '01:145038'"""
-        if device_hex == "FFFFFF":  # aka '63:262143'
-            return f"{'':9}"
-        if not device_hex.strip():  # aka '--:------'
-            return "--:------"
-        _tmp = int(device_hex, 16)
-        dev_type = (_tmp & 0xFC0000) >> 18
-        return f"{dev_type:02d}:{_tmp & 0x03FFFF:06d}"
-
     def _validate_packet(self) -> None:
         """Validate the RamsesPacket, raise CodeException if it fails"""
         if not self._expected_length(self.packet.length):

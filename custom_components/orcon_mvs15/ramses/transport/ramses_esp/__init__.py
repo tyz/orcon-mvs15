@@ -154,7 +154,7 @@ class RamsesESP:
     ) -> None:
         try:
             envelope: Envelope = json.loads(payload)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             _LOGGER.error(
                 f"Failed to process Ramses-ESP MQTT message {payload!r}",
                 exc_info=True,

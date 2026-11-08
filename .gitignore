@@ -7,3 +7,6 @@ coverage.json
 opencode.json
 TODO.md
 AGENTS.template.md
+*.egg-info/
+build/
+dist/

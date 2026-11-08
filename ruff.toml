@@ -1,4 +1,6 @@
-target-version = "py314"
+# The RAMSES core installs on Python >=3.12 (see pyproject.toml), so the whole
+# tree is kept 3.12-compatible even though Home Assistant itself needs 3.14.
+target-version = "py312"
 line-length = 88
 
 [lint]

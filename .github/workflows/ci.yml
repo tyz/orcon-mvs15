@@ -52,11 +52,31 @@ jobs:
       - name: Install test dependencies
         run: pip install -r requirements-test.txt
       - name: Run pytest
-        run: pytest -q tests/ --cov-report=json
+        run: pytest -q tests/
+      - name: Run the library tests under the same coverage report
+        run: >-
+          PYTHONPATH=custom_components/orcon_mvs15
+          pytest -q library_tests -o addopts=""
+          --cov=custom_components/orcon_mvs15 --cov-append --cov-report=json
       - name: Check per-module coverage
         run: python scripts/check_coverage.py
       - name: Compile check
         run: python -m compileall -q custom_components/orcon_mvs15
+
+  library:
+    name: Library (Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install the library and its test dependencies
+        run: pip install -e ".[test]"
+      - name: Run the library tests
+        run: pytest -q library_tests -o addopts=""
 
   hassfest:
     name: Hassfest

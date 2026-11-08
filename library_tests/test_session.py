@@ -10,17 +10,17 @@ from unittest.mock import Mock
 
 import pytest
 
-from custom_components.orcon_mvs15.ramses.protocol import (
+from ramses.protocol import (
     Code12a0,
     RamsesID,
     RamsesPacket,
 )
-from custom_components.orcon_mvs15.ramses.session import PendingRequest, RamsesSession
-from custom_components.orcon_mvs15.ramses.transport import (
+from ramses.session import PendingRequest, RamsesSession
+from ramses.transport import (
     ConnectionState,
     TransportError,
 )
-from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
+from ramses.transport.loopback import LoopbackTransport
 
 GATEWAY_ID = "18:149960"
 FAN_ID = "29:224547"
