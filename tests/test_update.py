@@ -86,7 +86,7 @@ async def test_update_is_unknown_until_the_gateway_reports(
 
 
 async def test_installing_is_offered_over_mqtt_only(hass: HomeAssistant) -> None:
-    """USB cannot reconnect after the reboot, so it stays read-only."""
+    """USB firmware installation is not offered yet, so it stays read-only."""
     mqtt = make_entity(hass, transport=TRANSPORT_MQTT)
     usb = make_entity(hass, transport=TRANSPORT_USB)
 

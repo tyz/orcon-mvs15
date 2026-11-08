@@ -33,6 +33,7 @@ from custom_components.orcon_mvs15.const import (
     CONF_CO2_ID,
     CONF_FAN_ID,
     DOMAIN,
+    TRANSPORT_MQTT,
     TRANSPORT_USB,
 )
 from custom_components.orcon_mvs15.ramses.protocol import RamsesID
@@ -365,7 +366,7 @@ async def test_a_failed_discovery_init_still_starts_the_timers(
 
     assert harness.controller._humidity_poll_unsub is not None
     assert harness.controller._fan_watchdog_unsub is not None
-    assert "Could not fetch the discovered device state" in caplog.text
+    assert "Could not fetch the device state" in caplog.text
 
 
 async def test_set_preset_mode_sends_the_command(
@@ -468,6 +469,75 @@ async def test_a_connection_loss_makes_the_entities_unavailable(
     assert harness.fan.available is True
     assert harness.co2.available is True
     assert harness.gateway.available is True
+
+
+async def test_a_reconnect_refreshes_the_known_devices(
+    make: Callable[..., Harness],
+) -> None:
+    """The next broadcast is minutes away, so fetch the state on reconnect."""
+    harness = make(co2_id=CO2_ID)
+    await harness.controller.start()
+    sent_before = len(harness.transport.sent)
+
+    await set_connected(harness, False)
+    assert len(harness.transport.sent) == sent_before
+
+    await set_connected(harness, True)
+    await settle()
+
+    # init_fan requests 10E0, 12A0 and 31D9; init_co2 requests three more.
+    assert len(harness.transport.sent) == sent_before + 6
+
+
+@pytest.mark.parametrize("transport_name", [TRANSPORT_MQTT, TRANSPORT_USB])
+async def test_the_reboot_button_sends_the_reset_command(
+    make: Callable[..., Harness], transport_name: str
+) -> None:
+    """The firmware's own `reset` works over MQTT and USB."""
+    harness = make(transport=transport_name)
+    await harness.controller.start()
+
+    await harness.controller.async_reboot_gateway()
+
+    assert harness.transport.commands == ["reset"]
+
+
+async def test_a_reboot_during_a_firmware_update_is_refused(
+    make: Callable[..., Harness],
+) -> None:
+    """Rebooting would abort the download the gateway is running."""
+    harness = make(firmware_update_timeout=1)
+    await harness.controller.start()
+    harness.gateway.data = {"latest_firmware_version": "0.6.0"}
+    task = asyncio.create_task(harness.controller.async_install_firmware())
+    await settle()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await harness.controller.async_reboot_gateway()
+
+    assert err.value.translation_key == "reboot_during_update"
+    assert harness.transport.commands == ["ota start"]
+
+    harness.transport.receive_version("0.6.0")
+    await settle()
+    await task
+
+
+async def test_a_reboot_reports_a_command_that_cannot_be_sent(
+    make: Callable[..., Harness],
+) -> None:
+    """A gateway that cannot take the command fails loudly."""
+    harness = make()
+    await harness.controller.start()
+    harness.session.send_command = AsyncMock(  # type: ignore[method-assign]
+        side_effect=TransportError("broker offline")
+    )
+
+    with pytest.raises(HomeAssistantError) as err:
+        await harness.controller.async_reboot_gateway()
+
+    assert err.value.translation_key == "reboot_failed"
+    assert err.value.translation_placeholders == {"error": "broker offline"}
 
 
 async def test_the_version_topic_updates_the_gateway_device(

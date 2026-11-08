@@ -28,6 +28,7 @@ The integration uses a base topic, `RAMSES/GATEWAY` by default.
 | Topic | Direction | Purpose |
 |---|---|---|
 | `<base>/+` | subscribe | Gateway discovery. The last topic segment is treated as the gateway Ramses ID. |
+| `<base>/<gateway>` | subscribe | Retained gateway status: `online` while connected, `offline` as the firmware's last will. |
 | `<base>/<gateway>/rx` | subscribe | Frames received by the gateway. |
 | `<base>/<gateway>/tx` | publish | Frames the gateway should transmit. |
 | `<base>/<gateway>/info/version` | subscribe | Firmware version the gateway is running. |
@@ -52,11 +53,12 @@ when publishing.
 ### Firmware commands
 
 The firmware also accepts plain console commands on `<base>/<gateway>/cmd/cmd`.
-`ota start` installs the latest release; `ota version <tag>` selects a release
-and must be followed by `ota start`. The stick downloads the image over WiFi,
-verifies it and reboots. `ota check` refreshes `info/latest`. The JSON on
-`cmd/result` only says whether the command line was accepted, not whether the
-download succeeded; a failed download leaves the old firmware running.
+`reset` restarts the stick (`esp_restart()`); `ota start` installs the latest
+release; `ota version <tag>` selects a release and must be followed by
+`ota start`. The stick downloads the image over WiFi, verifies it and reboots.
+`ota check` refreshes `info/latest`. The JSON on `cmd/result` only says whether
+the command line was accepted, not whether the download succeeded; a failed
+download leaves the old firmware running.
 
 ## USB serial transport
 
@@ -77,8 +79,12 @@ serial port at 115200 baud.
   `# Latest firmware version: <version>`, the serial counterpart of
   `info/latest`.
 - **Console commands** — firmware commands are written as plain lines
-  terminated by `\r`, for example `ota start`, the same text MQTT publishes on
-  `cmd/cmd`.
+  terminated by `\r`, for example `reset` or `ota start`, the same text MQTT
+  publishes on `cmd/cmd`.
+- **Reconnect** — a reboot or firmware install closes the port. The transport
+  reopens it with a backoff that starts at one second and doubles up to 30
+  seconds, then clears the partial line and reports the gateway connected
+  again. Commands sent while the port is closed fail with a transport error.
 - **Gateway ID** — the firmware derives its ID from the last three bytes of the
   factory MAC: `18:` followed by those bytes masked to 18 bits. That MAC is the
   USB serial number, so the integration derives the gateway ID before opening
@@ -359,10 +365,17 @@ reached the stick and start the timed-preset countdown.
 
 1. Subscribe to `<base>/+`.
 2. The first message’s final topic segment becomes the gateway ID.
-3. Subscribe to `<base>/<gateway>/rx` and `<base>/<gateway>/info/version`.
+3. Subscribe to `<base>/<gateway>`, `<base>/<gateway>/rx` and
+   `<base>/<gateway>/info/version`.
 
 Step 2 times out after 10 seconds by default; the resulting `MQTTException`
 makes Home Assistant retry entry setup instead of leaving it pending.
+
+The gateway publishes a retained `online` on connect and registers a retained
+`offline` last will on `<base>/<gateway>`. The transport treats the gateway as
+reachable only while both the broker and that topic say so; each transition is
+reported to the session, which makes the entities unavailable and re-requests
+the known device state after the gateway returns.
 
 ### Fan
 
@@ -413,5 +426,5 @@ This is a manual debugging path, not part of the integration’s normal transpor
 * Packet logging is off by default and writes to `/config/packet.log` when
   enabled in the options flow.
 * Firmware installation is offered over MQTT only. The USB transport can send
-  the commands, but it does not reopen the port after the gateway reboots.
+  the commands, but installation over USB has not been validated yet.
 * The `FFFFFF` device ID conversion is unverified.

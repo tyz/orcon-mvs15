@@ -45,8 +45,8 @@ class GatewayFirmwareUpdate(
 ):
     """The firmware running on the Ramses ESP gateway.
 
-    The stick downloads and flashes the image itself; the USB transport cannot
-    recover from the reboot, so installing is only offered over MQTT.
+    The stick downloads and flashes the image itself; installation is not
+    offered over USB yet.
     """
 
     _attr_has_entity_name = True

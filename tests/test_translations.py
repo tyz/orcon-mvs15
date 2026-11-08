@@ -52,6 +52,13 @@ def test_icons_cover_every_preset() -> None:
     assert set(states) == set(Code22f1.presets())
 
 
+def test_the_reboot_button_has_an_icon() -> None:
+    """The configuration button declares its icon instead of the device class."""
+    icons = load_json("icons.json")
+
+    assert icons["entity"]["button"]["reboot"]["default"] == "mdi:restart"
+
+
 @pytest.mark.parametrize("name", TRANSLATION_FILES)
 def test_every_preset_has_a_display_name(name: str) -> None:
     """Preset identifiers are translated, not shown raw in the frontend."""
@@ -80,6 +87,8 @@ EXCEPTION_PLACEHOLDERS: dict[str, dict[str, str] | None] = {
     "firmware_version_invalid": {"version": "bad tag"},
     "firmware_update_failed": {"error": "broker offline"},
     "firmware_update_timeout": {"version": "0.6.0"},
+    "reboot_failed": {"error": "broker offline"},
+    "reboot_during_update": None,
 }
 
 

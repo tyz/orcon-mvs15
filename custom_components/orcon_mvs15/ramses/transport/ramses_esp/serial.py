@@ -11,7 +11,7 @@ import asyncio
 import logging
 import re
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 from ...protocol.frame import RamsesID, RamsesPacket
@@ -32,6 +32,11 @@ MAX_LINE_LENGTH = 1024
 FRAME_QUEUE_SIZE = 100
 GATEWAY_CLASS = 18
 GATEWAY_ID_MASK = 0x3FFFF
+
+# A reboot or a firmware install closes the port for a few seconds; back off
+# so a stick that stays away does not spin on reopen attempts.
+RECONNECT_INITIAL_DELAY = 1.0
+RECONNECT_MAX_DELAY = 30.0
 
 _FRAME_RE = re.compile(r"^(?:\d{3}|---) +(?:RQ|RP|I|W) +--- ")
 _BANNER_RE = re.compile(r"^#\s*(\S+)\s+(\S+)\s*$")
@@ -64,6 +69,10 @@ class RamsesESPSerial:
         self,
         backend: SerialBackend,
         gateway_id: RamsesID = RamsesID(),
+        *,
+        reconnect_delay: float = RECONNECT_INITIAL_DELAY,
+        reconnect_max_delay: float = RECONNECT_MAX_DELAY,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self._backend = backend
         self._gateway_id = gateway_id
@@ -73,9 +82,13 @@ class RamsesESPSerial:
         self._connection_state = ConnectionState.DISCONNECTED
         self._frames: asyncio.Queue[Envelope] = asyncio.Queue(FRAME_QUEUE_SIZE)
         self._consumer: asyncio.Task[None] | None = None
+        self._reconnect_task: asyncio.Task[None] | None = None
         self._buffer = bytearray()
         self._started = False
         self._closing = False
+        self._reconnect_delay = reconnect_delay
+        self._reconnect_max_delay = reconnect_max_delay
+        self._sleep = sleep
 
     @property
     def gateway_id(self) -> RamsesID:
@@ -121,6 +134,7 @@ class RamsesESPSerial:
         """Close the port and stop delivering frames."""
         self._closing = True
         try:
+            await self._cancel_reconnect()
             if self._started:
                 await self._backend.stop()
         except Exception as err:
@@ -134,7 +148,7 @@ class RamsesESPSerial:
 
     async def send(self, packet: RamsesPacket) -> None:
         """Write one packet as the console command the firmware expects."""
-        if not self._started:
+        if self._connection_state is not ConnectionState.CONNECTED:
             raise TransportError("The USB gateway is not connected")
         msg = packet.ramses_esp_envelope()["msg"]
         try:
@@ -147,7 +161,7 @@ class RamsesESPSerial:
 
     async def send_command(self, command: str) -> None:
         """Write one firmware console command."""
-        if not self._started:
+        if self._connection_state is not ConnectionState.CONNECTED:
             raise TransportError("The USB gateway is not connected")
         try:
             _LOGGER.debug("Send serial command: %s", command)
@@ -253,10 +267,46 @@ class RamsesESPSerial:
             handler(version)
 
     def _handle_closed(self, exc: Exception | None) -> None:
-        if self._closing:
+        if self._closing or not self._started:
             return
-        _LOGGER.warning("The USB gateway disconnected: %s", exc or "unknown reason")
+        _LOGGER.warning(
+            "The USB gateway disconnected: %s; reconnecting",
+            exc or "unknown reason",
+        )
+        self._buffer.clear()
         self._set_connection(ConnectionState.DISCONNECTED)
+        self._start_reconnect()
+
+    def _start_reconnect(self) -> None:
+        if self._reconnect_task is not None and not self._reconnect_task.done():
+            return
+        self._reconnect_task = asyncio.create_task(self._reconnect())
+
+    async def _cancel_reconnect(self) -> None:
+        task = self._reconnect_task
+        if task is None:
+            return
+        self._reconnect_task = None
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    async def _reconnect(self) -> None:
+        """Reopen the port, backing off while it stays unavailable."""
+        delay = self._reconnect_delay
+        while self._started and not self._closing:
+            await self._sleep(delay)
+            try:
+                await self._backend.start(self._handle_data, self._handle_closed)
+            except Exception as err:
+                _LOGGER.warning("Could not reopen the USB gateway: %s", err)
+                delay = min(delay * 2, self._reconnect_max_delay)
+                continue
+            _LOGGER.info("The USB gateway reconnected")
+            self._set_connection(ConnectionState.CONNECTED)
+            return
 
     def _set_connection(self, state: ConnectionState) -> None:
         if state == self._connection_state:

@@ -49,12 +49,17 @@ class RamsesESP:
         self._unsubs: list[Callable[[], None]] = []
         self._discovery_event = asyncio.Event()
         self._connection_state = ConnectionState.DISCONNECTED
+        self._broker_connected = False
+        # The gateway publishes a retained "online" on connect and its last
+        # will is a retained "offline"; until either arrives, assume it is up.
+        self._gateway_online = True
         self.online_topic = f"{base_topic}/+"
         self.sub_topic = ""
         self.pub_topic = ""
         self.version_topic = ""
         self.latest_topic = ""
         self.cmd_topic = ""
+        self.lwt_topic = ""
 
     @property
     def gateway_id(self) -> RamsesID:
@@ -88,6 +93,7 @@ class RamsesESP:
         self.version_topic = f"{self._base_topic}/{self._gateway_id}/info/version"
         self.latest_topic = f"{self._base_topic}/{self._gateway_id}/info/latest"
         self.cmd_topic = f"{self._base_topic}/{self._gateway_id}/cmd/cmd"
+        self.lwt_topic = f"{self._base_topic}/{self._gateway_id}"
 
     async def start(self, handle_packet: PacketHandler) -> None:
         """Subscribe to the configured topics and start delivering frames."""
@@ -107,13 +113,17 @@ class RamsesESP:
             )
         )
         self._unsubs.append(
+            await self._backend.subscribe(self.lwt_topic, self._handle_gateway_status)
+        )
+        self._unsubs.append(
             self._backend.subscribe_connection(self._handle_connection_status)
         )
         # The current connection state is read, not announced: nothing changed
         # at startup and the session should not treat it as a transition.
+        self._broker_connected = self._backend.is_connected()
         self._connection_state = (
             ConnectionState.CONNECTED
-            if self._backend.is_connected()
+            if self._broker_connected
             else ConnectionState.DISCONNECTED
         )
 
@@ -224,13 +234,42 @@ class RamsesESP:
         self._discovery_event.set()
 
     def _handle_connection_status(self, connected: bool) -> None:
-        state = ConnectionState.CONNECTED if connected else ConnectionState.DISCONNECTED
-        if state == self._connection_state:
+        if connected == self._broker_connected:
             return
-        self._connection_state = state
+        self._broker_connected = connected
         if connected:
             _LOGGER.info("MQTT connection restored")
         else:
             _LOGGER.info("MQTT connection lost; the fan is unavailable")
+        self._update_connection()
+
+    async def _handle_gateway_status(
+        self, topic: str, payload: str | bytes | bytearray
+    ) -> None:
+        text = payload.decode() if isinstance(payload, (bytes, bytearray)) else payload
+        status = text.strip().lower()
+        if status not in {"online", "offline"}:
+            _LOGGER.debug("Ignoring gateway status %r on %s", text, topic)
+            return
+        online = status == "online"
+        if online == self._gateway_online:
+            return
+        self._gateway_online = online
+        if online:
+            _LOGGER.info("The gateway is online")
+        else:
+            _LOGGER.info("The gateway is offline; the fan is unavailable")
+        self._update_connection()
+
+    def _update_connection(self) -> None:
+        """Combine the broker and gateway state into one availability signal."""
+        state = (
+            ConnectionState.CONNECTED
+            if self._broker_connected and self._gateway_online
+            else ConnectionState.DISCONNECTED
+        )
+        if state == self._connection_state:
+            return
+        self._connection_state = state
         for handler in tuple(self._connection_handlers):
             handler(state)

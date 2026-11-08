@@ -25,6 +25,7 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
 - Auto-detects the fan's humidity sensor and creates an HA sensor
 - Creates a binary sensor that triggers when the fan reports a fault
 - Reports the Ramses ESP firmware version and offers firmware updates over MQTT
+- Offers a reboot button for the Ramses ESP gateway and tracks its online state
 - The fan reported mode is used to update the fan's current preset in HA, so it
   will immediately notice when the mode was changed by a 15RF wireless remote, for example
 
@@ -198,8 +199,13 @@ integration reacts to them. The fan state (`31D9`) and vent demand (`31E0`) are
 broadcast every 5 minutes, and device info (`10E0`) every 24 hours. The fan's
 humidity sensor (`12A0`) is not broadcast, so it is polled every 5 minutes.
 Entities are unavailable until the packet they read has arrived. If the MQTT
-connection is lost or the USB cable is unplugged, all entities become unavailable
-and the loss is logged once; they recover when the connection returns. A
+connection is lost or the USB cable is unplugged, all entities become
+unavailable and the loss is logged once; they recover when the connection
+returns. Over MQTT the gateway also reports its own `online`/`offline` state, so
+a stick that drops off WiFi makes the entities unavailable even while the broker
+is reachable. After a reconnect the integration re-requests the known device
+state instead of waiting for the next five-minute broadcast. The USB transport
+reopens the port automatically, with a backoff that grows to 30 seconds. A
 configured fan that sends no packet for 30 minutes raises a repair issue; every
 packet from the fan restarts the window.
 
@@ -217,9 +223,20 @@ WiFi and internet access. The integration does not transfer the firmware and
 cannot show a download percentage or take a backup. The newest version is
 whatever the gateway last checked; it checks at boot and every 24 hours.
 
-Firmware installation is offered over MQTT only. The USB transport does not
-reopen the port after an unexpected close, so a USB update would leave the
-entities unavailable until the integration is reloaded.
+Firmware installation is offered over MQTT only.
+
+## Gateway reboot
+
+The Ramses ESP device has a **Reboot** button. It sends the firmware's own
+`reset` command, which restarts the stick; the gateway then reconnects to WiFi
+and the MQTT broker. The button sits in the configuration category on the
+gateway device, so it stays off the default dashboard. A reboot is refused while
+a firmware update is in progress, because restarting would abort the download.
+
+Both transports recover from the restart: MQTT marks the entities unavailable
+until the gateway publishes `online` again, and USB reopens the port. The
+integration then re-requests the known fan and CO₂ state, so they return as soon
+as the gateway is back instead of after the next broadcast.
 
 ## Known limitations
 
@@ -230,8 +247,6 @@ entities unavailable until the integration is reloaded.
 - A `042F` power-up message is accepted from any source while the fan ID is
   unknown. A neighbouring Orcon unit that powers up while this fan is still
   being discovered could be adopted as this fan.
-- A USB gateway that is unplugged or reset is not reopened automatically; reload
-  the integration or restart Home Assistant once the stick is back.
 - Firmware installation is MQTT-only, reports no download progress, and the
   offered version can be up to 24 hours old.
 - The optional `/config/packet.log` (rolled over at 10 MB) is a debugging aid.
