@@ -45,10 +45,10 @@ class Code1298(Code):
             "level": None,
         }
         if self.packet.length == 3:
-            if self.packet.data:
-                self.values.update({"level": int(self.packet.data, 16)})
-            else:
-                self.values.update({"level": None})
+            payload = self.packet.payload
+            self.values.update(
+                {"level": int.from_bytes(payload, "big") if payload else None}
+            )
 
 
 @register_code("22F1")
@@ -59,14 +59,14 @@ class Code22f1(Code):
 
     # Preset identifiers are translation keys: lowercase slugs without spaces.
     _fan_modes = {
-        "auto": "000404",
-        "low": "000104",
-        "medium": "000204",
-        "high": "000304",
-        "high_15m": "00020F03040000",
-        "high_30m": "00021E03040000",
-        "high_60m": "00023C03040000",
-        "away": "000004",
+        "auto": b"\x00\x04\x04",
+        "low": b"\x00\x01\x04",
+        "medium": b"\x00\x02\x04",
+        "high": b"\x00\x03\x04",
+        "high_15m": b"\x00\x02\x0f\x03\x04\x00\x00",
+        "high_30m": b"\x00\x02\x1e\x03\x04\x00\x00",
+        "high_60m": b"\x00\x02\x3c\x03\x04\x00\x00",
+        "away": b"\x00\x00\x04",
     }
 
     _timed_modes = {"high_15m": 15, "high_30m": 30, "high_60m": 60}
@@ -82,8 +82,9 @@ class Code22f1(Code):
             "timer_minutes": None,
         }
         if self.packet.length != 1:
+            payload = self.packet.payload
             for k, v in self._fan_modes.items():
-                if v == self.packet.data:
+                if v == payload:
                     self.values.update(
                         {
                             "fan_mode": k,
@@ -91,15 +92,16 @@ class Code22f1(Code):
                         }
                     )
                     return
-            _LOGGER.debug(f"Unknown preset for 22F1/22F3: {self.packet.data}")
+            _LOGGER.debug(f"Unknown preset for 22F1/22F3: {payload.hex().upper()}")
 
     @classmethod
     def set(cls, src_id: RamsesID, dst_id: RamsesID, value: str) -> RamsesPacket:
+        data = cls._fan_modes[value].hex().upper()
         p = RamsesPacket(
             src_id=src_id,
             dst_id=dst_id,
             type="I",
-            data=cls._fan_modes[value],
+            data=data,
         )
         p.expected_response = RamsesPacketResponse(
             src_id=dst_id,
@@ -108,7 +110,7 @@ class Code22f1(Code):
             code="31D9",
         )
         p.code = "22F1" if p.length == 3 else "22F3"
-        _LOGGER.debug(f"Code22f1.set({value}) == {cls._fan_modes[value]} -> {p}")
+        _LOGGER.debug(f"Code22f1.set({value}) == {data} -> {p}")
         return p
 
     @classmethod
@@ -137,11 +139,11 @@ class Code31d9(Code):
     _code = "31D9"
 
     _presets = {
-        "00": "away",
-        "01": "low",
-        "02": "medium",
-        "03": "high",
-        "04": "auto",
+        0x00: "away",
+        0x01: "low",
+        0x02: "medium",
+        0x03: "high",
+        0x04: "auto",
     }
 
     def _expected_length(self, length: int) -> bool:
@@ -154,13 +156,13 @@ class Code31d9(Code):
             "fan_mode": None,
             "has_fault": None,
         }
-        assert self.packet.data is not None
         if self.packet.length == 3:
-            state = self.packet.data[4:6]
-            bitmap = int(self.packet.data[2:4], 16)
+            payload = self.packet.payload
+            state = payload[2]
+            bitmap = payload[1]
             self.values.update(
                 {
-                    "fan_mode": self._presets.get(state, state),
+                    "fan_mode": self._presets.get(state, f"{state:02X}"),
                     "has_fault": bool(bitmap & 0x80),
                 }
             )
@@ -186,12 +188,12 @@ class Code31e0(Code):
             "percentage": None,
             "unknown": None,
         }
-        assert self.packet.data is not None
         if self.packet.length == 8:
+            payload = self.packet.payload
             self.values.update(
                 {
-                    "percentage": self._percent(self.packet.data[4:6]),
-                    "unknown": self.packet.data[12:14],  # 64, 1E or AA
+                    "percentage": self._percent(payload[2]),
+                    "unknown": f"{payload[6]:02X}",  # 64, 1E or AA
                 }
             )
 
@@ -212,28 +214,22 @@ class Code10e0(Code):
         }
         if self.packet.length == 1:
             return
-        assert self.packet.data is not None
-        description, _, _ = self.packet.data[36:].partition("00")
+        payload = self.packet.payload
+        description = payload[18:].split(b"\x00", 1)[0]
         self.values.update(
             {
-                "sz_oem_code": self.packet.data[
-                    14:16
-                ],  # 00/FF is CH/DHW, 01/6x is HVAC
-                "manufacturer_group": self.packet.data[2:6],  # 0001-HVAC, 0002-CH/DHW
-                "manufacturer_sub_id": self.packet.data[6:8],
-                "product_id": self.packet.data[
-                    8:10
-                ],  # if CH/DHW: matches device_type (sometimes)
-                "software_ver_id": self.packet.data[10:12],
-                "list_ver_id": self.packet.data[
-                    12:14
-                ],  # if FF/01 is CH/DHW, then 01/FF
-                "unknown": self.packet.data[14:16],
-                "additional_ver_a": self.packet.data[16:18],
-                "additional_ver_b": self.packet.data[18:20],
-                "date_2": RamsesPacketDatetime(self.packet.data[20:28]),
-                "date_1": RamsesPacketDatetime(self.packet.data[28:36]),
-                "description": bytearray.fromhex(description).decode(),
+                "sz_oem_code": payload[7:8].hex().upper(),  # 00/FF CH/DHW, 01/6x HVAC
+                "manufacturer_group": payload[1:3].hex().upper(),  # 0001 HVAC
+                "manufacturer_sub_id": payload[3:4].hex().upper(),
+                "product_id": payload[4:5].hex().upper(),  # CH/DHW: device type
+                "software_ver_id": payload[5:6].hex().upper(),
+                "list_ver_id": payload[6:7].hex().upper(),  # FF/01: CH/DHW
+                "unknown": payload[7:8].hex().upper(),
+                "additional_ver_a": payload[8:9].hex().upper(),
+                "additional_ver_b": payload[9:10].hex().upper(),
+                "date_2": RamsesPacketDatetime(payload[10:14].hex().upper()),
+                "date_1": RamsesPacketDatetime(payload[14:18].hex().upper()),
+                "description": description.decode(),
             }
         )
 
@@ -253,9 +249,10 @@ class Code10e1(Code):
             "signal_strength": -self.packet.signal_strength,
             "device_id": None,
         }
-        assert self.packet.data is not None
         if self.packet.length == 4:
-            self.values.update({"device_id": self._dev_hex_to_id(self.packet.data)})
+            self.values.update(
+                {"device_id": self._dev_hex_to_id(self.packet.payload.hex().upper())}
+            )
 
 
 @register_code("12A0")
@@ -273,9 +270,8 @@ class Code12a0(Code):
             "signal_strength": -self.packet.signal_strength,
             "level": None,
         }
-        assert self.packet.data is not None
         if self.packet.length == 2:
-            self.values.update({"level": int(self.packet.data, 16)})
+            self.values.update({"level": int.from_bytes(self.packet.payload, "big")})
 
 
 @register_code("1060")
@@ -290,7 +286,6 @@ class Code1060(Code):
         return length in [1, 6]
 
     def _parse_packet(self) -> None:
-        assert self.packet.data is not None
         self.values = {
             "_label": "Battery status",
             "signal_strength": -self.packet.signal_strength,
@@ -298,10 +293,11 @@ class Code1060(Code):
             "low": None,
         }
         if self.packet.length == 6:
+            payload = self.packet.payload
             self.values.update(
                 {
-                    "level": self._percent(self.packet.data[2:4]),
-                    "low": self.packet.data[4:6] == "00",
+                    "level": self._percent(payload[1]),
+                    "low": payload[2] == 0,
                 }
             )
 
@@ -321,16 +317,16 @@ class Code1fc9(Code):
     _code = "1FC9"
 
     def _expected_length(self, length: int) -> bool:
-        return length % 6 == 0
+        return length > 0 and length % 6 == 0
 
     def _parse_packet(self) -> None:
-        assert self.packet.data is not None
+        payload = self.packet.payload
         self.values = {
             "_label": "RF Bind",
             "signal_strength": -self.packet.signal_strength,
-            "zone_idx": int(self.packet.data[:2], 16),
-            "command": self.packet.data[2:6],
-            "device_id": self._dev_hex_to_id(self.packet.data[6:]),
+            "zone_idx": payload[0],
+            "command": payload[1:3].hex().upper(),
+            "device_id": self._dev_hex_to_id(payload[3:].hex().upper()),
         }
 
     @classmethod
@@ -348,12 +344,12 @@ class Code042f(Code):
         return length == 6
 
     def _parse_packet(self) -> None:
-        assert self.packet.data is not None
+        payload = self.packet.payload
         self.values = {
             "_label": "Unknown (042F)",
             "signal_strength": -self.packet.signal_strength,
-            "power_cycles": f"0x{self.packet.data[2:6]}",
-            "power_cycles_2": f"0x{self.packet.data[6:10]}",
+            "power_cycles": f"0x{payload[1:3].hex().upper()}",
+            "power_cycles_2": f"0x{payload[3:5].hex().upper()}",
         }
 
     @classmethod

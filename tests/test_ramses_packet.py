@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from datetime import datetime
 
 import pytest
@@ -49,6 +51,7 @@ def test_parse_frame_without_data_field() -> None:
 
     assert packet.length == 0
     assert len(packet.data) == 0
+    assert packet.payload == b""
 
 
 @pytest.mark.parametrize(
@@ -130,6 +133,15 @@ def test_packet_data_length_is_bytes() -> None:
     assert len(RamsesPacketData("")) == 0
 
 
+def test_packet_payload_is_bytes() -> None:
+    """The payload is decoded from the hex data field."""
+    packet = RamsesPacket(
+        envelope=envelope("081  I --- 29:123456 29:654321 --:------ 22F1 003 000404")
+    )
+
+    assert packet.payload == b"\x00\x04\x04"
+
+
 def test_packet_data_rejects_odd_hex() -> None:
     """Half a byte is not a valid payload."""
     with pytest.raises(RamsesPacketException):
@@ -175,6 +187,26 @@ def test_datetime_ffffffff_is_no_date() -> None:
 
     assert stamp.t_datetime is None
     assert repr(stamp) == "FFFFFFFF"
+
+
+def test_datetime_invalid_hex_date_is_no_date() -> None:
+    """A hex date out of range is treated as no date, like FFFFFFFF."""
+    stamp = RamsesPacketDatetime("00000000")
+
+    assert stamp.t_datetime is None
+    assert repr(stamp) == "00000000"
+
+
+def test_datetime_lowercase_ffffffff_is_no_date(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The no-date sentinel is case insensitive and is not reported as invalid."""
+    caplog.set_level(logging.DEBUG)
+
+    stamp = RamsesPacketDatetime("ffffffff")
+
+    assert stamp.t_datetime is None
+    assert "Invalid hex date" not in caplog.text
 
 
 def test_datetime_rejects_invalid_input() -> None:

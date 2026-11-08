@@ -45,10 +45,10 @@ class Code:
     def _expected_length(self, length: int) -> bool:
         return True
 
-    def _percent(self, value: str) -> int | None:
-        if int(value, 16) > 200:  # FE or FF
+    def _percent(self, value: int) -> int | None:
+        if value > 200:  # FE or FF
             return None
-        return int(value, 16) // 2
+        return value // 2
 
     def _dev_hex_to_id(self, device_hex: str) -> str:
         """Convert (say) '06368E' to '01:145038'"""

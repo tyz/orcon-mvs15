@@ -49,13 +49,17 @@ class RamsesPacketDatetime:
         return self.t_str
 
     def _hex_to_date(self, value: str) -> datetime | None:
-        if value == "FFFFFFFF":
+        if value.upper() == "FFFFFFFF":
             return None
-        return datetime(
-            year=int(value[4:8], 16),
-            month=int(value[2:4], 16),
-            day=int(value[:2], 16) & 0b11111,  # 1st 3 bits: DayOfWeek
-        )
+        try:
+            return datetime(
+                year=int(value[4:8], 16),
+                month=int(value[2:4], 16),
+                day=int(value[:2], 16) & 0b11111,  # 1st 3 bits: DayOfWeek
+            )
+        except ValueError:
+            _LOGGER.debug("Invalid hex date %s", value)
+            return None
 
 
 class RamsesID(str):
@@ -130,6 +134,11 @@ class RamsesPacket:
             return
         self._data = RamsesPacketData(value)
         self.length = len(self._data)
+
+    @property
+    def payload(self) -> bytes:
+        """Return the payload as bytes."""
+        return bytes.fromhex(self._data)
 
     def ramses_esp_envelope(self) -> dict[str, str]:
         return {
