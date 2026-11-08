@@ -602,13 +602,18 @@ class OrconMVS15Controller:
         _LOGGER.info("The fake remote %s is paired with %s", remote_id, accept.src_id)
         return True
 
-    @callback
-    def async_arm_pairing(self) -> None:
+    async def async_arm_pairing(self) -> None:
         """Pair the fake remote again on the next fan power-up."""
         self._remote_paired = False
-        if self._pairing_task is not None:
-            self._pairing_task.cancel()
-            self._pairing_task = None
+        task, self._pairing_task = self._pairing_task, None
+        if task is not None:
+            # Wait for the cancelled attempt to clear `_pairing`; otherwise a
+            # power-up in between is refused and the window is lost.
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         _LOGGER.info("The fake remote will be paired again when the fan powers up")
 
     async def set_preset_mode(self, mode: str) -> None:

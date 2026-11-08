@@ -136,7 +136,7 @@ async def test_pressing_the_pairing_button_arms_the_next_powerup(
     hass: HomeAssistant,
 ) -> None:
     """The entity has no protocol knowledge of its own."""
-    controller = Mock()
+    controller = AsyncMock()
     entity = make_pair_entity(hass, controller)
 
     await entity.async_press()

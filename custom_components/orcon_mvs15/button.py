@@ -102,4 +102,4 @@ class PairAgainButton(CoordinatorEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Pair again the next time the fan powers up."""
-        self.controller.async_arm_pairing()
+        await self.controller.async_arm_pairing()

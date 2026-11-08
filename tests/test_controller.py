@@ -1177,7 +1177,7 @@ async def test_arming_pairs_again_on_the_next_powerup(
     await settle()
     assert harness.controller._remote_paired is True
 
-    harness.controller.async_arm_pairing()
+    await harness.controller.async_arm_pairing()
     assert harness.controller._remote_paired is False
 
     await feed(harness, POWERUP)
@@ -1190,6 +1190,29 @@ async def test_arming_pairs_again_on_the_next_powerup(
     await feed(harness, ACCEPT)
     await settle()
     assert harness.controller._remote_paired is True
+
+
+async def test_arming_during_an_attempt_keeps_the_next_powerup_usable(
+    make: Callable[..., Harness],
+) -> None:
+    """Arming must finish the cancelled attempt before the next power-up."""
+    harness = make(fake_remote=True, fan_id="", pairing_timeout=10)
+    await harness.controller.start()
+    await feed(harness, POWERUP)
+    await settle()
+    assert harness.controller._pairing is True
+
+    await harness.controller.async_arm_pairing()
+
+    assert harness.controller._pairing is False
+    assert harness.controller._pairing_task is None
+
+    await feed(harness, POWERUP)
+    await settle()
+    offers = [
+        p for p in harness.transport.sent if p.code == "1FC9" and p.dst_id == RamsesID()
+    ]
+    assert len(offers) == 2
 
 
 async def test_stopping_cancels_a_pending_pairing_attempt(
