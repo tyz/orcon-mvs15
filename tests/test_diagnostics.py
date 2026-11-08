@@ -35,7 +35,7 @@ from custom_components.orcon_mvs15.ramses.protocol import (
 from custom_components.orcon_mvs15.ramses.session import RamsesSession
 from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
 
-REMOTE_ID = "29:163058"
+REMOTE_ID = "29:123456"
 FAN_ID = "29:224547"
 GATEWAY_ID = "18:149960"
 MQTT_TOPIC = "RAMSES/GATEWAY"

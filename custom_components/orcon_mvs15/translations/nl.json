@@ -19,7 +19,7 @@
         },
         "data_description": {
           "remote_fake": "Genereer een afstandsbedienings-ID en koppel die aan de ventilator, in plaats van een 15RF-afstandsbediening te gebruiken. Het veld Afstandbediening ID wordt dan genegeerd. Koppel de ventilator na de installatie met de knop Afstandsbediening koppelen.",
-          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
+          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:123456.",
           "mqtt_topic": "Het basistopic van de Ramses ESP-gateway, bijvoorbeeld RAMSES/GATEWAY."
         }
       },
@@ -33,7 +33,7 @@
         },
         "data_description": {
           "remote_fake": "Genereer een afstandsbedienings-ID en koppel die aan de ventilator, in plaats van een 15RF-afstandsbediening te gebruiken. Het veld Afstandbediening ID wordt dan genegeerd. Koppel de ventilator na de installatie met de knop Afstandsbediening koppelen.",
-          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:163058.",
+          "remote_id": "Het Ramses-ID van de draadloze 15RF-afstandsbediening, bijvoorbeeld 29:123456.",
           "usb_port": "De USB-seriële poort van de Ramses ESP, bijvoorbeeld /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_...-if00."
         }
       },

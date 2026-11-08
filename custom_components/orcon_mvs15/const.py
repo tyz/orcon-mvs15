@@ -11,7 +11,6 @@ CONF_TRANSPORT: str = "transport"
 CONF_USB_PORT: str = "usb_port"
 CONF_PACKET_LOG: str = "packet_log"
 DEFAULT_PACKET_LOG: bool = False
-DEFAULT_REMOTE_ID: str = "29:163058"
 DEFAULT_MQTT_TOPIC: str = "RAMSES/GATEWAY"
 DEFAULT_TRANSPORT: str = "mqtt"
 TRANSPORT_MQTT: str = "mqtt"

@@ -26,7 +26,6 @@ from .const import (
     CONF_USB_PORT,
     DEFAULT_MQTT_TOPIC,
     DEFAULT_PACKET_LOG,
-    DEFAULT_REMOTE_ID,
     DOMAIN,
     STEP_MQTT,
     STEP_USB,
@@ -170,7 +169,7 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id=STEP_MQTT,
             data_schema=_mqtt_schema(
-                current.get(CONF_REMOTE_ID, DEFAULT_REMOTE_ID),
+                current.get(CONF_REMOTE_ID, ""),
                 current.get(CONF_REMOTE_FAKE, False),
                 current.get(CONF_MQTT_TOPIC, DEFAULT_MQTT_TOPIC),
             ),
@@ -209,7 +208,7 @@ class OrconConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id=STEP_USB,
             data_schema=_usb_schema(
-                current.get(CONF_REMOTE_ID, DEFAULT_REMOTE_ID),
+                current.get(CONF_REMOTE_ID, ""),
                 current.get(CONF_REMOTE_FAKE, False),
                 current.get(CONF_USB_PORT, ""),
             ),

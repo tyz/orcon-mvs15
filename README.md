@@ -58,7 +58,7 @@ ID and the transport settings:
   while this is enabled. Pair the fan after setup with the **Pair remote**
   button; see [Fake remote](#fake-remote).
 - **Remote ID** — the Ramses ID of the 15RF wireless remote that sends commands
-  to the fan, for example `29:163058`. If you do not know it yet, follow
+  to the fan, for example `29:123456`. If you do not know it yet, follow
   [Fan ID](#fan-id).
 - **MQTT topic prefix** (MQTT connection) — the base topic of the Ramses ESP
   gateway, for example `RAMSES/GATEWAY`. The integration discovers the gateway

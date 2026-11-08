@@ -39,7 +39,7 @@ from custom_components.orcon_mvs15.ramses.transport import (
 )
 from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTransport
 
-REMOTE_ID = "29:163058"
+REMOTE_ID = "29:123456"
 FAN_ID = "29:224547"
 CO2_ID = "29:111111"
 GATEWAY_ID = "18:149960"

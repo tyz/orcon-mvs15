@@ -31,7 +31,7 @@ from custom_components.orcon_mvs15.ramses.transport.loopback import LoopbackTran
 GATEWAY_ID = "18:149960"
 FAN_ID = "29:224547"
 CO2_ID = "32:093959"
-REMOTE_ID = "29:163058"
+REMOTE_ID = "29:123456"
 NEIGHBOUR_ID = "29:999999"
 MQTT_TOPIC = "RAMSES/GATEWAY"
 TIMESTAMP = "2026-09-11T17:29:09.534250+02:00"

@@ -51,6 +51,22 @@ async def test_user_flow_shows_the_transport_menu(hass: HomeAssistant) -> None:
     assert result["menu_options"] == [STEP_MQTT, STEP_USB]
 
 
+@pytest.mark.parametrize("step", [STEP_MQTT, STEP_USB])
+async def test_the_remote_id_field_has_no_prefilled_example(
+    hass: HomeAssistant, step: str
+) -> None:
+    """A real remote ID must not ship as the value the form suggests."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await _choose(hass, result, step)
+
+    schema = result["data_schema"].schema
+    remote_id = next(marker for marker in schema if marker.schema == CONF_REMOTE_ID)
+
+    assert remote_id.default() == ""
+
+
 async def test_mqtt_flow_creates_an_entry(hass: HomeAssistant) -> None:
     """The user data is stored after the discovery info step."""
     result = await hass.config_entries.flow.async_init(
@@ -64,7 +80,7 @@ async def test_mqtt_flow_creates_an_entry(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         user_input={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
         },
     )
@@ -80,7 +96,7 @@ async def test_mqtt_flow_creates_an_entry(hass: HomeAssistant) -> None:
     assert result["title"] == "Orcon MVS-15"
     assert result["data"] == {
         CONF_REMOTE_FAKE: False,
-        CONF_REMOTE_ID: "29:163058",
+        CONF_REMOTE_ID: "29:123456",
         CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
         CONF_TRANSPORT: TRANSPORT_MQTT,
     }
@@ -103,7 +119,7 @@ async def test_fake_remote_generates_an_id(
         result["flow_id"],
         user_input={
             CONF_REMOTE_FAKE: True,
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
         },
     )
@@ -164,7 +180,7 @@ async def test_switching_to_a_fake_remote_generates_a_new_id(
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
             CONF_TRANSPORT: TRANSPORT_MQTT,
         },
@@ -184,7 +200,7 @@ async def test_switching_to_a_fake_remote_generates_a_new_id(
             result["flow_id"],
             user_input={
                 CONF_REMOTE_FAKE: True,
-                CONF_REMOTE_ID: "29:163058",
+                CONF_REMOTE_ID: "29:123456",
                 CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
             },
         )
@@ -222,14 +238,14 @@ async def test_switching_back_to_a_real_remote_stores_the_entered_id(
             result["flow_id"],
             user_input={
                 CONF_REMOTE_FAKE: False,
-                CONF_REMOTE_ID: "29:163058",
+                CONF_REMOTE_ID: "29:123456",
                 CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
             },
         )
 
     assert result["type"] is FlowResultType.ABORT
     assert entry.data[CONF_REMOTE_FAKE] is False
-    assert entry.data[CONF_REMOTE_ID] == "29:163058"
+    assert entry.data[CONF_REMOTE_ID] == "29:123456"
 
 
 async def test_usb_flow_derives_the_gateway_from_the_serial_number(
@@ -250,7 +266,7 @@ async def test_usb_flow_derives_the_gateway_from_the_serial_number(
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            user_input={CONF_REMOTE_ID: "29:163058", CONF_USB_PORT: USB_PORT},
+            user_input={CONF_REMOTE_ID: "29:123456", CONF_USB_PORT: USB_PORT},
         )
 
     assert result["type"] is FlowResultType.FORM
@@ -263,7 +279,7 @@ async def test_usb_flow_derives_the_gateway_from_the_serial_number(
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {
         CONF_REMOTE_FAKE: False,
-        CONF_REMOTE_ID: "29:163058",
+        CONF_REMOTE_ID: "29:123456",
         CONF_TRANSPORT: TRANSPORT_USB,
         CONF_USB_PORT: USB_PORT,
         CONF_GATEWAY_ID: USB_GATEWAY_ID,
@@ -279,7 +295,7 @@ async def test_usb_flow_requires_a_port(hass: HomeAssistant) -> None:
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        user_input={CONF_REMOTE_ID: "29:163058", CONF_USB_PORT: "   "},
+        user_input={CONF_REMOTE_ID: "29:123456", CONF_USB_PORT: "   "},
     )
 
     assert result["type"] is FlowResultType.FORM
@@ -302,7 +318,7 @@ async def test_usb_flow_rejects_a_port_without_a_serial_number(
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            user_input={CONF_REMOTE_ID: "29:163058", CONF_USB_PORT: USB_PORT},
+            user_input={CONF_REMOTE_ID: "29:123456", CONF_USB_PORT: USB_PORT},
         )
 
     assert result["type"] is FlowResultType.FORM
@@ -323,7 +339,7 @@ async def test_usb_flow_survives_a_failed_serial_lookup(hass: HomeAssistant) -> 
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            user_input={CONF_REMOTE_ID: "29:163058", CONF_USB_PORT: USB_PORT},
+            user_input={CONF_REMOTE_ID: "29:123456", CONF_USB_PORT: USB_PORT},
         )
 
     assert result["type"] is FlowResultType.FORM
@@ -336,7 +352,7 @@ async def test_duplicate_mqtt_topic_is_rejected(hass: HomeAssistant) -> None:
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
             CONF_TRANSPORT: TRANSPORT_MQTT,
         },
@@ -364,7 +380,7 @@ async def test_duplicate_usb_port_is_rejected(hass: HomeAssistant) -> None:
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_TRANSPORT: TRANSPORT_USB,
             CONF_USB_PORT: USB_PORT,
             CONF_GATEWAY_ID: USB_GATEWAY_ID,
@@ -396,7 +412,7 @@ async def test_reconfigure_updates_the_connection_settings(
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
             CONF_TRANSPORT: TRANSPORT_MQTT,
         },
@@ -438,7 +454,7 @@ async def test_reconfigure_can_switch_to_usb(hass: HomeAssistant) -> None:
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
             CONF_TRANSPORT: TRANSPORT_MQTT,
             CONF_GATEWAY_ID: "18:149960",
@@ -480,7 +496,7 @@ async def test_switching_back_to_mqtt_clears_the_usb_gateway(
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_TRANSPORT: TRANSPORT_USB,
             CONF_USB_PORT: USB_PORT,
             CONF_GATEWAY_ID: USB_GATEWAY_ID,
@@ -500,7 +516,7 @@ async def test_switching_back_to_mqtt_clears_the_usb_gateway(
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={
-                CONF_REMOTE_ID: "29:163058",
+                CONF_REMOTE_ID: "29:123456",
                 CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
             },
         )
@@ -515,7 +531,7 @@ async def test_reconfigure_may_keep_the_current_topic(hass: HomeAssistant) -> No
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
             CONF_TRANSPORT: TRANSPORT_MQTT,
         },
@@ -569,7 +585,7 @@ async def test_user_flow_rejects_an_unusable_topic(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         user_input={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_MQTT_TOPIC: topic,
         },
     )
@@ -584,7 +600,7 @@ async def test_reconfigure_rejects_a_wildcard_topic(hass: HomeAssistant) -> None
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
             CONF_TRANSPORT: TRANSPORT_MQTT,
         },
@@ -620,7 +636,7 @@ async def test_options_flow_keeps_the_packet_log_off_by_default(
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
         },
     )
@@ -645,7 +661,7 @@ async def test_options_flow_can_enable_the_packet_log(hass: HomeAssistant) -> No
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
         },
     )
@@ -669,7 +685,7 @@ async def test_a_switched_entry_does_not_block_its_old_topic(
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_TRANSPORT: TRANSPORT_USB,
             CONF_USB_PORT: USB_PORT,
             CONF_GATEWAY_ID: USB_GATEWAY_ID,
@@ -685,7 +701,7 @@ async def test_a_switched_entry_does_not_block_its_old_topic(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         user_input={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
         },
     )
@@ -701,7 +717,7 @@ async def test_a_switched_entry_does_not_block_its_old_port(
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_TRANSPORT: TRANSPORT_MQTT,
             CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
             CONF_USB_PORT: USB_PORT,
@@ -719,7 +735,7 @@ async def test_a_switched_entry_does_not_block_its_old_port(
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            user_input={CONF_REMOTE_ID: "29:163058", CONF_USB_PORT: USB_PORT},
+            user_input={CONF_REMOTE_ID: "29:123456", CONF_USB_PORT: USB_PORT},
         )
 
     assert result["type"] is FlowResultType.FORM
@@ -733,7 +749,7 @@ async def test_reconfigure_keeps_the_gateway_when_the_lookup_fails(
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
-            CONF_REMOTE_ID: "29:163058",
+            CONF_REMOTE_ID: "29:123456",
             CONF_TRANSPORT: TRANSPORT_USB,
             CONF_USB_PORT: USB_PORT,
             CONF_GATEWAY_ID: USB_GATEWAY_ID,

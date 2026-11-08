@@ -19,7 +19,7 @@
         },
         "data_description": {
           "remote_fake": "Generate a remote ID and pair it with the fan, instead of using a 15RF remote. The Remote ID field is ignored. Pair the fan after setup with the Pair remote button.",
-          "remote_id": "The Ramses ID of the 15RF wireless remote, for example 29:163058.",
+          "remote_id": "The Ramses ID of the 15RF wireless remote, for example 29:123456.",
           "mqtt_topic": "The base topic of the Ramses ESP gateway, for example RAMSES/GATEWAY."
         }
       },
@@ -33,7 +33,7 @@
         },
         "data_description": {
           "remote_fake": "Generate a remote ID and pair it with the fan, instead of using a 15RF remote. The Remote ID field is ignored. Pair the fan after setup with the Pair remote button.",
-          "remote_id": "The Ramses ID of the 15RF wireless remote, for example 29:163058.",
+          "remote_id": "The Ramses ID of the 15RF wireless remote, for example 29:123456.",
           "usb_port": "The USB serial port of the Ramses ESP, for example /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_...-if00."
         }
       },
