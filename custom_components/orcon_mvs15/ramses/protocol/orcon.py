@@ -264,7 +264,7 @@ class Code10e0(Code):
                 "additional_ver_b": payload[9:10].hex().upper(),
                 "date_2": RamsesPacketDatetime(payload[10:14].hex().upper()),
                 "date_1": RamsesPacketDatetime(payload[14:18].hex().upper()),
-                "description": description.decode(),
+                "description": description.decode(errors="replace"),
             }
         )
 

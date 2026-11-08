@@ -40,6 +40,12 @@ NEIGHBOUR_STATE = f"044 RP --- {NEIGHBOUR_ID} {GATEWAY_ID} --:------ 31D9 003 00
 POWERUP = f"044 I --- --:------ --:------ {FAN_ID} 042F 006 00004C004C00"
 POWERUP_WITHOUT_ANN = f"044 I --- {FAN_ID} --:------ --:------ 042F 006 00004C004C00"
 VENT_DEMAND = f"044 I --- {CO2_ID} {FAN_ID} --:------ 31E0 008 0000000000641E00"
+VENT_DEMAND_BROADCAST = (
+    f"099  I --- {CO2_ID} --:------ {CO2_ID} 31E0 008 0000000000641E00"
+)
+HUMIDITY = f"044  I --- {FAN_ID} {GATEWAY_ID} --:------ 12A0 002 0037"
+HUMIDITY_REQUEST = f"081  I --- {FAN_ID} {GATEWAY_ID} --:------ 12A0 001 00"
+DEVICE_INFO_REQUEST = f"081  I --- {REMOTE_ID} {GATEWAY_ID} --:------ 10E0 001 00"
 TIMED_ECHO = f"000 I --- {REMOTE_ID} {FAN_ID} --:------ 22F3 007 00020F03040000"
 
 
@@ -250,6 +256,48 @@ async def test_unknown_31e0_from_the_fan_discovers_the_co2_sensor(
     assert harness.discovery.get("co2") == CO2_ID
     assert harness.entry.data[CONF_CO2_ID] == CO2_ID
     assert harness.devices == [("co2", RamsesID(CO2_ID))]
+
+
+async def test_a_broadcast_31e0_is_not_adopted_without_a_fan(
+    make: Callable[..., Harness],
+) -> None:
+    """Before the fan is known, a neighbour's broadcast is not our sensor."""
+    harness = make(fan_id="", co2_id="")
+    await harness.controller.start()
+
+    await feed(harness, VENT_DEMAND_BROADCAST)
+
+    assert not harness.discovery.get("co2")
+    assert CONF_CO2_ID not in harness.entry.data
+    assert harness.devices == []
+
+
+async def test_a_10e0_request_does_not_break_the_handler(
+    make: Callable[..., Harness], caplog: pytest.LogCaptureFixture
+) -> None:
+    """A device-info request carries no fields, so the handler skips it."""
+    harness = make()
+    await harness.controller.start()
+
+    with caplog.at_level(logging.ERROR):
+        await feed(harness, DEVICE_INFO_REQUEST)
+
+    assert "A RAMSES subscriber failed" not in caplog.text
+
+
+async def test_a_humidity_request_keeps_the_last_measurement(
+    make: Callable[..., Harness], caplog: pytest.LogCaptureFixture
+) -> None:
+    """A one-byte 12A0 request must not overwrite the humidity with None."""
+    harness = make()
+    await harness.controller.start()
+    await feed(harness, HUMIDITY)
+
+    with caplog.at_level(logging.ERROR):
+        await feed(harness, HUMIDITY_REQUEST)
+
+    assert harness.fan.data["relative_humidity"] == 55
+    assert "A RAMSES subscriber failed" not in caplog.text
 
 
 async def test_powerup_discovers_the_fan(
@@ -485,7 +533,7 @@ async def test_packet_log_reports_a_failed_reopen(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A reopen failure after rotation is logged, not raised to the caller."""
+    """A reopen failure leaves the log closed but recoverable."""
     harness = make()
     path = tmp_path / "packet.log"
     real_open = open
@@ -506,8 +554,27 @@ async def test_packet_log_reports_a_failed_reopen(
         )
 
     assert "Error reopening" in caplog.text
-    assert harness.controller._log_f is not None
-    assert harness.controller._log_f.closed
+    assert harness.controller._log_f is None
+
+    item = envelope(FAN_STATE)
+    await harness.controller.packet_log(item, path=str(path))
+
+    assert path.read_text().strip() == f"{item['ts']} {item['msg']}"
+
+
+async def test_packet_log_recreates_a_deleted_file(
+    make: Callable[..., Harness], tmp_path: Path
+) -> None:
+    """Deleting the log while it is open must not disable packet logging."""
+    harness = make()
+    path = tmp_path / "packet.log"
+    item = envelope(FAN_STATE)
+    await harness.controller.packet_log(item, path=str(path))
+
+    path.unlink()
+    await harness.controller.packet_log(item, path=str(path))
+
+    assert path.read_text().strip() == f"{item['ts']} {item['msg']}"
 
 
 async def test_packet_log_ignores_a_failing_close(

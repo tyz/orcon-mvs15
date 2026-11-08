@@ -273,6 +273,29 @@ async def test_humidity_update_tracks_the_level(hass: HomeAssistant) -> None:
     entity.async_write_ha_state.assert_called_once_with()
 
 
+async def test_humidity_sensor_handles_a_missing_measurement(
+    hass: HomeAssistant,
+) -> None:
+    """A request carries no level, so the sensor reports nothing to show."""
+    entity = HumiditySensor(
+        hass=hass,
+        ramses_id=FAN_ID,
+        config=OrconMVS15Config(mqtt_topic=MQTT_TOPIC),
+        coordinator=make_coordinator(hass),
+        controller=Mock(),
+        discovery_key="humidity",
+    )
+    entity.async_write_ha_state = Mock()
+    entity.coordinator.data = {"relative_humidity": None}
+
+    assert entity.available is False
+
+    entity._handle_coordinator_update()
+
+    assert entity.native_value is None
+    entity.async_write_ha_state.assert_called_once_with()
+
+
 async def test_signal_strength_update_tracks_the_radio_level(
     hass: HomeAssistant,
 ) -> None:

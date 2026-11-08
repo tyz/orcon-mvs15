@@ -168,6 +168,7 @@ class OrconMVS15Controller:
             return True
         if (
             not self.co2_id
+            and self.fan_id
             and packet.type == "I"
             and packet.code == "31E0"
             and packet.length == 8
@@ -354,42 +355,67 @@ class OrconMVS15Controller:
             with self._log_lock:
                 if self._closed:
                     return
-                if self._log_f is None:
-                    try:
-                        self._log_f = open(target, "a")
-                    except Exception as err:
-                        _LOGGER.error("Error opening %s: %s", target, err)
+                if not self._open_log(target):
+                    return
+                try:
+                    self._append_log_line(envelope)
+                    size = os.path.getsize(target)
+                except FileNotFoundError:
+                    # The file was removed while the handle stayed open.
+                    self._close_log_handle()
+                    if not self._open_log(target):
                         return
+                    self._append_log_line(envelope)
+                    size = os.path.getsize(target)
 
-                print(f"{envelope['ts']} {envelope['msg']}", file=self._log_f)
-                self._log_f.flush()
-
-                if os.path.getsize(target) > max_size:
+                if size <= max_size:
+                    return
+                self._close_log_handle()
+                for i in range(10, 0, -1):  # keep up to 10 old log files
+                    src = f"{target}{'' if i == 1 else f'.{i - 1}'}"
+                    dst = f"{target}.{i}"
                     try:
-                        self._log_f.close()
-                    except Exception:
-                        pass
-                    for i in range(10, 0, -1):  # keep up to 10 old log files
-                        src = f"{target}{'' if i == 1 else f'.{i - 1}'}"
-                        dst = f"{target}.{i}"
-                        try:
-                            os.replace(src, dst)
-                        except FileNotFoundError:
-                            continue
-                    try:
-                        self._log_f = open(target, "a")
-                    except Exception as err:
-                        _LOGGER.error("Error reopening %s: %s", target, err)
+                        os.replace(src, dst)
+                    except FileNotFoundError:
+                        continue
+                try:
+                    self._log_f = open(target, "a")
+                except Exception as err:
+                    _LOGGER.error("Error reopening %s: %s", target, err)
+                    self._log_f = None
 
         await self.hass.async_add_executor_job(_sync_log)
+
+    def _open_log(self, target: str) -> bool:
+        """Open the log if there is no handle; return whether it is ready."""
+        if self._log_f is not None:
+            return True
+        try:
+            self._log_f = open(target, "a")
+        except Exception as err:
+            _LOGGER.error("Error opening %s: %s", target, err)
+            return False
+        return True
+
+    def _append_log_line(self, envelope: Envelope) -> None:
+        """Append one line to the open log and flush it."""
+        log = self._log_f
+        if log is None:
+            return
+        print(f"{envelope['ts']} {envelope['msg']}", file=log)
+        log.flush()
+
+    def _close_log_handle(self) -> None:
+        """Close the handle, if any, so the next write reopens the file."""
+        if self._log_f is None:
+            return
+        try:
+            self._log_f.close()
+        except OSError:
+            _LOGGER.debug("Failed to close the packet log", exc_info=True)
+        self._log_f = None
 
     def _close_packet_log(self) -> None:
         """Close the debug log without racing a write in another thread."""
         with self._log_lock:
-            if self._log_f is None:
-                return
-            try:
-                self._log_f.close()
-            except OSError:
-                _LOGGER.debug("Failed to close the packet log", exc_info=True)
-            self._log_f = None
+            self._close_log_handle()

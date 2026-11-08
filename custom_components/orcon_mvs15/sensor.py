@@ -152,14 +152,18 @@ class HumiditySensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self) -> bool:
         """The sensor has no state until 12A0 has been received."""
-        return super().available and "relative_humidity" in self.coordinator.data
+        return (
+            super().available
+            and self.coordinator.data.get("relative_humidity") is not None
+        )
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         key = "relative_humidity"
         if key in self.coordinator.data:
-            self._attr_native_value = int(self.coordinator.data[key])
+            value = self.coordinator.data[key]
+            self._attr_native_value = None if value is None else int(value)
             self.async_write_ha_state()
 
 
