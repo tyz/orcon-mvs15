@@ -18,6 +18,7 @@ I used [ramses_rf](https://github.com/zxdavb/ramses_rf) and [this wiki](https://
 - Auto-detects the wired `CO2 ruimtesensor 15RF` and creates a Home Assistant sensor
 - Auto-detects the fan's humidity sensor and creates a Home Assistant sensor
 - Creates a binary sensor that triggers when the fan reports a fault
+- Raises a repair issue with the LED fault patterns when the fan reports a fault
 - Reports the Ramses ESP firmware version and offers firmware updates over MQTT
 - Offers a reboot button for the Ramses ESP gateway and tracks its online state
 - Generates a remote and pairs it with the fan, so no 15RF remote is needed
@@ -99,7 +100,21 @@ features:
 
 ## Alert on fault
 
-```
+When the fan reports a fault, the integration raises a repair issue under **Settings > System > Repairs**. The issue lists the LED patterns below and disappears when the fan reports that the fault is cleared.
+
+Check the LED on the fan unit if it reports a fault:
+
+| Flashing red | Error                         |
+| -------------|-------------------------------|
+| 1x           | Motor not running             |
+| 2x           | No value from humidity sensor |
+| 3x           | RF communication failure      |
+
+The fan reports only that a fault is present, not which one, so the issue lists all three patterns. The LED on the fan tells you which one applies.
+
+The fan also has a `binary_sensor.orcon_mvs_15_fan_fault` entity. This example uses the `alert` integration to send a notification to your phone:
+
+```yaml
 alert:
   orcon_mvs_15_fault:
     title: Orcon MVS-15 fault
@@ -111,14 +126,6 @@ alert:
       - persistent_notification  # create an alert in the web UI
       - mobile_app_your_phone  # send a notification through the companion app
 ```
-
-Check the LED on the fan unit if it reports a fault:
-
-| Flashing red | Error                         |
-| -------------|-------------------------------|
-| 1x           | Motor not running             |
-| 2x           | No value from humidity sensor |
-| 3x           | RF communication failure      |
 
 ## Automations
 
@@ -177,6 +184,7 @@ Both transports recover from the restart: MQTT marks the entities unavailable un
 ## Known limitations
 
 - The generated remote is paired automatically on the fan's startup message. If an attempt is missed, turn the fan off and on again or press **Pair again on next fan restart** first.
+- The fan reports only that a fault is present, not which one. The repair issue lists all three LED patterns; the LED on the fan shows which one applies.
 - The timed-mode countdown is maintained by the integration; the fan's next reported state remains the source of truth for the preset.
 - A startup message (`042F`) is accepted from any source while the fan ID is unknown. A neighbouring Orcon unit that powers up while this fan is still being discovered could be adopted as this fan.
 - Firmware installation is MQTT-only, reports no download progress, and the offered version can be up to 24 hours old.

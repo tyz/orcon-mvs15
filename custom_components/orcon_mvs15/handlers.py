@@ -11,8 +11,9 @@ from homeassistant.helpers.event import async_call_later, async_track_time_inter
 from homeassistant.util import dt as dt_util
 
 from .coordinator import OrconMVS15DataUpdateCoordinator
-from .ramses.protocol import Code
 from .device import update_device_info
+from .issues import async_create_fan_fault_issue, async_delete_fan_fault_issue
+from .ramses.protocol import Code
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -110,16 +111,25 @@ class DataHandlers:
         )
 
     def _fan_state_handler(self, payload: Code) -> None:
-        """Update fan mode and fault state"""
+        """Update fan mode, fault state and the fault repair issue."""
+        if payload.packet.length == 1:
+            return  # A request carries no state and must not clear a fault.
+        fault = payload.values["has_fault"]
+        previous = self.fan_coordinator.data.get("fan_fault")
+        if fault is not None and fault != previous:
+            if fault:
+                async_create_fan_fault_issue(self.hass, payload.packet.src_id)
+            else:
+                async_delete_fan_fault_issue(self.hass, payload.packet.src_id)
         _LOGGER.info(
             f"Current fan mode: {payload.values['fan_mode']}, "
-            f"has_fault: {payload.values['has_fault']}, "
+            f"has_fault: {fault}, "
             f"signal strength: {payload.values['signal_strength']} dBm"
         )
         new_data = {
             **self.fan_coordinator.data,
             "fan_mode": payload.values["fan_mode"],
-            "fan_fault": payload.values["has_fault"],
+            "fan_fault": fault,
             "fan_signal_strength": payload.values["signal_strength"],
             "discovered_fan_id": payload.packet.src_id,
         }

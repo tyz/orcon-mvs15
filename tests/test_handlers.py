@@ -183,7 +183,7 @@ def test_fan_state_handler_stores_mode_fault_and_signal(
     handlers.fan_coordinator.data = {"relative_humidity": 47}
     payload = SimpleNamespace(
         values={"fan_mode": "low", "has_fault": False, "signal_strength": -60},
-        packet=SimpleNamespace(src_id=FAN_ID),
+        packet=SimpleNamespace(src_id=FAN_ID, length=3),
     )
 
     handlers._fan_state_handler(payload)
@@ -195,6 +195,20 @@ def test_fan_state_handler_stores_mode_fault_and_signal(
         "fan_signal_strength": -60,
         "discovered_fan_id": FAN_ID,
     }
+
+
+def test_fan_state_request_keeps_the_last_fault(hass: HomeAssistant) -> None:
+    """A 31D9 request carries no state and must not clear the fault."""
+    handlers = make_recording_handlers(hass)
+    handlers.fan_coordinator.data = {"fan_mode": "low", "fan_fault": True}
+    payload = SimpleNamespace(
+        values={"fan_mode": None, "has_fault": None, "signal_strength": -60},
+        packet=SimpleNamespace(src_id=FAN_ID, length=1),
+    )
+
+    handlers._fan_state_handler(payload)
+
+    assert handlers.fan_coordinator.data == {"fan_mode": "low", "fan_fault": True}
 
 
 def test_humidity_handler_stores_level_and_signal(hass: HomeAssistant) -> None:

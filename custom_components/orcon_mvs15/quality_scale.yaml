@@ -159,9 +159,10 @@ rules:
     status: done
     comment: |
       A configured fan that sends no packet for 30 minutes raises a translated
-      repair issue with the steps to check. The issue is deleted when the fan is
-      heard again, when the entry unloads, and its timer pauses while the
-      gateway is unreachable.
+      repair issue with the steps to check. A fan that reports a fault raises a
+      translated repair issue with the LED patterns. Both issues are deleted
+      when the entry unloads; the silence issue is also deleted when the fan is
+      heard again, and its timer pauses while the gateway is unreachable.
   stale-devices:
     status: done
     comment: |

@@ -18,6 +18,7 @@ from .ramses.protocol import RamsesID
 _LOGGER = logging.getLogger(__name__)
 
 FAN_NOT_RESPONDING = "fan_not_responding"
+FAN_FAULT = "fan_fault"
 
 
 def fan_not_responding_issue_id(fan_id: RamsesID) -> str:
@@ -57,3 +58,34 @@ def async_delete_fan_not_responding_issue(
 ) -> None:
     """Delete the issue once the fan sends a packet again."""
     ir.async_delete_issue(hass, DOMAIN, fan_not_responding_issue_id(fan_id))
+
+
+def fan_fault_issue_id(fan_id: RamsesID) -> str:
+    """Return the fault issue id for one fan."""
+    return f"{FAN_FAULT}_{fan_id.replace(':', '_')}"
+
+
+@callback
+def async_create_fan_fault_issue(hass: HomeAssistant, fan_id: RamsesID) -> None:
+    """Tell the user that the fan reports a fault.
+
+    The fan's 31D9 state only carries a fault flag, not which fault it is, so
+    the message lists every LED pattern the fan can show.
+    """
+    _LOGGER.warning("The fan %s reports a fault", fan_id)
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        fan_fault_issue_id(fan_id),
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key=FAN_FAULT,
+        translation_placeholders={"fan_id": str(fan_id)},
+        learn_more_url="https://github.com/tyz/orcon-mvs15#alert-on-fault",
+    )
+
+
+@callback
+def async_delete_fan_fault_issue(hass: HomeAssistant, fan_id: RamsesID) -> None:
+    """Delete the issue once the fan reports that the fault is cleared."""
+    ir.async_delete_issue(hass, DOMAIN, fan_fault_issue_id(fan_id))

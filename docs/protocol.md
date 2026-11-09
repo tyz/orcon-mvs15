@@ -337,6 +337,8 @@ when the payload length is 7.
 
 * Length: 1 byte (request) or 3 bytes.
 * `data[2:4]` — bitmap; bit `0x80` means fault.
+* The integration raises a repair issue while the fault bit is set. The packet
+  does not identify the fault, so the issue lists all three LED patterns.
 * `data[4:6]` — mode:
 
 | Value | Preset |

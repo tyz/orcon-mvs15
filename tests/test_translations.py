@@ -112,6 +112,7 @@ async def test_exception_messages_resolve(hass: HomeAssistant) -> None:
 
 ISSUE_PLACEHOLDERS: dict[str, dict[str, str]] = {
     "fan_not_responding": {"fan_id": "29:224547"},
+    "fan_fault": {"fan_id": "29:224547"},
 }
 
 
