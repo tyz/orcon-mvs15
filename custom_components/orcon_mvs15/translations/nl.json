@@ -115,6 +115,10 @@
     "fan_not_responding": {
       "title": "De Orcon MVS-15-ventilator reageert niet",
       "description": "Er is al 30 minuten geen bericht van ventilator {fan_id} ontvangen. Controleer of de ventilator stroom heeft en of de Ramses ESP-gateway binnen RF-bereik staat, en start de ventilator daarna opnieuw op. Deze melding verdwijnt zodra de ventilator weer wordt ontvangen."
+    },
+    "fan_fault": {
+      "title": "De Orcon MVS-15-ventilator meldt een storing",
+      "description": "De ventilator {fan_id} meldt een storing. Controleer de led op de ventilator: 1 keer rood knipperen betekent dat de motor niet draait, 2 keer rood knipperen betekent dat de vochtigheidssensor geen waarde geeft en 3 keer rood knipperen betekent dat de RF-communicatie is mislukt. Deze melding verdwijnt zodra de ventilator meldt dat de storing is opgelost."
     }
   },
   "entity": {

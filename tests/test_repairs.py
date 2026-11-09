@@ -13,6 +13,7 @@ from controller_helpers import (
     FAN_ID,
     GATEWAY_ID,
     NEIGHBOUR_ID,
+    REMOTE_ID,
     Harness,
     feed,
     make_controller,
@@ -22,11 +23,14 @@ from custom_components.orcon_mvs15.const import DOMAIN
 from custom_components.orcon_mvs15.controller import FAN_RESPONSE_TIMEOUT
 from custom_components.orcon_mvs15.issues import (
     async_create_fan_not_responding_issue,
+    fan_fault_issue_id,
     fan_not_responding_issue_id,
 )
 from custom_components.orcon_mvs15.ramses.protocol import RamsesID
 
 FAN_STATE = f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 000001"
+FAN_FAULT_STATE = f"044 RP --- {FAN_ID} {GATEWAY_ID} --:------ 31D9 003 008001"
+FAN_STATE_REQUEST = f"044 RQ --- {REMOTE_ID} {FAN_ID} --:------ 31D9 001 00"
 OWN_POWERUP = f"044 I --- --:------ --:------ {FAN_ID} 042F 006 00004C004C00"
 POWERUP_WITHOUT_ANN = f"044 I --- {FAN_ID} --:------ --:------ 042F 006 00004C004C00"
 NEIGHBOUR_POWERUP = (
@@ -58,6 +62,12 @@ async def make(
 def get_issue(hass: HomeAssistant) -> ir.IssueEntry | None:
     """Return the repair issue for the configured fan."""
     issue_id = fan_not_responding_issue_id(RamsesID(FAN_ID))
+    return ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
+
+
+def get_fault_issue(hass: HomeAssistant) -> ir.IssueEntry | None:
+    """Return the fault repair issue for the configured fan."""
+    issue_id = fan_fault_issue_id(RamsesID(FAN_ID))
     return ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
 
 
@@ -185,3 +195,63 @@ async def test_no_watchdog_without_a_known_fan(
     harness.controller.async_set_connected(True)
 
     assert harness.timers.later == []
+
+
+async def test_a_fan_fault_raises_an_issue(
+    make: Callable[..., Harness], hass: HomeAssistant
+) -> None:
+    """A reported fault becomes an actionable repair issue."""
+    harness = make()
+    await harness.controller.start()
+
+    await feed(harness, FAN_FAULT_STATE)
+
+    issue = get_fault_issue(hass)
+    assert issue is not None
+    assert issue.translation_key == "fan_fault"
+    assert issue.translation_placeholders == {"fan_id": FAN_ID}
+    assert issue.severity is ir.IssueSeverity.WARNING
+    assert issue.is_fixable is False
+
+
+async def test_clearing_the_fault_removes_the_issue(
+    make: Callable[..., Harness], hass: HomeAssistant
+) -> None:
+    """The issue disappears when the fan reports the fault is gone."""
+    harness = make()
+    await harness.controller.start()
+    await feed(harness, FAN_FAULT_STATE)
+    assert get_fault_issue(hass) is not None
+
+    await feed(harness, FAN_STATE)
+
+    assert get_fault_issue(hass) is None
+
+
+async def test_a_state_request_does_not_clear_the_fault_issue(
+    make: Callable[..., Harness], hass: HomeAssistant
+) -> None:
+    """A 31D9 request carries no state and must not hide a fault."""
+    harness = make()
+    await harness.controller.start()
+    await feed(harness, FAN_FAULT_STATE)
+    assert get_fault_issue(hass) is not None
+
+    await feed(harness, FAN_STATE_REQUEST)
+
+    assert get_fault_issue(hass) is not None
+    assert harness.fan.data["fan_fault"] is True
+
+
+async def test_cleanup_removes_the_fault_issue(
+    make: Callable[..., Harness], hass: HomeAssistant
+) -> None:
+    """Unloading the entry must not leave a fault issue behind."""
+    harness = make()
+    await harness.controller.start()
+    await feed(harness, FAN_FAULT_STATE)
+    assert get_fault_issue(hass) is not None
+
+    await harness.controller.stop()
+
+    assert get_fault_issue(hass) is None

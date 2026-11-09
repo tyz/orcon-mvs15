@@ -115,6 +115,10 @@
     "fan_not_responding": {
       "title": "The Orcon MVS-15 fan is not responding",
       "description": "No packet has been received from the fan {fan_id} for 30 minutes. Check that the fan has power and that the Ramses ESP gateway is within RF range, then power-cycle the fan. This issue disappears as soon as the fan is heard again."
+    },
+    "fan_fault": {
+      "title": "The Orcon MVS-15 fan reports a fault",
+      "description": "The fan {fan_id} reports a fault. Check the LED on the fan unit: 1 red flash means the motor is not running, 2 red flashes mean the humidity sensor has no value, and 3 red flashes mean RF communication failed. This issue disappears when the fan reports that the fault is cleared."
     }
   },
   "entity": {

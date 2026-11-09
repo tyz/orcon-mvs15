@@ -27,6 +27,7 @@ from .discovery import DiscoveryManager
 from .handlers import DataHandlers
 from .issues import (
     async_create_fan_not_responding_issue,
+    async_delete_fan_fault_issue,
     async_delete_fan_not_responding_issue,
 )
 from .ramses.protocol import (
@@ -186,6 +187,7 @@ class OrconMVS15Controller:
         self.cancel_fan_watchdog()
         self.handlers.cleanup()
         if self.fan_id:
+            async_delete_fan_fault_issue(self.hass, self.fan_id)
             async_delete_fan_not_responding_issue(self.hass, self.fan_id)
         if (
             self._firmware_update_future is not None
