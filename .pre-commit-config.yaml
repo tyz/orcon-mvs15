@@ -24,7 +24,7 @@ repos:
       - id: codespell
         args:
           - --ignore-words-list=aiport,astroid,checkin,currenty,hass,iif,incomfort,lookin,nam,NotIn
-          - --skip="./.*,*.csv,*.json,*.ambr"
+          - --skip=./.*,*.csv,*.json
           - --quiet-level=2
         exclude_types: [csv, json, html]
         exclude: ^tests/fixtures/|homeassistant/generated/|tests/components/.*/snapshots/
