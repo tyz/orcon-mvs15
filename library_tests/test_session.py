@@ -312,7 +312,7 @@ async def test_unknown_codes_use_the_generic_decoder(
     await session.stop()
 
 
-async def test_a_malformed_frame_is_logged_and_still_reaches_the_raw_tap(
+async def test_a_malformed_frame_is_logged_at_debug_and_reaches_the_raw_tap(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """The packet log sees malformed frames even though no codec runs."""
@@ -320,12 +320,32 @@ async def test_a_malformed_frame_is_logged_and_still_reaches_the_raw_tap(
     raw: list[str] = []
     session.subscribe_raw(lambda item: raw.append(item["msg"]))
 
-    with caplog.at_level(logging.ERROR):
+    with caplog.at_level(logging.DEBUG):
         await transport.receive_frame("not a frame", TIMESTAMP)
         await settle()
 
     assert raw == ["not a frame"]
-    assert "Error parsing a received frame" in caplog.text
+    assert "Ignoring malformed frame" in caplog.text
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+    await session.stop()
+
+
+async def test_a_wrong_length_frame_from_a_neighbour_is_not_an_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A foreign frame with a length mismatch is RF noise, not a failure."""
+    session, transport = await make_session()
+
+    with caplog.at_level(logging.DEBUG):
+        await transport.receive_frame(
+            "101  I --- 32:097067 --:------ 32:097067 31E0 008 000088000100AA",
+            "2026-11-14T17:01:21.575977+00:00",
+        )
+        await settle()
+
+    assert "Ignoring malformed frame" in caplog.text
+    assert "Wrong length (8 vs 7)" in caplog.text
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
     await session.stop()
 
 

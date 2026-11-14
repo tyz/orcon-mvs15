@@ -18,6 +18,7 @@ from .protocol import (
     CODE_REGISTRY,
     Code,
     RamsesPacket,
+    RamsesPacketException,
     RamsesPacketResponse,
 )
 from .transport import ConnectionState, Envelope, Transport, TransportError
@@ -242,6 +243,10 @@ class RamsesSession:
         await self._dispatch_raw(self._raw_handlers, envelope)
         try:
             packet = RamsesPacket(envelope=envelope)
+        except RamsesPacketException as err:
+            # Neighbouring systems share the band, so malformed frames are noise.
+            _LOGGER.debug("Ignoring malformed frame %s: %s", envelope, err)
+            return
         except Exception:
             _LOGGER.error("Error parsing a received frame %s", envelope, exc_info=True)
             return
